@@ -1,5 +1,8 @@
 import { define } from "../../../utils.ts";
-import { cloneTransactionForNextPeriod, getTransactionById } from "../../../lib/store.ts";
+import {
+  cloneTransactionForNextPeriod,
+  getTransactionById,
+} from "../../../lib/store.ts";
 
 export const handlers = define.handlers({
   async POST(ctx) {

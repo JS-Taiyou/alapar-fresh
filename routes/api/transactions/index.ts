@@ -13,8 +13,12 @@ export const handlers = define.handlers({
     const userPaid = form.get("userPaid") as string;
     const notes = (form.get("notes") as string) || "";
     const registryId = form.get("registryId") as string;
-    const installmentCurrent = form.get("installmentCurrent") ? parseInt(form.get("installmentCurrent") as string) : null;
-    const installmentTotal = form.get("installmentTotal") ? parseInt(form.get("installmentTotal") as string) : null;
+    const installmentCurrent = form.get("installmentCurrent")
+      ? parseInt(form.get("installmentCurrent") as string)
+      : null;
+    const installmentTotal = form.get("installmentTotal")
+      ? parseInt(form.get("installmentTotal") as string)
+      : null;
 
     const splitJson: TransactionSplit = JSON.parse(splitJsonStr);
 

@@ -1,5 +1,9 @@
 import { define } from "../../../utils.ts";
-import { updateTransaction, deleteTransaction, getTransactionById } from "../../../lib/store.ts";
+import {
+  deleteTransaction,
+  getTransactionById,
+  updateTransaction,
+} from "../../../lib/store.ts";
 import type { TransactionSplit } from "../../../lib/types.ts";
 
 export const handlers = define.handlers({
@@ -17,8 +21,12 @@ export const handlers = define.handlers({
     const splitJsonStr = form.get("splitJson") as string;
     const userPaid = form.get("userPaid") as string;
     const notes = (form.get("notes") as string) || "";
-    const installmentCurrent = form.get("installmentCurrent") ? parseInt(form.get("installmentCurrent") as string) : null;
-    const installmentTotal = form.get("installmentTotal") ? parseInt(form.get("installmentTotal") as string) : null;
+    const installmentCurrent = form.get("installmentCurrent")
+      ? parseInt(form.get("installmentCurrent") as string)
+      : null;
+    const installmentTotal = form.get("installmentTotal")
+      ? parseInt(form.get("installmentTotal") as string)
+      : null;
     const splitJson: TransactionSplit = JSON.parse(splitJsonStr);
 
     await updateTransaction(id, {

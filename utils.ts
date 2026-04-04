@@ -6,6 +6,8 @@ export interface State {
   activeRegistry: Registry | null;
   registryUsers: User[];
   registries: Registry[];
+  supabaseAuthId: string | null;
+  isOwner: boolean;
 }
 
 export const define = createDefine<State>();

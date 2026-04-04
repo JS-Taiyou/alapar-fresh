@@ -1,15 +1,18 @@
 -- Alapar Schema - Multi-registry expense splitting
--- Designed for future Supabase migration (uuids, timestamps, FKs)
+-- Designed for Supabase auth + local PostgreSQL data
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- System-level users (auth identity)
+-- System-level users (auth identity, bridged from Supabase)
 CREATE TABLE system_users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
+  supabase_auth_id UUID UNIQUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE INDEX idx_system_users_supabase_auth_id ON system_users(supabase_auth_id);
 
 -- Registries (groups) - central hub replacing per-group SQLite DBs
 CREATE TABLE registries (
@@ -30,6 +33,16 @@ CREATE TABLE registry_members (
   joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE(registry_id, user_id)
 );
+
+-- Per-user preferences (active registry, etc.)
+CREATE TABLE user_preferences (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL UNIQUE REFERENCES system_users(id) ON DELETE CASCADE,
+  active_registry_id UUID REFERENCES registries(id) ON DELETE SET NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_user_preferences_user ON user_preferences(user_id);
 
 -- Per-registry user profiles
 CREATE TABLE users (
@@ -63,12 +76,44 @@ CREATE TABLE transactions (
   exercise_id UUID REFERENCES exercises(id) ON DELETE SET NULL,
   installment_current INTEGER,
   installment_total INTEGER,
+  recurring_disabled BOOLEAN NOT NULL DEFAULT false,
+  recurring_group_id UUID,
   notes TEXT NOT NULL DEFAULT '',
   split_json JSONB NOT NULL DEFAULT '{"splits":[]}',
   creator_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   user_paid UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Invitations
+CREATE TABLE invitations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  registry_id UUID NOT NULL REFERENCES registries(id) ON DELETE CASCADE,
+  code TEXT NOT NULL UNIQUE,
+  created_by UUID NOT NULL REFERENCES system_users(id),
+  expires_at TIMESTAMPTZ,
+  max_uses INTEGER,
+  current_uses INTEGER NOT NULL DEFAULT 0,
+  revoked_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_invitations_code ON invitations(code);
+CREATE INDEX idx_invitations_registry ON invitations(registry_id);
+
+-- Audit log
+CREATE TABLE audit_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  actor_id UUID REFERENCES system_users(id),
+  action TEXT NOT NULL,
+  target_type TEXT NOT NULL,
+  target_id UUID,
+  metadata JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_audit_log_actor ON audit_log(actor_id);
+CREATE INDEX idx_audit_log_registry ON audit_log(target_id);
 
 -- Indexes
 CREATE INDEX idx_transactions_registry ON transactions(registry_id);

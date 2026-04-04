@@ -1,13 +1,35 @@
 import { query } from "./db.ts";
-import type { User, Transaction, Exercise, Registry, SystemUser, SplitEntry, TransactionSplit } from "./types.ts";
+import type {
+  Exercise,
+  Registry,
+  SplitEntry,
+  SystemUser,
+  Transaction,
+  TransactionSplit,
+  User,
+} from "./types.ts";
 
-const MONTHS_ES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+const MONTHS_ES = [
+  "Ene",
+  "Feb",
+  "Mar",
+  "Abr",
+  "May",
+  "Jun",
+  "Jul",
+  "Ago",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dic",
+];
 
 function rowToSystemUser(row: Record<string, unknown>): SystemUser {
   return {
     id: row.id as string,
     email: row.email as string,
     name: row.name as string,
+    supabaseAuthId: (row.supabase_auth_id as string) ?? null,
   };
 }
 
@@ -37,7 +59,9 @@ function rowToTransaction(row: Record<string, unknown>): Transaction {
     recurringDisabled: (row.recurring_disabled as boolean) ?? false,
     recurringGroupId: (row.recurring_group_id as string) ?? row.id as string,
     notes: row.notes as string,
-    splitJson: typeof row.split_json === "string" ? JSON.parse(row.split_json) : row.split_json as TransactionSplit,
+    splitJson: typeof row.split_json === "string"
+      ? JSON.parse(row.split_json)
+      : row.split_json as TransactionSplit,
     creatorId: row.creator_id as string,
     userPaid: row.user_paid as string,
     createdAt: new Date(row.created_at as string),
@@ -65,26 +89,67 @@ function rowToRegistry(row: Record<string, unknown>): Registry {
   };
 }
 
-let cachedSystemUser: SystemUser | null = null;
-
-export async function getSystemUser(): Promise<SystemUser | null> {
-  if (cachedSystemUser) return cachedSystemUser;
-  const result = await query("SELECT * FROM system_users ORDER BY created_at LIMIT 1");
+export async function getUserBySupabaseId(
+  supabaseAuthId: string,
+): Promise<SystemUser | null> {
+  const result = await query(
+    "SELECT * FROM system_users WHERE supabase_auth_id = $1",
+    [supabaseAuthId],
+  );
   if (result.rows.length === 0) return null;
-  cachedSystemUser = rowToSystemUser(result.rows[0]);
-  return cachedSystemUser;
+  return rowToSystemUser(result.rows[0]);
 }
 
-export async function setSystemUser(user: SystemUser): Promise<void> {
-  await query(
-    "INSERT INTO system_users (id, email, name) VALUES ($1, $2, $3) ON CONFLICT (email) DO UPDATE SET name = $3",
-    [user.id, user.email, user.name],
+export async function createUserFromSupabase(
+  supabaseAuthId: string,
+  email: string,
+  name: string,
+): Promise<SystemUser> {
+  const result = await query(
+    "INSERT INTO system_users (id, email, name, supabase_auth_id) VALUES ($1, $2, $3, $4) ON CONFLICT (supabase_auth_id) DO UPDATE SET email = $2, name = $3 RETURNING *",
+    [crypto.randomUUID(), email, name, supabaseAuthId],
   );
-  cachedSystemUser = user;
+  return rowToSystemUser(result.rows[0]);
+}
+
+export async function getUserActiveRegistry(
+  systemUserId: string,
+): Promise<Registry | null> {
+  const result = await query(
+    `SELECT r.* FROM registries r
+     JOIN user_preferences up ON up.active_registry_id = r.id
+     WHERE up.user_id = $1`,
+    [systemUserId],
+  );
+  if (result.rows.length === 0) return null;
+  return rowToRegistry(result.rows[0]);
+}
+
+export async function setUserActiveRegistry(
+  systemUserId: string,
+  registryId: string,
+): Promise<void> {
+  await query(
+    `INSERT INTO user_preferences (user_id, active_registry_id, updated_at) VALUES ($1, $2, now())
+     ON CONFLICT (user_id) DO UPDATE SET active_registry_id = $2, updated_at = now()`,
+    [systemUserId, registryId],
+  );
+}
+
+export async function ensureUserPreferences(
+  systemUserId: string,
+): Promise<void> {
+  await query(
+    `INSERT INTO user_preferences (user_id, active_registry_id) VALUES ($1, NULL)
+     ON CONFLICT (user_id) DO NOTHING`,
+    [systemUserId],
+  );
 }
 
 export async function getUsers(registryId: string): Promise<User[]> {
-  const result = await query("SELECT * FROM users WHERE registry_id = $1", [registryId]);
+  const result = await query("SELECT * FROM users WHERE registry_id = $1", [
+    registryId,
+  ]);
   return result.rows.map(rowToUser);
 }
 
@@ -94,7 +159,9 @@ export async function getUserById(id: string): Promise<User | undefined> {
   return rowToUser(result.rows[0]);
 }
 
-export async function getActiveTransactions(registryId: string): Promise<Transaction[]> {
+export async function getActiveTransactions(
+  registryId: string,
+): Promise<Transaction[]> {
   const result = await query(
     "SELECT * FROM transactions WHERE exercise_id IS NULL AND registry_id = $1 ORDER BY created_at DESC",
     [registryId],
@@ -102,7 +169,9 @@ export async function getActiveTransactions(registryId: string): Promise<Transac
   return result.rows.map(rowToTransaction);
 }
 
-export async function getTransactionsByExercise(exerciseId: string): Promise<Transaction[]> {
+export async function getTransactionsByExercise(
+  exerciseId: string,
+): Promise<Transaction[]> {
   const result = await query(
     "SELECT * FROM transactions WHERE exercise_id = $1 ORDER BY created_at DESC",
     [exerciseId],
@@ -110,13 +179,17 @@ export async function getTransactionsByExercise(exerciseId: string): Promise<Tra
   return result.rows.map(rowToTransaction);
 }
 
-export async function getTransactionById(id: string): Promise<Transaction | undefined> {
+export async function getTransactionById(
+  id: string,
+): Promise<Transaction | undefined> {
   const result = await query("SELECT * FROM transactions WHERE id = $1", [id]);
   if (result.rows.length === 0) return undefined;
   return rowToTransaction(result.rows[0]);
 }
 
-export async function createTransaction(data: Omit<Transaction, "id" | "createdAt">): Promise<Transaction> {
+export async function createTransaction(
+  data: Omit<Transaction, "id" | "createdAt">,
+): Promise<Transaction> {
   const recurringGroupId = data.recurringGroupId ?? crypto.randomUUID();
   const result = await query(
     `INSERT INTO transactions (registry_id, description, amount, original_amount, type, exercise_id, installment_current, installment_total, recurring_disabled, recurring_group_id, notes, split_json, creator_id, user_paid)
@@ -141,20 +214,53 @@ export async function createTransaction(data: Omit<Transaction, "id" | "createdA
   return rowToTransaction(result.rows[0]);
 }
 
-export async function updateTransaction(id: string, data: Partial<Transaction>): Promise<Transaction | undefined> {
+export async function updateTransaction(
+  id: string,
+  data: Partial<Transaction>,
+): Promise<Transaction | undefined> {
   const sets: string[] = [];
   const values: unknown[] = [];
   let idx = 1;
-  if (data.description !== undefined) { sets.push(`description = $${idx++}`); values.push(data.description); }
-  if (data.amount !== undefined) { sets.push(`amount = $${idx++}`); values.push(data.amount); }
-  if (data.originalAmount !== undefined) { sets.push(`original_amount = $${idx++}`); values.push(data.originalAmount); }
-  if (data.type !== undefined) { sets.push(`type = $${idx++}`); values.push(data.type); }
-  if (data.notes !== undefined) { sets.push(`notes = $${idx++}`); values.push(data.notes); }
-  if (data.splitJson !== undefined) { sets.push(`split_json = $${idx++}`); values.push(JSON.stringify(data.splitJson)); }
-  if (data.userPaid !== undefined) { sets.push(`user_paid = $${idx++}`); values.push(data.userPaid); }
-  if (data.installmentCurrent !== undefined) { sets.push(`installment_current = $${idx++}`); values.push(data.installmentCurrent); }
-  if (data.installmentTotal !== undefined) { sets.push(`installment_total = $${idx++}`); values.push(data.installmentTotal); }
-  if (data.recurringDisabled !== undefined) { sets.push(`recurring_disabled = $${idx++}`); values.push(data.recurringDisabled); }
+  if (data.description !== undefined) {
+    sets.push(`description = $${idx++}`);
+    values.push(data.description);
+  }
+  if (data.amount !== undefined) {
+    sets.push(`amount = $${idx++}`);
+    values.push(data.amount);
+  }
+  if (data.originalAmount !== undefined) {
+    sets.push(`original_amount = $${idx++}`);
+    values.push(data.originalAmount);
+  }
+  if (data.type !== undefined) {
+    sets.push(`type = $${idx++}`);
+    values.push(data.type);
+  }
+  if (data.notes !== undefined) {
+    sets.push(`notes = $${idx++}`);
+    values.push(data.notes);
+  }
+  if (data.splitJson !== undefined) {
+    sets.push(`split_json = $${idx++}`);
+    values.push(JSON.stringify(data.splitJson));
+  }
+  if (data.userPaid !== undefined) {
+    sets.push(`user_paid = $${idx++}`);
+    values.push(data.userPaid);
+  }
+  if (data.installmentCurrent !== undefined) {
+    sets.push(`installment_current = $${idx++}`);
+    values.push(data.installmentCurrent);
+  }
+  if (data.installmentTotal !== undefined) {
+    sets.push(`installment_total = $${idx++}`);
+    values.push(data.installmentTotal);
+  }
+  if (data.recurringDisabled !== undefined) {
+    sets.push(`recurring_disabled = $${idx++}`);
+    values.push(data.recurringDisabled);
+  }
   if (sets.length === 0) return getTransactionById(id);
   values.push(id);
   const result = await query(
@@ -178,7 +284,9 @@ export async function getExercises(registryId: string): Promise<Exercise[]> {
   return result.rows.map(rowToExercise);
 }
 
-export async function getExerciseById(id: string): Promise<Exercise | undefined> {
+export async function getExerciseById(
+  id: string,
+): Promise<Exercise | undefined> {
   const result = await query("SELECT * FROM exercises WHERE id = $1", [id]);
   if (result.rows.length === 0) return undefined;
   return rowToExercise(result.rows[0]);
@@ -187,12 +295,20 @@ export async function getExerciseById(id: string): Promise<Exercise | undefined>
 export async function createExercise(registryId: string): Promise<Exercise> {
   const active = await getActiveTransactions(registryId);
   const total = active.reduce((sum, t) => sum + Math.abs(t.originalAmount), 0);
-  const startDate = active.length > 0 ? new Date(Math.min(...active.map((t) => t.createdAt.getTime()))) : new Date();
+  const startDate = active.length > 0
+    ? new Date(Math.min(...active.map((t) => t.createdAt.getTime())))
+    : new Date();
   const endDate = new Date();
 
   const result = await query(
     `INSERT INTO exercises (registry_id, start_date, end_date, transaction_count, total_amount) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [registryId, startDate.toISOString(), endDate.toISOString(), active.length, total],
+    [
+      registryId,
+      startDate.toISOString(),
+      endDate.toISOString(),
+      active.length,
+      total,
+    ],
   );
   const exercise = rowToExercise(result.rows[0]);
 
@@ -207,12 +323,9 @@ export async function createExercise(registryId: string): Promise<Exercise> {
   return exercise;
 }
 
-export async function getRegistries(): Promise<Registry[]> {
-  const result = await query("SELECT * FROM registries ORDER BY latest_accessed DESC");
-  return result.rows.map(rowToRegistry);
-}
-
-export async function getRegistriesForUser(systemUserId: string): Promise<Registry[]> {
+export async function getRegistriesForUser(
+  systemUserId: string,
+): Promise<Registry[]> {
   const result = await query(
     `SELECT r.* FROM registries r JOIN registry_members rm ON r.id = rm.registry_id WHERE rm.user_id = $1 ORDER BY r.latest_accessed DESC`,
     [systemUserId],
@@ -220,62 +333,77 @@ export async function getRegistriesForUser(systemUserId: string): Promise<Regist
   return result.rows.map(rowToRegistry);
 }
 
-export async function getActiveRegistry(): Promise<Registry | undefined> {
-  const result = await query("SELECT * FROM registries WHERE is_default = true LIMIT 1");
-  if (result.rows.length === 0) return undefined;
-  return rowToRegistry(result.rows[0]);
-}
-
-export async function createRegistry(name: string, systemUserId: string): Promise<Registry> {
-  const dbName = name.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
-  await query("UPDATE registries SET is_default = false");
+export async function createRegistry(
+  name: string,
+  systemUserId: string,
+): Promise<Registry> {
+  const dbName = name.toLowerCase().replace(/\s+/g, "_").replace(
+    /[^a-z0-9_]/g,
+    "",
+  );
   let result;
   try {
     result = await query(
-      "INSERT INTO registries (name, db_name, is_default) VALUES ($1, $2, true) RETURNING *",
+      "INSERT INTO registries (name, db_name, is_default) VALUES ($1, $2, false) RETURNING *",
       [name, dbName],
     );
   } catch {
     result = await query(
-      "UPDATE registries SET is_default = true, name = $1 WHERE db_name = $2 RETURNING *",
+      "UPDATE registries SET name = $1 WHERE db_name = $2 RETURNING *",
       [name, dbName],
     );
   }
   const registry = rowToRegistry(result.rows[0]);
 
-  const sysUser = await getSystemUser();
-  if (sysUser) {
+  const existingMember = await query(
+    "SELECT registry_id FROM registry_members WHERE registry_id = $1 AND user_id = $2",
+    [registry.id, systemUserId],
+  );
+  if (existingMember.rows.length === 0) {
+    await query(
+      "INSERT INTO registry_members (registry_id, user_id, role) VALUES ($1, $2, 'owner')",
+      [registry.id, systemUserId],
+    );
+  }
+
+  const sysUser = await query("SELECT * FROM system_users WHERE id = $1", [
+    systemUserId,
+  ]);
+  if (sysUser.rows.length > 0) {
+    const su = rowToSystemUser(sysUser.rows[0]);
     const existing = await query(
       "SELECT id FROM users WHERE registry_id = $1 AND system_user_id = $2",
-      [registry.id, sysUser.id],
+      [registry.id, su.id],
     );
     if (existing.rows.length === 0) {
       await query(
         "INSERT INTO users (registry_id, system_user_id, email, name, color) VALUES ($1, $2, $3, $4, $5) RETURNING *",
-        [registry.id, sysUser.id, sysUser.email, sysUser.name, "#093eaa"],
-      );
-    }
-    const existingMember = await query(
-      "SELECT registry_id FROM registry_members WHERE registry_id = $1 AND user_id = $2",
-      [registry.id, systemUserId],
-    );
-    if (existingMember.rows.length === 0) {
-      await query(
-        "INSERT INTO registry_members (registry_id, user_id) VALUES ($1, $2)",
-        [registry.id, systemUserId],
+        [registry.id, su.id, su.email, su.name, "#093eaa"],
       );
     }
   }
 
+  await setUserActiveRegistry(systemUserId, registry.id);
+
   return registry;
 }
 
-export async function setActiveRegistry(id: string): Promise<void> {
-  await query("UPDATE registries SET is_default = false");
-  await query("UPDATE registries SET is_default = true, latest_accessed = now() WHERE id = $1", [id]);
+export async function getUserRole(
+  systemUserId: string,
+  registryId: string,
+): Promise<string | null> {
+  const result = await query(
+    "SELECT role FROM registry_members WHERE registry_id = $1 AND user_id = $2",
+    [registryId, systemUserId],
+  );
+  if (result.rows.length === 0) return null;
+  return result.rows[0].role as string;
 }
 
-export async function calculateBalance(userId: string, registryId: string): Promise<number> {
+export async function calculateBalance(
+  userId: string,
+  registryId: string,
+): Promise<number> {
   const active = await getActiveTransactions(registryId);
   let balance = 0;
   for (const tx of active) {
@@ -290,7 +418,9 @@ export async function calculateBalance(userId: string, registryId: string): Prom
     }
     const userSplit = tx.splitJson.splits.find((s) => s.userId === userId);
     if (!userSplit) continue;
-    const divisor = tx.type === "parcialidad" && tx.installmentTotal ? tx.installmentTotal : 1;
+    const divisor = tx.type === "parcialidad" && tx.installmentTotal
+      ? tx.installmentTotal
+      : 1;
     const totalAmount = tx.originalAmount / divisor;
     const splitAmount = userSplit.amount / divisor;
     if (tx.userPaid === userId) {
@@ -302,7 +432,10 @@ export async function calculateBalance(userId: string, registryId: string): Prom
   return balance;
 }
 
-export function buildEqualSplit(total: number, userIds: string[]): TransactionSplit {
+export function buildEqualSplit(
+  total: number,
+  userIds: string[],
+): TransactionSplit {
   const count = userIds.length;
   const perPerson = Math.floor((total / count) * 100) / 100;
   const remainder = Math.round((total - perPerson * count) * 100) / 100;
@@ -314,7 +447,10 @@ export function buildEqualSplit(total: number, userIds: string[]): TransactionSp
   return { splits };
 }
 
-export function buildPercentageSplit(total: number, percentages: { userId: string; percentage: number }[]): TransactionSplit {
+export function buildPercentageSplit(
+  total: number,
+  percentages: { userId: string; percentage: number }[],
+): TransactionSplit {
   const splits: SplitEntry[] = percentages.map((p) => ({
     userId: p.userId,
     percentage: p.percentage,
@@ -323,7 +459,10 @@ export function buildPercentageSplit(total: number, percentages: { userId: strin
   return { splits };
 }
 
-export function buildFixedSplit(total: number, amounts: { userId: string; amount: number }[]): TransactionSplit {
+export function buildFixedSplit(
+  total: number,
+  amounts: { userId: string; amount: number }[],
+): TransactionSplit {
   const splits: SplitEntry[] = amounts.map((a) => ({
     userId: a.userId,
     percentage: total > 0 ? Math.round((a.amount / total) * 10000) / 100 : 0,
@@ -336,7 +475,9 @@ export function getMonthNameEs(date: Date): string {
   return MONTHS_ES[date.getMonth()];
 }
 
-export async function getSpawnCandidates(registryId: string): Promise<Transaction[]> {
+export async function getSpawnCandidates(
+  registryId: string,
+): Promise<Transaction[]> {
   const result = await query(
     `SELECT * FROM transactions
      WHERE registry_id = $1
@@ -366,7 +507,10 @@ export async function getSpawnCandidates(registryId: string): Promise<Transactio
     if (t.type === "recurrente") {
       if (t.exerciseId !== null) candidates.push(t);
     } else if (t.type === "parcialidad") {
-      if (t.installmentCurrent !== null && t.installmentTotal !== null && t.installmentCurrent < t.installmentTotal) {
+      if (
+        t.installmentCurrent !== null && t.installmentTotal !== null &&
+        t.installmentCurrent < t.installmentTotal
+      ) {
         candidates.push(t);
       }
     }
@@ -374,7 +518,10 @@ export async function getSpawnCandidates(registryId: string): Promise<Transactio
   return candidates;
 }
 
-export async function cloneTransactionForNextPeriod(sourceId: string, installmentOffset: number = 1): Promise<Transaction> {
+export async function cloneTransactionForNextPeriod(
+  sourceId: string,
+  installmentOffset: number = 1,
+): Promise<Transaction> {
   const source = await getTransactionById(sourceId);
   if (!source) throw new Error(`Transaction ${sourceId} not found`);
   return createTransaction({
@@ -384,8 +531,13 @@ export async function cloneTransactionForNextPeriod(sourceId: string, installmen
     originalAmount: source.originalAmount,
     type: source.type,
     exerciseId: null,
-    installmentCurrent: source.type === "parcialidad" && source.installmentCurrent !== null ? source.installmentCurrent + installmentOffset : null,
-    installmentTotal: source.type === "parcialidad" ? source.installmentTotal : null,
+    installmentCurrent:
+      source.type === "parcialidad" && source.installmentCurrent !== null
+        ? source.installmentCurrent + installmentOffset
+        : null,
+    installmentTotal: source.type === "parcialidad"
+      ? source.installmentTotal
+      : null,
     recurringDisabled: false,
     recurringGroupId: source.recurringGroupId,
     notes: source.notes,
@@ -393,4 +545,185 @@ export async function cloneTransactionForNextPeriod(sourceId: string, installmen
     creatorId: source.creatorId,
     userPaid: source.userPaid,
   });
+}
+
+export function generateInviteCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 8; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
+
+export async function createInvitation(
+  registryId: string,
+  createdBy: string,
+  expiresAt?: Date,
+  maxUses?: number,
+): Promise<{ id: string; code: string; expiresAt: Date | null }> {
+  const code = generateInviteCode();
+  const result = await query(
+    `INSERT INTO invitations (registry_id, code, created_by, expires_at, max_uses) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [
+      registryId,
+      code,
+      createdBy,
+      expiresAt?.toISOString() ?? null,
+      maxUses ?? null,
+    ],
+  );
+  const row = result.rows[0];
+  await query(
+    `INSERT INTO audit_log (actor_id, action, target_type, target_id, metadata) VALUES ($1, $2, $3, $4, $5)`,
+    [
+      createdBy,
+      "invite_created",
+      "invitation",
+      row.id,
+      JSON.stringify({ code }),
+    ],
+  );
+  return {
+    id: row.id as string,
+    code: row.code as string,
+    expiresAt: row.expires_at ? new Date(row.expires_at as string) : null,
+  };
+}
+
+export async function getInvitationByCode(code: string): Promise<
+  {
+    id: string;
+    registryId: string;
+    registryName: string;
+    code: string;
+    expiresAt: Date | null;
+    maxUses: number | null;
+    currentUses: number;
+    revokedAt: Date | null;
+  } | null
+> {
+  const result = await query(
+    `SELECT i.*, r.name as registry_name FROM invitations i JOIN registries r ON r.id = i.registry_id WHERE i.code = $1`,
+    [code.toUpperCase()],
+  );
+  if (result.rows.length === 0) return null;
+  const row = result.rows[0];
+  return {
+    id: row.id as string,
+    registryId: row.registry_id as string,
+    registryName: row.registry_name as string,
+    code: row.code as string,
+    expiresAt: row.expires_at ? new Date(row.expires_at as string) : null,
+    maxUses: (row.max_uses as number) ?? null,
+    currentUses: row.current_uses as number,
+    revokedAt: row.revoked_at ? new Date(row.revoked_at as string) : null,
+  };
+}
+
+export async function useInvitation(
+  code: string,
+  systemUserId: string,
+): Promise<string> {
+  const invitation = await getInvitationByCode(code);
+  if (!invitation) throw new Error("Invitation not found");
+  if (invitation.revokedAt) throw new Error("Invitation has been revoked");
+  if (invitation.expiresAt && invitation.expiresAt < new Date()) {
+    throw new Error("Invitation has expired");
+  }
+  if (
+    invitation.maxUses !== null && invitation.currentUses >= invitation.maxUses
+  ) throw new Error("Invitation has reached max uses");
+
+  const existing = await query(
+    "SELECT registry_id FROM registry_members WHERE registry_id = $1 AND user_id = $2",
+    [invitation.registryId, systemUserId],
+  );
+  if (existing.rows.length > 0) {
+    throw new Error("Already a member of this registry");
+  }
+
+  await query(
+    "INSERT INTO registry_members (registry_id, user_id, role) VALUES ($1, $2, 'member')",
+    [invitation.registryId, systemUserId],
+  );
+
+  const sysUser = await query("SELECT * FROM system_users WHERE id = $1", [
+    systemUserId,
+  ]);
+  if (sysUser.rows.length > 0) {
+    const su = rowToSystemUser(sysUser.rows[0]);
+    const existingUser = await query(
+      "SELECT id FROM users WHERE registry_id = $1 AND system_user_id = $2",
+      [invitation.registryId, su.id],
+    );
+    if (existingUser.rows.length === 0) {
+      await query(
+        "INSERT INTO users (registry_id, system_user_id, email, name, color) VALUES ($1, $2, $3, $4, $5)",
+        [invitation.registryId, su.id, su.email, su.name, "#093eaa"],
+      );
+    }
+  }
+
+  await query(
+    "UPDATE invitations SET current_uses = current_uses + 1 WHERE id = $1",
+    [invitation.id],
+  );
+
+  await query(
+    `INSERT INTO audit_log (actor_id, action, target_type, target_id, metadata) VALUES ($1, $2, $3, $4, $5)`,
+    [
+      systemUserId,
+      "invite_used",
+      "invitation",
+      invitation.id,
+      JSON.stringify({ code }),
+    ],
+  );
+
+  return invitation.registryId;
+}
+
+export async function getInvitationsForRegistry(registryId: string): Promise<{
+  id: string;
+  code: string;
+  expiresAt: Date | null;
+  maxUses: number | null;
+  currentUses: number;
+  revokedAt: Date | null;
+  createdAt: Date;
+}[]> {
+  const result = await query(
+    "SELECT * FROM invitations WHERE registry_id = $1 ORDER BY created_at DESC",
+    [registryId],
+  );
+  return result.rows.map((row) => ({
+    id: row.id as string,
+    code: row.code as string,
+    expiresAt: row.expires_at ? new Date(row.expires_at as string) : null,
+    maxUses: (row.max_uses as number) ?? null,
+    currentUses: row.current_uses as number,
+    revokedAt: row.revoked_at ? new Date(row.revoked_at as string) : null,
+    createdAt: new Date(row.created_at as string),
+  }));
+}
+
+export async function revokeInvitation(
+  invitationId: string,
+  systemUserId: string,
+): Promise<void> {
+  await query(
+    "UPDATE invitations SET revoked_at = now() WHERE id = $1",
+    [invitationId],
+  );
+  await query(
+    `INSERT INTO audit_log (actor_id, action, target_type, target_id, metadata) VALUES ($1, $2, $3, $4, $5)`,
+    [
+      systemUserId,
+      "invite_revoked",
+      "invitation",
+      invitationId,
+      JSON.stringify({}),
+    ],
+  );
 }

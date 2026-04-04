@@ -58,6 +58,14 @@ export interface SystemUser {
   id: string;
   email: string;
   name: string;
+  supabaseAuthId: string | null;
+}
+
+export interface UserPreferences {
+  id: string;
+  userId: string;
+  activeRegistryId: string | null;
+  updatedAt: Date;
 }
 
 export interface RegistryMember {

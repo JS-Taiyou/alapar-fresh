@@ -19,15 +19,32 @@ export default function ExerciseCard(props: ExerciseCardProps) {
         </div>
         <div>
           <p class="font-medium text-slate-100 leading-tight">
-            Corte {exercise.startDate.toLocaleDateString("es-MX", { month: "long", year: "numeric" })}
+            Corte {exercise.startDate.toLocaleDateString("es-MX", {
+              month: "long",
+              year: "numeric",
+            })}
           </p>
           <p class="text-xs text-slate-500">
-            {exercise.transactionCount} Gastos &bull; Total: ${exercise.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {exercise.transactionCount}{" "}
+            Gastos &bull; Total: ${exercise.totalAmount.toLocaleString(
+              "en-US",
+              { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+            )}
           </p>
         </div>
       </div>
-      <svg class="h-5 w-5 text-slate-600 group-hover:text-primary-light" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
+      <svg
+        class="h-5 w-5 text-slate-600 group-hover:text-primary-light"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          d="M9 5l7 7-7 7"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+        />
       </svg>
     </a>
   );

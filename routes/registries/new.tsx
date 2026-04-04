@@ -12,16 +12,33 @@ export default define.page(function NewRegistry() {
         <div class="bg-surface border border-border-custom rounded-custom p-8 w-full max-w-md z-10">
           <div class="text-center mb-8">
             <div class="inline-flex items-center justify-center p-3 bg-primary rounded-custom mb-4">
-              <svg class="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path d="M12 4v16m8-8H4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
+              <svg
+                class="h-8 w-8 text-white"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  d="M12 4v16m8-8H4"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                />
               </svg>
             </div>
             <h1 class="text-2xl font-bold text-white">Nuevo Registro</h1>
-            <p class="text-slate-400 text-sm mt-2">Crea un grupo para gestionar gastos compartidos</p>
+            <p class="text-slate-400 text-sm mt-2">
+              Crea un grupo para gestionar gastos compartidos
+            </p>
           </div>
           <form action="/api/registries" method="POST" class="space-y-5">
             <div>
-              <label class="block text-sm font-medium text-slate-300 mb-1.5" for="name">Nombre del Registro</label>
+              <label
+                class="block text-sm font-medium text-slate-300 mb-1.5"
+                for="name"
+              >
+                Nombre del Registro
+              </label>
               <input
                 class="block w-full px-4 py-2.5 bg-background border border-border-custom rounded-custom text-white focus:ring-primary focus:border-primary"
                 id="name"
@@ -37,7 +54,10 @@ export default define.page(function NewRegistry() {
             >
               Crear Registro
             </button>
-            <a href="/" class="block text-center text-sm text-slate-400 hover:text-white transition-colors">
+            <a
+              href="/"
+              class="block text-center text-sm text-slate-400 hover:text-white transition-colors"
+            >
               Cancelar
             </a>
           </form>

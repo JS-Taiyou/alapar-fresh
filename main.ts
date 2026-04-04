@@ -1,20 +1,57 @@
 import { App, staticFiles } from "fresh";
 import { define, type State } from "./utils.ts";
-import { getSystemUser, getActiveRegistry, getRegistries, getUsers } from "./lib/store.ts";
+import {
+  createUserFromSupabase,
+  ensureUserPreferences,
+  getRegistriesForUser,
+  getUserActiveRegistry,
+  getUserBySupabaseId,
+  getUsers,
+} from "./lib/store.ts";
+import { getUserFromRequest } from "./lib/supabase.ts";
 
 export const app = new App<State>();
 
 app.use(staticFiles());
 
 app.use(define.middleware(async (ctx) => {
-  ctx.state.systemUser = await getSystemUser();
-  ctx.state.activeRegistry = await getActiveRegistry() ?? null;
+  ctx.state.systemUser = null;
+  ctx.state.activeRegistry = null;
   ctx.state.registries = [];
   ctx.state.registryUsers = [];
+  ctx.state.supabaseAuthId = null;
+  ctx.state.isOwner = false;
 
-  if (ctx.state.systemUser && ctx.state.activeRegistry) {
-    ctx.state.registries = await getRegistries();
-    ctx.state.registryUsers = await getUsers(ctx.state.activeRegistry.id);
+  const authUser = await getUserFromRequest(ctx.req);
+  if (!authUser) return await ctx.next();
+
+  ctx.state.supabaseAuthId = authUser.id;
+
+  let systemUser = await getUserBySupabaseId(authUser.id);
+  if (!systemUser) {
+    systemUser = await createUserFromSupabase(
+      authUser.id,
+      authUser.email,
+      authUser.email.split("@")[0],
+    );
+    await ensureUserPreferences(systemUser.id);
+  }
+  ctx.state.systemUser = systemUser;
+
+  ctx.state.registries = await getRegistriesForUser(systemUser.id);
+
+  const activeRegistry = await getUserActiveRegistry(systemUser.id);
+  if (activeRegistry) {
+    ctx.state.activeRegistry = activeRegistry;
+    ctx.state.registryUsers = await getUsers(activeRegistry.id);
+
+    const { query } = await import("./lib/db.ts");
+    const roleResult = await query(
+      "SELECT role FROM registry_members WHERE registry_id = $1 AND user_id = $2",
+      [activeRegistry.id, systemUser.id],
+    );
+    ctx.state.isOwner = roleResult.rows.length > 0 &&
+      roleResult.rows[0].role === "owner";
   }
 
   return await ctx.next();
@@ -25,14 +62,19 @@ app.use(define.middleware(async (ctx) => {
   const hasUser = ctx.state.systemUser !== null;
   const hasRegistry = ctx.state.activeRegistry !== null;
 
-  const isApiSetup = path === "/api/users/setup";
-  const isSetup = path === "/setup";
+  const publicPaths = [
+    "/login",
+    "/signup",
+    "/api/auth/callback",
+    "/api/auth/logout",
+  ];
+  const isPublic = publicPaths.some((p) => path.startsWith(p));
 
-  if (!hasUser && !isSetup && !isApiSetup) {
-    return ctx.redirect("/setup");
+  if (!hasUser && !isPublic) {
+    return ctx.redirect("/login");
   }
 
-  if (isSetup && hasUser) {
+  if (hasUser && (path === "/login" || path === "/signup")) {
     return ctx.redirect("/");
   }
 
@@ -40,12 +82,9 @@ app.use(define.middleware(async (ctx) => {
     if (path.startsWith("/dashboard")) {
       return ctx.redirect("/");
     }
-    if (path === "/" && !isSetup) {
-      // Let "/" render — it shows "Nuevo registro" link
-    }
   }
 
-  if (hasUser && hasRegistry && (path === "/" || path === "/setup")) {
+  if (hasUser && hasRegistry && path === "/") {
     return ctx.redirect("/dashboard");
   }
 
