@@ -196,8 +196,10 @@ function TransactionCardClickable(props: {
 }
 
 export default function TransactionList(props: TransactionListProps) {
+  const transactions = useSignal<EnrichedTransaction[]>(props.transactions);
   const isOpen = useSignal(false);
   const editingId = useSignal<string | null>(null);
+  const submitting = useSignal(false);
   const amount = useSignal(0);
   const description = useSignal("");
   const notes = useSignal("");
@@ -360,20 +362,10 @@ export default function TransactionList(props: TransactionListProps) {
     );
   }
 
-  function setDefaultSplitMode() {
-    if (
-      props.defaultSplit &&
-      props.defaultSplit.splits.length === props.users.length
-    ) {
-      splitMode.value = "percentage";
-      percentages.value = buildDefaultPercentages();
-    } else {
-      setAutoSplit();
-    }
-  }
-
   async function handleSubmit(e: Event) {
     e.preventDefault();
+    if (submitting.value) return;
+    submitting.value = true;
 
     let splitJson: TransactionSplit;
 
@@ -403,29 +395,58 @@ export default function TransactionList(props: TransactionListProps) {
       form.append("installmentTotal", installmentTotal.value.toString());
     }
 
-    if (editingId.value) {
-      await fetch(`/api/transactions/${editingId.value}`, {
-        method: "PUT",
-        body: form,
-      });
-    } else {
-      await fetch("/api/transactions", { method: "POST", body: form });
+    try {
+      if (editingId.value) {
+        const res = await fetch(`/api/transactions/${editingId.value}`, {
+          method: "PUT",
+          body: form,
+        });
+        if (!res.ok) throw new Error("Update failed");
+        const updated = await res.json();
+        const paidByUser = props.users.find((u) => u.id === updated.userPaid) ??
+          null;
+        transactions.value = transactions.value.map((t) =>
+          t.id === editingId.value ? { ...updated, paidByUser } : t
+        );
+      } else {
+        const res = await fetch("/api/transactions", {
+          method: "POST",
+          body: form,
+        });
+        if (!res.ok) throw new Error("Create failed");
+        const created = await res.json();
+        const paidByUser = props.users.find((u) => u.id === created.userPaid) ??
+          null;
+        transactions.value = [
+          { ...created, paidByUser },
+          ...transactions.value,
+        ];
+      }
+      isOpen.value = false;
+      editingId.value = null;
+      globalThis.location.reload();
+    } catch {
+      submitting.value = false;
     }
-    isOpen.value = false;
-    editingId.value = null;
-    window.location.reload();
   }
 
   function handleDelete() {
-    if (!editingId.value) return;
+    if (!editingId.value || submitting.value) return;
     if (!confirm("Eliminar esta transacción?")) return;
-    fetch(`/api/transactions/${editingId.value}`, { method: "DELETE" }).then(
-      () => {
+    submitting.value = true;
+    const id = editingId.value;
+    fetch(`/api/transactions/${id}`, { method: "DELETE" }).then((res) => {
+      if (res.ok) {
+        transactions.value = transactions.value.filter((t) => t.id !== id);
         isOpen.value = false;
         editingId.value = null;
-        window.location.reload();
-      },
-    );
+        globalThis.location.reload();
+      } else {
+        submitting.value = false;
+      }
+    }).catch(() => {
+      submitting.value = false;
+    });
   }
 
   const splits = getSplits();
@@ -454,7 +475,7 @@ export default function TransactionList(props: TransactionListProps) {
             Transacciones Recientes
           </h2>
         </div>
-        {props.transactions.length === 0
+        {transactions.value.length === 0
           ? (
             <div class="flex flex-col items-center justify-center py-20 text-center">
               <div class="bg-slate-800 p-4 rounded-full mb-4">
@@ -480,7 +501,7 @@ export default function TransactionList(props: TransactionListProps) {
               </p>
             </div>
           )
-          : props.transactions.map((tx) => (
+          : transactions.value.map((tx) => (
             <TransactionCardClickable
               key={tx.id}
               tx={tx}
@@ -1063,8 +1084,9 @@ export default function TransactionList(props: TransactionListProps) {
                 {isEditing.value && (
                   <button
                     type="button"
+                    disabled={submitting.value}
                     onClick={handleDelete}
-                    class="px-4 py-2 text-sm font-semibold text-red-400 hover:text-red-300 transition-colors"
+                    class="px-4 py-2 text-sm font-semibold text-red-400 hover:text-red-300 transition-colors disabled:opacity-50"
                   >
                     Eliminar
                   </button>
@@ -1083,14 +1105,15 @@ export default function TransactionList(props: TransactionListProps) {
                 </button>
                 <button
                   type="button"
+                  disabled={submitting.value}
                   onClick={(e) => handleSubmit(e)}
-                  class={`px-8 py-2 text-sm font-semibold rounded-custom transition-all shadow-lg active:scale-95 ${
+                  class={`px-8 py-2 text-sm font-semibold rounded-custom transition-all shadow-lg active:scale-95 disabled:opacity-50 ${
                     isPago
                       ? "bg-indigo-500 hover:bg-indigo-400 text-white"
                       : "bg-primary hover:bg-primary-light text-white"
                   }`}
                 >
-                  Guardar
+                  {submitting.value ? "Guardando..." : "Guardar"}
                 </button>
               </div>
             </footer>

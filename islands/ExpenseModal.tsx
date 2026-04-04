@@ -18,6 +18,7 @@ type ExpenseType = "unico" | "parcialidad" | "recurrente";
 
 export default function ExpenseModal(props: ExpenseModalProps) {
   const isOpen = useSignal(false);
+  const submitting = useSignal(false);
   const amount = useSignal(0);
   const description = useSignal("");
   const notes = useSignal("");
@@ -166,6 +167,9 @@ export default function ExpenseModal(props: ExpenseModalProps) {
 
   async function handleSubmit(e: Event) {
     e.preventDefault();
+    if (submitting.value) return;
+    submitting.value = true;
+
     const splits = getSplits();
     const splitJson: TransactionSplit = { splits };
 
@@ -183,9 +187,17 @@ export default function ExpenseModal(props: ExpenseModalProps) {
       form.append("installmentTotal", installmentTotal.value.toString());
     }
 
-    await fetch("/api/transactions", { method: "POST", body: form });
-    isOpen.value = false;
-    window.location.reload();
+    try {
+      const res = await fetch("/api/transactions", {
+        method: "POST",
+        body: form,
+      });
+      if (!res.ok) throw new Error("Create failed");
+      isOpen.value = false;
+      globalThis.location.reload();
+    } catch {
+      submitting.value = false;
+    }
   }
 
   const splits = getSplits();
@@ -603,10 +615,11 @@ export default function ExpenseModal(props: ExpenseModalProps) {
               </button>
               <button
                 type="button"
+                disabled={submitting.value}
                 onClick={(e) => handleSubmit(e)}
-                class="px-8 py-2 text-sm font-semibold bg-primary hover:bg-primary-light text-white rounded-custom transition-all shadow-lg active:scale-95"
+                class="px-8 py-2 text-sm font-semibold bg-primary hover:bg-primary-light text-white rounded-custom transition-all shadow-lg active:scale-95 disabled:opacity-50"
               >
-                Guardar
+                {submitting.value ? "Guardando..." : "Guardar"}
               </button>
             </footer>
           </div>

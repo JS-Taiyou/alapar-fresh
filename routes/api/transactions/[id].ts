@@ -29,7 +29,7 @@ export const handlers = define.handlers({
       : null;
     const splitJson: TransactionSplit = JSON.parse(splitJsonStr);
 
-    await updateTransaction(id, {
+    const updated = await updateTransaction(id, {
       description,
       amount,
       originalAmount,
@@ -40,7 +40,7 @@ export const handlers = define.handlers({
       installmentCurrent,
       installmentTotal,
     });
-    return ctx.redirect("/dashboard");
+    return Response.json(updated);
   },
   async DELETE(ctx) {
     const id = ctx.params.id;

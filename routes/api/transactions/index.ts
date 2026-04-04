@@ -22,7 +22,7 @@ export const handlers = define.handlers({
 
     const splitJson: TransactionSplit = JSON.parse(splitJsonStr);
 
-    await createTransaction({
+    const tx = await createTransaction({
       registry_id: registryId,
       description,
       amount,
@@ -39,6 +39,6 @@ export const handlers = define.handlers({
       userPaid,
     });
 
-    return ctx.redirect("/dashboard");
+    return Response.json(tx);
   },
 });
