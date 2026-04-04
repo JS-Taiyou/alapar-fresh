@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #093eaa;
+  --color-primary-light: #1e5cd9;
+  --color-primary-dark: #062d7c;
+  --color-background: #0a0a0c;
+  --color-surface: #16161a;
+  --color-card: #1a1a1a;
+  --color-border-custom: #2d2d33;
+  --font-sans: "Inter", sans-serif;
+  --radius-custom: 8px;
+}
+
+html, body {
+  background-color: var(--color-background);
+  color: #f8fafc;
+}
+
+.bg-pattern {
+  background-image: radial-gradient(circle at 2px 2px, rgba(9, 62, 170, 0.15) 1px, transparent 0);
+  background-size: 40px 40px;
+}
+
+.gradient-glow {
+  background: radial-gradient(circle at 50% 50%, rgba(9, 62, 170, 0.2) 0%, rgba(10, 10, 12, 0) 70%);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 10px;
+}
+
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+.modal-overlay {
+  background-color: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(4px);
+}

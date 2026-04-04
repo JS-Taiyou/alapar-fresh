@@ -1,0 +1,45 @@
+import { define } from "../../../utils.ts";
+import { updateTransaction, deleteTransaction, getTransactionById } from "../../../lib/store.ts";
+import type { TransactionSplit } from "../../../lib/types.ts";
+
+export const handlers = define.handlers({
+  async PUT(ctx) {
+    const id = ctx.params.id;
+    const tx = await getTransactionById(id);
+    if (!tx) {
+      return new Response("Not found", { status: 404 });
+    }
+    const form = await ctx.req.formData();
+    const description = form.get("description") as string;
+    const amount = parseFloat(form.get("amount") as string);
+    const originalAmount = parseFloat(form.get("originalAmount") as string);
+    const type = (form.get("type") as string) || "unico";
+    const splitJsonStr = form.get("splitJson") as string;
+    const userPaid = form.get("userPaid") as string;
+    const notes = (form.get("notes") as string) || "";
+    const installmentCurrent = form.get("installmentCurrent") ? parseInt(form.get("installmentCurrent") as string) : null;
+    const installmentTotal = form.get("installmentTotal") ? parseInt(form.get("installmentTotal") as string) : null;
+    const splitJson: TransactionSplit = JSON.parse(splitJsonStr);
+
+    await updateTransaction(id, {
+      description,
+      amount,
+      originalAmount,
+      type: type as "unico" | "parcialidad" | "recurrente",
+      notes,
+      splitJson,
+      userPaid,
+      installmentCurrent,
+      installmentTotal,
+    });
+    return ctx.redirect("/dashboard");
+  },
+  async DELETE(ctx) {
+    const id = ctx.params.id;
+    const deleted = await deleteTransaction(id);
+    if (!deleted) {
+      return new Response("Not found", { status: 404 });
+    }
+    return new Response(null, { status: 204 });
+  },
+});
