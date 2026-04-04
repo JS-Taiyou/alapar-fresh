@@ -797,3 +797,11 @@ export function calculatePairwiseBreakdown(
   entries.sort((a, b) => b.amount - a.amount);
   return entries;
 }
+
+export async function isEmailAllowed(email: string): Promise<boolean> {
+  const result = await query(
+    "SELECT 1 FROM allowed_emails WHERE email = $1",
+    [email.toLowerCase()],
+  );
+  return result.rows.length > 0;
+}

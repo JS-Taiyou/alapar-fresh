@@ -24,8 +24,6 @@ export default function AuthForm(props: AuthFormProps) {
     return <div class="text-red-400 text-center p-4">{error.value}</div>;
   }
 
-  const ALLOWED_EMAILS = ["jpsb23@gmail.com", "itzapicm@gmail.com"];
-
   async function handleSubmit(e: Event) {
     e.preventDefault();
     error.value = "";
@@ -33,8 +31,20 @@ export default function AuthForm(props: AuthFormProps) {
 
     try {
       if (props.mode === "signup") {
-        if (!ALLOWED_EMAILS.includes(email.value)) {
-          error.value = "Este email no está autorizado para registrarse.";
+        try {
+          const res = await fetch("/api/auth/check-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: email.value }),
+          });
+          const data = await res.json();
+          if (!data.allowed) {
+            error.value = "Este email no está autorizado para registrarse.";
+            loading.value = false;
+            return;
+          }
+        } catch {
+          error.value = "Error al verificar email.";
           loading.value = false;
           return;
         }

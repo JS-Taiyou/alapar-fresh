@@ -174,9 +174,9 @@ export default function Sidebar(props: SidebarProps) {
             onClick={() => {
               showInvite.value = true;
             }}
-            class={`w-full flex items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-custom text-sm font-semibold text-emerald-400 transition-all ${
+            class={`w-full flex items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-custom text-sm font-semibold text-emerald-400 ${
               collapsed.value && !mobileOpen.value
-                ? "justify-center p-2 aspect-square"
+                ? "justify-center p-2.5"
                 : "justify-center py-2.5 px-3"
             }`}
           >
@@ -201,9 +201,9 @@ export default function Sidebar(props: SidebarProps) {
       <div class={`border-t border-white/10 space-y-2 ${collapsed.value && !mobileOpen.value ? "p-2" : "p-4"}`}>
         <a
           href="/registries/new"
-          class={`flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-custom text-sm font-semibold text-white transition-all ${
+          class={`flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-custom text-sm font-semibold text-white ${
             collapsed.value && !mobileOpen.value
-              ? "justify-center p-2 aspect-square"
+              ? "justify-center p-2.5"
               : "justify-center py-3 px-4"
           }`}
         >
@@ -286,7 +286,7 @@ export default function Sidebar(props: SidebarProps) {
       <aside
         class={`hidden md:flex ${
           collapsed.value ? "w-16" : "w-72"
-        } bg-[#0a0a0a] border-r border-white/10 flex-col h-full transition-all duration-300`}
+        } bg-[#0a0a0a] border-r border-white/10 flex-col h-full overflow-hidden transition-[width] duration-300`}
       >
         {sidebarContent}
       </aside>

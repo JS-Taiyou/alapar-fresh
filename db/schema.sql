@@ -115,6 +115,15 @@ CREATE TABLE audit_log (
 CREATE INDEX idx_audit_log_actor ON audit_log(actor_id);
 CREATE INDEX idx_audit_log_registry ON audit_log(target_id);
 
+-- Allowed emails for registration
+CREATE TABLE allowed_emails (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_allowed_emails_email ON allowed_emails(email);
+
 -- Indexes
 CREATE INDEX idx_transactions_registry ON transactions(registry_id);
 CREATE INDEX idx_transactions_exercise ON transactions(exercise_id);

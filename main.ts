@@ -7,6 +7,7 @@ import {
   getUserActiveRegistry,
   getUserBySupabaseId,
   getUsers,
+  isEmailAllowed,
 } from "./lib/store.ts";
 import { getUserFromRequest } from "./lib/supabase.ts";
 import { query } from "./lib/db.ts";
@@ -26,8 +27,7 @@ app.use(define.middleware(async (ctx) => {
   const authUser = await getUserFromRequest(ctx.req);
   if (!authUser) return await ctx.next();
 
-  const ALLOWED_EMAILS = ["jpsb23@gmail.com", "itzapicm@gmail.com"];
-  if (!ALLOWED_EMAILS.includes(authUser.email)) {
+  if (!(await isEmailAllowed(authUser.email))) {
     return ctx.redirect("/login?error=unauthorized");
   }
 
@@ -44,6 +44,10 @@ app.use(define.middleware(async (ctx) => {
   } else if (authUser.name && systemUser.name !== authUser.name) {
     await query(
       "UPDATE system_users SET name = $1 WHERE id = $2",
+      [authUser.name, systemUser.id],
+    );
+    await query(
+      "UPDATE users SET name = $1 WHERE system_user_id = $2",
       [authUser.name, systemUser.id],
     );
     systemUser = { ...systemUser, name: authUser.name };
