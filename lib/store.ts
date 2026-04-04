@@ -156,9 +156,10 @@ export async function ensureUserPreferences(
 }
 
 export async function getUsers(registryId: string): Promise<User[]> {
-  const result = await query("SELECT * FROM users WHERE registry_id = $1", [
-    registryId,
-  ]);
+  const result = await query(
+    "SELECT u.*, COALESCE(su.name, u.name) as name FROM users u LEFT JOIN system_users su ON u.system_user_id = su.id WHERE u.registry_id = $1",
+    [registryId],
+  );
   return result.rows.map(rowToUser);
 }
 
