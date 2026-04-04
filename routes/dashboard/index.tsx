@@ -11,7 +11,11 @@ import TransactionList from "../../islands/TransactionList.tsx";
 import CortarButton from "../../islands/CortarButton.tsx";
 import RecurringSpawn from "../../islands/RecurringSpawn.tsx";
 import BalanceBreakdown from "../../islands/BalanceBreakdown.tsx";
-import type { BalanceBreakdownEntry, Transaction, User } from "../../lib/types.ts";
+import type {
+  BalanceBreakdownEntry,
+  Transaction,
+  User,
+} from "../../lib/types.ts";
 
 interface EnrichedTransaction extends Transaction {
   paidByUser: User | null;
@@ -148,13 +152,14 @@ export default define.page(function DashboardIndex(ctx) {
           <CortarButton balance={balance} hasTransactions={hasTransactions} />
         </div>
       </header>
-        <TransactionList
-          transactions={data.transactions}
-          users={users}
-          currentUserId={currentRegistryUserId}
-          registryId={ctx.state.activeRegistry?.id ?? ""}
-          balanceBreakdown={data.balanceBreakdown}
-        />
+      <TransactionList
+        transactions={data.transactions}
+        users={users}
+        currentUserId={currentRegistryUserId}
+        registryId={ctx.state.activeRegistry?.id ?? ""}
+        balanceBreakdown={data.balanceBreakdown}
+        defaultSplit={ctx.state.activeRegistry?.defaultSplit ?? null}
+      />
     </>
   );
 });

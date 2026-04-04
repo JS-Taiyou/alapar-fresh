@@ -21,6 +21,8 @@ CREATE TABLE registries (
   db_name TEXT NOT NULL UNIQUE,
   is_default BOOLEAN NOT NULL DEFAULT false,
   latest_accessed TIMESTAMPTZ NOT NULL DEFAULT now(),
+  default_split_json JSONB DEFAULT NULL,
+  default_split_member_count INTEGER DEFAULT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -44,15 +46,17 @@ CREATE TABLE user_preferences (
 
 CREATE INDEX idx_user_preferences_user ON user_preferences(user_id);
 
--- Per-registry user profiles
+-- Per-registry user profiles (includes entities/third parties)
 CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   registry_id UUID NOT NULL REFERENCES registries(id) ON DELETE CASCADE,
-  system_user_id UUID NOT NULL REFERENCES system_users(id) ON DELETE CASCADE,
-  email TEXT NOT NULL,
+  system_user_id UUID REFERENCES system_users(id) ON DELETE CASCADE,
+  email TEXT NOT NULL DEFAULT '',
   name TEXT NOT NULL,
   color TEXT NOT NULL DEFAULT '#093eaa',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  is_entity BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (system_user_id IS NOT NULL OR is_entity = true)
 );
 
 -- Exercises (cuts/settlements) - before transactions due to FK

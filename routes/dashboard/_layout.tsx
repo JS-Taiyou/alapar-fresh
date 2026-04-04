@@ -9,6 +9,8 @@ export default define.layout(function DashboardLayout(ctx) {
     2,
   ).toUpperCase();
 
+  const entities = ctx.state.registryUsers.filter((u) => u.isEntity);
+
   return (
     <div class="flex h-screen overflow-hidden">
       <Sidebar
@@ -17,6 +19,8 @@ export default define.layout(function DashboardLayout(ctx) {
         userName={userName}
         userInitials={userInitials}
         isOwner={ctx.state.isOwner}
+        entities={entities}
+        defaultSplit={ctx.state.activeRegistry?.defaultSplit ?? null}
       />
       <div class="flex-1 flex flex-col min-w-0">
         <ctx.Component />

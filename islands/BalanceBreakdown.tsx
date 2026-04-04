@@ -32,7 +32,9 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
       <button
         type="button"
         onClick={toggle}
-        class={`text-left ${canShowPopover ? "cursor-pointer group" : "cursor-default"}`}
+        class={`text-left ${
+          canShowPopover ? "cursor-pointer group" : "cursor-default"
+        }`}
       >
         <div class="flex items-center gap-2">
           <span class="text-sm font-medium text-gray-400 uppercase tracking-wider">

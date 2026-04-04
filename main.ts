@@ -82,6 +82,7 @@ app.use(define.middleware(async (ctx) => {
     "/signup",
     "/api/auth/callback",
     "/api/auth/logout",
+    "/api/auth/check-email",
   ];
   const isPublic = publicPaths.some((p) => path.startsWith(p));
 

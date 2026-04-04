@@ -1,6 +1,7 @@
 import { useComputed, useSignal } from "@preact/signals";
 import type {
   BalanceBreakdownEntry,
+  DefaultSplit,
   SplitEntry,
   Transaction,
   TransactionSplit,
@@ -17,6 +18,7 @@ interface TransactionListProps {
   currentUserId: string;
   registryId: string;
   balanceBreakdown: BalanceBreakdownEntry[];
+  defaultSplit: DefaultSplit | null;
 }
 
 type SplitMode = "auto" | "percentage" | "fixed";
@@ -38,6 +40,24 @@ function sanitizeDecimal(raw: string): string {
 
 function sanitizeInteger(raw: string): string {
   return raw.replace(/[^0-9]/g, "");
+}
+
+function computeDefaultPercentages(
+  users: User[],
+  defaultSplit: DefaultSplit | null,
+): Record<string, number> {
+  if (defaultSplit && defaultSplit.splits.length === users.length) {
+    const userIds = new Set(users.map((u) => u.id));
+    const allPresent = defaultSplit.splits.every((s) => userIds.has(s.userId));
+    if (allPresent) {
+      return Object.fromEntries(
+        defaultSplit.splits.map((s) => [s.userId, s.percentage]),
+      );
+    }
+  }
+  return Object.fromEntries(
+    users.map((u) => [u.id, Math.round(10000 / users.length) / 100]),
+  );
 }
 
 function TransactionCardClickable(props: {
@@ -190,17 +210,17 @@ export default function TransactionList(props: TransactionListProps) {
     props.users.find((u) => u.id !== props.currentUserId)?.id ?? "",
   );
   const percentages = useSignal<Record<string, number>>(
-    Object.fromEntries(
-      props.users.map((
-        u,
-      ) => [u.id, Math.round(10000 / props.users.length) / 100]),
-    ),
+    computeDefaultPercentages(props.users, props.defaultSplit),
   );
   const fixedAmounts = useSignal<Record<string, number>>(
     Object.fromEntries(props.users.map((u) => [u.id, 0])),
   );
 
   const isEditing = useComputed(() => editingId.value !== null);
+
+  function buildDefaultPercentages(): Record<string, number> {
+    return computeDefaultPercentages(props.users, props.defaultSplit);
+  }
 
   function resetForm() {
     amount.value = 0;
@@ -209,15 +229,19 @@ export default function TransactionList(props: TransactionListProps) {
     expenseType.value = "unico";
     installmentCurrent.value = 1;
     installmentTotal.value = 12;
-    splitMode.value = "auto";
     userPaid.value = props.currentUserId;
     paymentRecipient.value =
       props.users.find((u) => u.id !== props.currentUserId)?.id ?? "";
-    percentages.value = Object.fromEntries(
-      props.users.map((
-        u,
-      ) => [u.id, Math.round(10000 / props.users.length) / 100]),
-    );
+    if (
+      props.defaultSplit &&
+      props.defaultSplit.splits.length === props.users.length
+    ) {
+      splitMode.value = "percentage";
+      percentages.value = buildDefaultPercentages();
+    } else {
+      splitMode.value = "auto";
+      percentages.value = buildDefaultPercentages();
+    }
     fixedAmounts.value = Object.fromEntries(props.users.map((u) => [u.id, 0]));
     editingId.value = null;
   }
@@ -329,10 +353,23 @@ export default function TransactionList(props: TransactionListProps) {
 
   function setAutoSplit() {
     splitMode.value = "auto";
-    const count = props.users.length;
     percentages.value = Object.fromEntries(
-      props.users.map((u) => [u.id, Math.round((100 / count) * 100) / 100]),
+      props.users.map((
+        u,
+      ) => [u.id, Math.round((100 / props.users.length) * 100) / 100]),
     );
+  }
+
+  function setDefaultSplitMode() {
+    if (
+      props.defaultSplit &&
+      props.defaultSplit.splits.length === props.users.length
+    ) {
+      splitMode.value = "percentage";
+      percentages.value = buildDefaultPercentages();
+    } else {
+      setAutoSplit();
+    }
   }
 
   async function handleSubmit(e: Event) {
@@ -711,6 +748,11 @@ export default function TransactionList(props: TransactionListProps) {
                                           (Tú)
                                         </span>
                                       )}
+                                      {user.isEntity && (
+                                        <span class="text-xs ml-1 px-1.5 py-0.5 rounded bg-slate-700 text-slate-400">
+                                          tercero
+                                        </span>
+                                      )}
                                     </span>
                                   </div>
                                 </td>
@@ -756,22 +798,32 @@ export default function TransactionList(props: TransactionListProps) {
                                         const bd = props.balanceBreakdown.find(
                                           (b) => b.userId === user.id,
                                         );
-                                        if (!bd || Math.abs(bd.amount) < 0.01) return null;
+                                        if (!bd || Math.abs(bd.amount) < 0.01) {
+                                          return null;
+                                        }
                                         return bd.amount > 0
                                           ? (
                                             <span class="text-xs font-semibold text-green-400">
-                                              Te debe ${bd.amount.toLocaleString(
-                                                "en-US",
-                                                { minimumFractionDigits: 2, maximumFractionDigits: 2 },
-                                              )}
+                                              Te debe ${bd.amount
+                                                .toLocaleString(
+                                                  "en-US",
+                                                  {
+                                                    minimumFractionDigits: 2,
+                                                    maximumFractionDigits: 2,
+                                                  },
+                                                )}
                                             </span>
                                           )
                                           : (
                                             <span class="text-xs font-semibold text-red-400">
-                                              Le debes ${Math.abs(bd.amount).toLocaleString(
-                                                "en-US",
-                                                { minimumFractionDigits: 2, maximumFractionDigits: 2 },
-                                              )}
+                                              Le debes ${Math.abs(bd.amount)
+                                                .toLocaleString(
+                                                  "en-US",
+                                                  {
+                                                    minimumFractionDigits: 2,
+                                                    maximumFractionDigits: 2,
+                                                  },
+                                                )}
                                             </span>
                                           );
                                       })()}
@@ -803,11 +855,29 @@ export default function TransactionList(props: TransactionListProps) {
                         >
                           Auto
                         </button>
+                        {props.defaultSplit && (
+                          <button
+                            type="button"
+                            onClick={setDefaultSplitMode}
+                            class={`text-xs font-semibold px-2 py-1 rounded transition-colors ${
+                              splitMode.value === "percentage" &&
+                                props.defaultSplit.splits.length ===
+                                  props.users.length
+                                ? "bg-primary/20 text-primary"
+                                : "text-slate-400 hover:text-white"
+                            }`}
+                          >
+                            Default
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => splitMode.value = "percentage"}
                           class={`text-xs font-semibold px-2 py-1 rounded transition-colors ${
-                            splitMode.value === "percentage"
+                            splitMode.value === "percentage" &&
+                              !(props.defaultSplit &&
+                                props.defaultSplit.splits.length ===
+                                  props.users.length)
                               ? "bg-primary/20 text-primary"
                               : "text-slate-400 hover:text-white"
                           }`}
@@ -869,6 +939,11 @@ export default function TransactionList(props: TransactionListProps) {
                                       {user.id === props.currentUserId && (
                                         <span class="text-slate-500 ml-1">
                                           (Tú)
+                                        </span>
+                                      )}
+                                      {user.isEntity && (
+                                        <span class="text-xs ml-1 px-1.5 py-0.5 rounded bg-slate-700 text-slate-400">
+                                          tercero
                                         </span>
                                       )}
                                     </span>

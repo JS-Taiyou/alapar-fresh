@@ -1,10 +1,11 @@
 export interface User {
   id: string;
   registry_id: string;
-  system_user_id: string;
+  system_user_id: string | null;
   email: string;
   name: string;
   color: string;
+  isEntity: boolean;
   createdAt: Date;
 }
 
@@ -36,12 +37,23 @@ export interface Exercise {
   totalAmount: number;
 }
 
+export interface DefaultSplitEntry {
+  userId: string;
+  percentage: number;
+}
+
+export interface DefaultSplit {
+  splits: DefaultSplitEntry[];
+}
+
 export interface Registry {
   id: string;
   name: string;
   dbName: string;
   isDefault: boolean;
   latestAccessed: Date;
+  defaultSplit: DefaultSplit | null;
+  defaultSplitMemberCount: number | null;
 }
 
 export interface SplitEntry {

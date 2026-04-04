@@ -1,6 +1,7 @@
 import { query } from "./db.ts";
 import type {
   BalanceBreakdownEntry,
+  DefaultSplit,
   Exercise,
   Registry,
   SplitEntry,
@@ -38,10 +39,11 @@ function rowToUser(row: Record<string, unknown>): User {
   return {
     id: row.id as string,
     registry_id: row.registry_id as string,
-    system_user_id: row.system_user_id as string,
-    email: row.email as string,
+    system_user_id: (row.system_user_id as string) ?? null,
+    email: (row.email as string) ?? "",
     name: row.name as string,
     color: row.color as string,
+    isEntity: (row.is_entity as boolean) ?? false,
     createdAt: new Date(row.created_at as string),
   };
 }
@@ -87,6 +89,12 @@ function rowToRegistry(row: Record<string, unknown>): Registry {
     dbName: row.db_name as string,
     isDefault: row.is_default as boolean,
     latestAccessed: new Date(row.latest_accessed as string),
+    defaultSplit: row.default_split_json
+      ? (typeof row.default_split_json === "string"
+        ? JSON.parse(row.default_split_json)
+        : row.default_split_json as DefaultSplit)
+      : null,
+    defaultSplitMemberCount: (row.default_split_member_count as number) ?? null,
   };
 }
 
@@ -548,6 +556,106 @@ export async function cloneTransactionForNextPeriod(
   });
 }
 
+export async function getEntities(registryId: string): Promise<User[]> {
+  const result = await query(
+    "SELECT * FROM users WHERE registry_id = $1 AND is_entity = true ORDER BY created_at",
+    [registryId],
+  );
+  return result.rows.map(rowToUser);
+}
+
+export async function createEntity(
+  registryId: string,
+  name: string,
+  color?: string,
+): Promise<User> {
+  const result = await query(
+    "INSERT INTO users (registry_id, name, color, is_entity) VALUES ($1, $2, $3, true) RETURNING *",
+    [registryId, name, color ?? "#6b7280"],
+  );
+  return rowToUser(result.rows[0]);
+}
+
+export async function updateEntity(
+  entityId: string,
+  name: string,
+  color?: string,
+): Promise<User | undefined> {
+  const result = await query(
+    "UPDATE users SET name = $1, color = COALESCE($2, color) WHERE id = $3 AND is_entity = true RETURNING *",
+    [name, color ?? null, entityId],
+  );
+  if (result.rows.length === 0) return undefined;
+  return rowToUser(result.rows[0]);
+}
+
+export async function deleteEntity(entityId: string): Promise<boolean> {
+  const activeRefs = await query(
+    "SELECT 1 FROM transactions WHERE (creator_id = $1 OR user_paid = $1) AND exercise_id IS NULL LIMIT 1",
+    [entityId],
+  );
+  if (activeRefs.rows.length > 0) return false;
+
+  const splitRefs = await query(
+    "SELECT 1 FROM transactions WHERE exercise_id IS NULL AND split_json @> $1 LIMIT 1",
+    [JSON.stringify({ splits: [{ userId: entityId }] })],
+  );
+  if (splitRefs.rows.length > 0) return false;
+
+  const result = await query(
+    "DELETE FROM users WHERE id = $1 AND is_entity = true",
+    [entityId],
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
+export async function getRegistryMemberCount(
+  registryId: string,
+): Promise<number> {
+  const result = await query(
+    "SELECT COUNT(*) as cnt FROM users WHERE registry_id = $1 AND is_entity = false",
+    [registryId],
+  );
+  return parseInt(result.rows[0].cnt as string);
+}
+
+export async function setDefaultSplit(
+  registryId: string,
+  splits: { userId: string; percentage: number }[],
+): Promise<void> {
+  const memberCount = await getRegistryMemberCount(registryId);
+  await query(
+    "UPDATE registries SET default_split_json = $1, default_split_member_count = $2 WHERE id = $3",
+    [JSON.stringify({ splits }), memberCount, registryId],
+  );
+}
+
+export async function clearDefaultSplit(
+  registryId: string,
+): Promise<void> {
+  await query(
+    "UPDATE registries SET default_split_json = NULL, default_split_member_count = NULL WHERE id = $1",
+    [registryId],
+  );
+}
+
+export async function invalidateDefaultSplitIfNeeded(
+  registryId: string,
+): Promise<void> {
+  const result = await query(
+    "SELECT default_split_member_count FROM registries WHERE id = $1",
+    [registryId],
+  );
+  if (result.rows.length === 0) return;
+  const savedCount = result.rows[0].default_split_member_count as number | null;
+  if (savedCount === null) return;
+
+  const currentCount = await getRegistryMemberCount(registryId);
+  if (currentCount !== savedCount) {
+    await clearDefaultSplit(registryId);
+  }
+}
+
 export function generateInviteCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
@@ -673,6 +781,8 @@ export async function useInvitation(
   );
 
   await setUserActiveRegistry(systemUserId, invitation.registryId);
+
+  await invalidateDefaultSplitIfNeeded(invitation.registryId);
 
   await query(
     `INSERT INTO audit_log (actor_id, action, target_type, target_id, metadata) VALUES ($1, $2, $3, $4, $5)`,

@@ -1,10 +1,16 @@
 import { useSignal } from "@preact/signals";
-import type { SplitEntry, TransactionSplit, User } from "../lib/types.ts";
+import type {
+  DefaultSplit,
+  SplitEntry,
+  TransactionSplit,
+  User,
+} from "../lib/types.ts";
 
 interface ExpenseModalProps {
   users: User[];
   currentUserId: string;
   registryId: string;
+  defaultSplit: DefaultSplit | null;
 }
 
 type SplitMode = "auto" | "percentage" | "fixed";
@@ -56,8 +62,36 @@ export default function ExpenseModal(props: ExpenseModalProps) {
     expenseType.value = "unico";
     installmentCurrent.value = 1;
     installmentTotal.value = 12;
-    splitMode.value = "auto";
     userPaid.value = props.currentUserId;
+    if (
+      props.defaultSplit &&
+      props.defaultSplit.splits.length === props.users.length
+    ) {
+      splitMode.value = "percentage";
+      const userIds = new Set(props.users.map((u) => u.id));
+      const allPresent = props.defaultSplit.splits.every((s) =>
+        userIds.has(s.userId)
+      );
+      if (allPresent) {
+        percentages.value = Object.fromEntries(
+          props.defaultSplit.splits.map((s) => [s.userId, s.percentage]),
+        );
+      } else {
+        splitMode.value = "auto";
+        percentages.value = Object.fromEntries(
+          props.users.map((
+            u,
+          ) => [u.id, Math.round(10000 / props.users.length) / 100]),
+        );
+      }
+    } else {
+      splitMode.value = "auto";
+      percentages.value = Object.fromEntries(
+        props.users.map((
+          u,
+        ) => [u.id, Math.round(10000 / props.users.length) / 100]),
+      );
+    }
     isOpen.value = true;
   }
 
@@ -436,6 +470,11 @@ export default function ExpenseModal(props: ExpenseModalProps) {
                                   {user.id === props.currentUserId && (
                                     <span class="text-slate-500 ml-1">
                                       (Tú)
+                                    </span>
+                                  )}
+                                  {user.isEntity && (
+                                    <span class="text-xs ml-1 px-1.5 py-0.5 rounded bg-slate-700 text-slate-400">
+                                      tercero
                                     </span>
                                   )}
                                 </span>
