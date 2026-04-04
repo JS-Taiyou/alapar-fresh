@@ -268,8 +268,8 @@ export default function AuthForm(props: AuthFormProps) {
               Ya tienes cuenta?{" "}
               <a
                 href={`/login${
-                  redirectUrl
-                    ? `?redirect=${encodeURIComponent(redirectUrl)}`
+                  redirectPath !== "/"
+                    ? `?redirect=${encodeURIComponent(redirectPath)}`
                     : ""
                 }`}
                 class="text-primary hover:underline"
