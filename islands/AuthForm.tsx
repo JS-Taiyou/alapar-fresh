@@ -53,7 +53,7 @@ export default function AuthForm(props: AuthFormProps) {
           password: password.value,
           options: {
             data: { name: name.value },
-            emailRedirectTo: globalThis.location.origin + "/api/auth/callback",
+            emailRedirectTo: globalThis.location.origin + "/",
           },
         });
         if (signUpError) {
