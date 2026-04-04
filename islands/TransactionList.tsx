@@ -728,7 +728,7 @@ export default function TransactionList(props: TransactionListProps) {
                       Transferencia
                     </h3>
                     <div class="border border-border-custom rounded-custom overflow-hidden">
-                      <table class="w-full text-left border-collapse">
+                      <table class="hidden md:table w-full text-left border-collapse">
                         <thead class="bg-slate-800/50">
                           <tr>
                             <th class="px-4 py-3 text-xs font-semibold text-slate-400">
@@ -855,6 +855,116 @@ export default function TransactionList(props: TransactionListProps) {
                           })}
                         </tbody>
                       </table>
+
+                      <div class="md:hidden divide-y divide-border-custom">
+                        {props.users.map((user) => {
+                          const initials = user.name.split(" ").map((n) => n[0])
+                            .join("").substring(0, 2).toUpperCase();
+                          const bd = props.users.length > 2 &&
+                              user.id !== props.currentUserId
+                            ? props.balanceBreakdown.find((b) =>
+                              b.userId === user.id
+                            )
+                            : null;
+                          return (
+                            <div
+                              key={user.id}
+                              class="flex items-center gap-3 px-3 py-3"
+                            >
+                              <div class="flex flex-col items-center gap-1">
+                                <span class="text-[9px] text-slate-500 uppercase">
+                                  Pagó
+                                </span>
+                                <input
+                                  type="radio"
+                                  name="pagoPaidMobile"
+                                  value={user.id}
+                                  checked={userPaid.value === user.id}
+                                  onChange={() => {
+                                    userPaid.value = user.id;
+                                    if (paymentRecipient.value === user.id) {
+                                      paymentRecipient.value =
+                                        props.users.find((u) =>
+                                          u.id !== user.id
+                                        )?.id ?? "";
+                                    }
+                                  }}
+                                  class="accent-primary"
+                                />
+                              </div>
+                              <div class="flex flex-col items-center gap-1">
+                                <span class="text-[9px] text-slate-500 uppercase">
+                                  Recibió
+                                </span>
+                                <input
+                                  type="radio"
+                                  name="pagoRecipientMobile"
+                                  value={user.id}
+                                  checked={paymentRecipient.value === user.id}
+                                  onChange={() => {
+                                    paymentRecipient.value = user.id;
+                                    if (userPaid.value === user.id) {
+                                      userPaid.value = props.users.find((u) =>
+                                        u.id !== user.id
+                                      )?.id ?? props.currentUserId;
+                                    }
+                                  }}
+                                  class="accent-indigo-400"
+                                />
+                              </div>
+                              <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2">
+                                  <div
+                                    class="h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                                    style={`background-color: ${user.color}30; color: ${user.color}`}
+                                  >
+                                    {initials}
+                                  </div>
+                                  <span class="text-sm font-medium text-white truncate">
+                                    {user.name}
+                                    {user.id === props.currentUserId && (
+                                      <span class="text-slate-500 ml-1">
+                                        (Tú)
+                                      </span>
+                                    )}
+                                    {user.isEntity && (
+                                      <span class="text-xs ml-1 px-1 py-0.5 rounded bg-slate-700 text-slate-400">
+                                        tercero
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                                {bd && Math.abs(bd.amount) >= 0.01 && (
+                                  <span
+                                    class={`text-xs font-semibold ${
+                                      bd.amount > 0
+                                        ? "text-green-400"
+                                        : "text-red-400"
+                                    } ml-8`}
+                                  >
+                                    {bd.amount > 0
+                                      ? `Te debe $${
+                                        bd.amount.toLocaleString("en-US", {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })
+                                      }`
+                                      : `Le debes $${
+                                        Math.abs(bd.amount).toLocaleString(
+                                          "en-US",
+                                          {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                          },
+                                        )
+                                      }`}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </section>
                 )
@@ -909,7 +1019,7 @@ export default function TransactionList(props: TransactionListProps) {
                     </div>
 
                     <div class="border border-border-custom rounded-custom overflow-hidden">
-                      <table class="w-full text-left border-collapse">
+                      <table class="hidden md:table w-full text-left border-collapse">
                         <thead class="bg-slate-800/50">
                           <tr>
                             <th class="px-4 py-3 text-xs font-semibold text-slate-400">
@@ -1074,6 +1184,157 @@ export default function TransactionList(props: TransactionListProps) {
                           </tr>
                         </tfoot>
                       </table>
+
+                      <div class="md:hidden divide-y divide-border-custom">
+                        {props.users.map((user) => {
+                          const split = splits.find((s) =>
+                            s.userId === user.id
+                          );
+                          const initials = user.name.split(" ").map((n) => n[0])
+                            .join("").substring(0, 2).toUpperCase();
+                          return (
+                            <div
+                              key={user.id}
+                              class="flex items-start gap-3 px-3 py-3"
+                            >
+                              <div class="flex flex-col items-center gap-2 pt-0.5">
+                                <input
+                                  type="radio"
+                                  name="userPaidMobile"
+                                  value={user.id}
+                                  checked={userPaid.value === user.id}
+                                  onChange={() => userPaid.value = user.id}
+                                  class="accent-primary"
+                                />
+                              </div>
+                              <div class="flex-1 min-w-0 space-y-1.5">
+                                <div class="flex items-center gap-2">
+                                  <div
+                                    class="h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                                    style={`background-color: ${user.color}30; color: ${user.color}`}
+                                  >
+                                    {initials}
+                                  </div>
+                                  <span class="text-sm font-medium text-white truncate">
+                                    {user.name}
+                                    {user.id === props.currentUserId && (
+                                      <span class="text-slate-500 ml-1">
+                                        (Tú)
+                                      </span>
+                                    )}
+                                    {user.isEntity && (
+                                      <span class="text-xs ml-1 px-1 py-0.5 rounded bg-slate-700 text-slate-400">
+                                        tercero
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                                <div class="flex items-center gap-4 text-sm">
+                                  <div class="flex items-center">
+                                    {splitMode.value === "percentage"
+                                      ? (
+                                        <input
+                                          class="w-14 bg-transparent border-0 text-right text-sm font-medium text-white focus:ring-0 p-0"
+                                          type="text"
+                                          inputmode="decimal"
+                                          value={percentages.value[user.id] ??
+                                            0}
+                                          onInput={(e) => {
+                                            const sanitized = sanitizeDecimal(
+                                              (e.target as HTMLInputElement)
+                                                .value,
+                                            );
+                                            (e.target as HTMLInputElement)
+                                              .value = sanitized;
+                                            const v = parseFloat(sanitized) ||
+                                              0;
+                                            percentages.value = {
+                                              ...percentages.value,
+                                              [user.id]: v,
+                                            };
+                                            autoComplementPercentage(user.id);
+                                          }}
+                                        />
+                                      )
+                                      : (
+                                        <span class="text-slate-400">
+                                          {split?.percentage.toFixed(0) ?? 0}
+                                        </span>
+                                      )}
+                                    <span class="ml-0.5 text-slate-500 text-xs">
+                                      %
+                                    </span>
+                                  </div>
+                                  <div class="flex items-center">
+                                    {splitMode.value === "fixed"
+                                      ? (
+                                        <input
+                                          class="w-20 bg-transparent border-0 text-right text-sm font-medium text-white focus:ring-0 p-0"
+                                          type="text"
+                                          inputmode="decimal"
+                                          value={fixedAmounts.value[user.id] ??
+                                            0}
+                                          onInput={(e) => {
+                                            const sanitized = sanitizeDecimal(
+                                              (e.target as HTMLInputElement)
+                                                .value,
+                                            );
+                                            (e.target as HTMLInputElement)
+                                              .value = sanitized;
+                                            const v = parseFloat(sanitized) ||
+                                              0;
+                                            fixedAmounts.value = {
+                                              ...fixedAmounts.value,
+                                              [user.id]: v,
+                                            };
+                                            autoComplementFixed(user.id);
+                                          }}
+                                        />
+                                      )
+                                      : (
+                                        <span class="text-white">
+                                          ${(split?.amount ?? 0).toFixed(2)}
+                                        </span>
+                                      )}
+                                    {splitMode.value === "fixed" && (
+                                      <span class="ml-0.5 text-slate-500 text-xs">
+                                        $
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        <div class="flex items-center justify-between px-3 py-2 bg-slate-800/30">
+                          <span class="text-xs font-bold text-slate-400 italic">
+                            TOTAL
+                          </span>
+                          <div class="flex items-center gap-4">
+                            <span
+                              class={`text-xs font-bold ${
+                                Math.abs(totalPct - 100) < 0.01
+                                  ? "text-white"
+                                  : "text-red-400"
+                              }`}
+                            >
+                              {totalPct.toFixed(0)}%
+                            </span>
+                            <span
+                              class={`text-xs font-bold ${
+                                Math.abs(
+                                    totalSplitAmount - Math.abs(amount.value),
+                                  ) < 0.01
+                                  ? "text-white"
+                                  : "text-red-400"
+                              }`}
+                            >
+                              ${totalSplitAmount.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </section>
                 )}
