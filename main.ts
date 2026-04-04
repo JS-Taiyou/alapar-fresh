@@ -80,6 +80,7 @@ app.use(define.middleware(async (ctx) => {
   const publicPaths = [
     "/login",
     "/signup",
+    "/join",
     "/api/auth/callback",
     "/api/auth/logout",
     "/api/auth/check-email",
@@ -87,7 +88,7 @@ app.use(define.middleware(async (ctx) => {
   const isPublic = publicPaths.some((p) => path.startsWith(p));
 
   if (!hasUser && !isPublic) {
-    return ctx.redirect("/login");
+    return ctx.redirect(`/login?redirect=${encodeURIComponent(path)}`);
   }
 
   if (hasUser && (path === "/login" || path === "/signup")) {

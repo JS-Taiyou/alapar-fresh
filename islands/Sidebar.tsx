@@ -328,10 +328,10 @@ export default function Sidebar(props: SidebarProps) {
       <button
         type="button"
         onClick={() => mobileOpen.value = true}
-        class="md:hidden fixed top-4 left-4 z-40 p-2 bg-surface border border-border-custom rounded-custom text-white"
+        class="md:hidden fixed bottom-20 left-4 z-40 w-12 h-12 bg-surface border border-border-custom rounded-full text-white shadow-lg flex items-center justify-center hover:bg-white/10 active:scale-95 transition-all"
       >
         <svg
-          class="w-6 h-6"
+          class="w-5 h-5"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"

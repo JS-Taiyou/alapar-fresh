@@ -16,10 +16,10 @@ export default function AuthForm(props: AuthFormProps) {
   const error = useSignal("");
   const loading = useSignal(false);
 
-  const redirectPath = typeof globalThis.location !== "undefined"
-    ? (new URL(globalThis.location.href).searchParams.get("redirect") ??
-      "/")
-    : "/";
+  const redirectParam = typeof globalThis.location !== "undefined"
+    ? new URL(globalThis.location.href).searchParams.get("redirect")
+    : null;
+  const redirectPath = redirectParam ?? "/dashboard";
 
   let client: SupabaseClient;
   try {
@@ -253,8 +253,8 @@ export default function AuthForm(props: AuthFormProps) {
               No tienes cuenta?{" "}
               <a
                 href={`/signup${
-                  redirectPath !== "/dashboard"
-                    ? `?redirect=${encodeURIComponent(redirectPath)}`
+                  redirectParam
+                    ? `?redirect=${encodeURIComponent(redirectParam)}`
                     : ""
                 }`}
                 class="text-primary hover:underline"
@@ -268,8 +268,8 @@ export default function AuthForm(props: AuthFormProps) {
               Ya tienes cuenta?{" "}
               <a
                 href={`/login${
-                  redirectPath !== "/"
-                    ? `?redirect=${encodeURIComponent(redirectPath)}`
+                  redirectParam
+                    ? `?redirect=${encodeURIComponent(redirectParam)}`
                     : ""
                 }`}
                 class="text-primary hover:underline"
