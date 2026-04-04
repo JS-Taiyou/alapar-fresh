@@ -9,6 +9,7 @@ import {
   getUsers,
 } from "./lib/store.ts";
 import { getUserFromRequest } from "./lib/supabase.ts";
+import { query } from "./lib/db.ts";
 
 export const app = new App<State>();
 
@@ -24,6 +25,11 @@ app.use(define.middleware(async (ctx) => {
 
   const authUser = await getUserFromRequest(ctx.req);
   if (!authUser) return await ctx.next();
+
+  const ALLOWED_EMAILS = ["jpsb23@gmail.com", "itzapicm@gmail.com"];
+  if (!ALLOWED_EMAILS.includes(authUser.email)) {
+    return ctx.redirect("/login?error=unauthorized");
+  }
 
   ctx.state.supabaseAuthId = authUser.id;
 
@@ -45,7 +51,6 @@ app.use(define.middleware(async (ctx) => {
     ctx.state.activeRegistry = activeRegistry;
     ctx.state.registryUsers = await getUsers(activeRegistry.id);
 
-    const { query } = await import("./lib/db.ts");
     const roleResult = await query(
       "SELECT role FROM registry_members WHERE registry_id = $1 AND user_id = $2",
       [activeRegistry.id, systemUser.id],

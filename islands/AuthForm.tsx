@@ -23,6 +23,8 @@ export default function AuthForm(props: AuthFormProps) {
     return <div class="text-red-400 text-center p-4">{error.value}</div>;
   }
 
+  const ALLOWED_EMAILS = ["jpsb23@gmail.com", "itzapicm@gmail.com"];
+
   async function handleSubmit(e: Event) {
     e.preventDefault();
     error.value = "";
@@ -30,6 +32,11 @@ export default function AuthForm(props: AuthFormProps) {
 
     try {
       if (props.mode === "signup") {
+        if (!ALLOWED_EMAILS.includes(email.value)) {
+          error.value = "Este email no está autorizado para registrarse.";
+          loading.value = false;
+          return;
+        }
         const { data, error: signUpError } = await client.auth.signUp({
           email: email.value,
           password: password.value,

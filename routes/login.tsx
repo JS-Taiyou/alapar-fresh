@@ -3,7 +3,10 @@ import { define } from "../utils.ts";
 import { getSupabaseAnonKey, getSupabaseUrl } from "../lib/supabase.ts";
 import AuthForm from "../islands/AuthForm.tsx";
 
-export default define.page(function Login() {
+export default define.page(function Login(ctx) {
+  const url = new URL(ctx.req.url);
+  const errorMsg = url.searchParams.get("error");
+
   return (
     <>
       <Head>
@@ -33,6 +36,13 @@ export default define.page(function Login() {
               Ingresa a tu cuenta de A la par
             </p>
           </div>
+
+          {errorMsg === "unauthorized" && (
+            <div class="text-sm text-red-400 bg-red-400/10 border border-red-400/20 rounded-custom px-4 py-2 mb-4">
+              Tu email no está autorizado para usar esta aplicación.
+            </div>
+          )}
+
           <AuthForm
             mode="login"
             supabaseUrl={getSupabaseUrl()}

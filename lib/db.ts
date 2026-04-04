@@ -1,10 +1,12 @@
 import pg from "pg";
 
+const connectionString = Deno.env.get("DATABASE_URL");
+if (!connectionString) throw new Error("DATABASE_URL env var is required");
+
 const pool = new pg.Pool({
-  host: "/var/run/postgresql",
-  port: 5433,
-  user: "convem",
-  database: "alapar",
+  connectionString,
+  ssl: { rejectUnauthorized: false },
+  max: 3,
 });
 
 export function getPool() {
