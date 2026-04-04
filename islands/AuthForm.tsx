@@ -40,7 +40,10 @@ export default function AuthForm(props: AuthFormProps) {
         const { data, error: signUpError } = await client.auth.signUp({
           email: email.value,
           password: password.value,
-          options: { data: { name: name.value } },
+          options: {
+            data: { name: name.value },
+            emailRedirectTo: globalThis.location.origin + "/api/auth/callback",
+          },
         });
         if (signUpError) {
           error.value = signUpError.message;
