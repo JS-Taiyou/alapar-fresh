@@ -16,6 +16,11 @@ export default function AuthForm(props: AuthFormProps) {
   const error = useSignal("");
   const loading = useSignal(false);
 
+  const redirectUrl = new URL(globalThis.location.href).searchParams.get(
+    "redirect",
+  );
+  const redirectPath = redirectUrl ?? "/dashboard";
+
   let client: SupabaseClient;
   try {
     client = createClient(props.supabaseUrl, props.supabaseAnonKey);
@@ -53,7 +58,7 @@ export default function AuthForm(props: AuthFormProps) {
           password: password.value,
           options: {
             data: { name: name.value },
-            emailRedirectTo: globalThis.location.origin + "/",
+            emailRedirectTo: globalThis.location.origin + redirectPath,
           },
         });
         if (signUpError) {
@@ -103,7 +108,7 @@ export default function AuthForm(props: AuthFormProps) {
         body: JSON.stringify({ accessToken, refreshToken }),
       });
       if (res.ok) {
-        globalThis.location.href = "/dashboard";
+        globalThis.location.href = redirectPath;
       } else {
         error.value = "Error al guardar la sesión";
         loading.value = false;

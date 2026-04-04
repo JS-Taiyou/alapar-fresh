@@ -120,13 +120,13 @@ export default define.page(function JoinPage(ctx) {
             : (
               <div class="space-y-3">
                 <a
-                  href="/login"
+                  href={`/login?redirect=/join/${inv.code}`}
                   class="block w-full py-3 bg-primary hover:bg-primary-light text-white font-semibold rounded-custom transition-all shadow-lg"
                 >
                   Iniciar Sesión para Unirme
                 </a>
                 <a
-                  href="/signup"
+                  href={`/signup?redirect=/join/${inv.code}`}
                   class="block w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold rounded-custom transition-all"
                 >
                   Crear Cuenta
