@@ -19,7 +19,7 @@ export default function AuthForm(props: AuthFormProps) {
   const redirectUrl = new URL(globalThis.location.href).searchParams.get(
     "redirect",
   );
-  const redirectPath = redirectUrl ?? "/dashboard";
+  const redirectPath = redirectUrl ?? "/";
 
   let client: SupabaseClient;
   try {
