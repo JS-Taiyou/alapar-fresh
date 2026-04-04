@@ -58,6 +58,7 @@
     ],
     "types": [
       "vite/client"
-    ]
+    ],
+    "skipLibCheck": true
   }
 }

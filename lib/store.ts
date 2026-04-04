@@ -1,5 +1,6 @@
 import { query } from "./db.ts";
 import type {
+  BalanceBreakdownEntry,
   Exercise,
   Registry,
   SplitEntry,
@@ -729,4 +730,70 @@ export async function revokeInvitation(
       JSON.stringify({}),
     ],
   );
+}
+
+export function calculatePairwiseBreakdown(
+  transactions: Transaction[],
+  currentUserId: string,
+  allUsers: User[],
+): BalanceBreakdownEntry[] {
+  const net: Record<string, number> = {};
+  for (const u of allUsers) {
+    if (u.id !== currentUserId) net[u.id] = 0;
+  }
+
+  for (const tx of transactions) {
+    if (tx.type === "pago") {
+      if (tx.userPaid === currentUserId) {
+        const recipient = tx.splitJson.splits[0];
+        if (recipient && net[recipient.userId] !== undefined) {
+          net[recipient.userId] += tx.originalAmount;
+        }
+      } else if (
+        tx.splitJson.splits.some((s) => s.userId === currentUserId)
+      ) {
+        if (net[tx.userPaid] !== undefined) {
+          net[tx.userPaid] -= tx.originalAmount;
+        }
+      }
+      continue;
+    }
+
+    const divisor = tx.type === "parcialidad" && tx.installmentTotal
+      ? tx.installmentTotal
+      : 1;
+    const currentUserSplit = tx.splitJson.splits.find((s) =>
+      s.userId === currentUserId
+    );
+    if (!currentUserSplit) continue;
+
+    if (tx.userPaid === currentUserId) {
+      for (const split of tx.splitJson.splits) {
+        if (split.userId !== currentUserId && net[split.userId] !== undefined) {
+          net[split.userId] += split.amount / divisor;
+        }
+      }
+    } else {
+      if (net[tx.userPaid] !== undefined) {
+        net[tx.userPaid] -= currentUserSplit.amount / divisor;
+      }
+    }
+  }
+
+  const entries: BalanceBreakdownEntry[] = [];
+  for (const u of allUsers) {
+    if (u.id === currentUserId) continue;
+    const amount = Math.round((net[u.id] ?? 0) * 100) / 100;
+    if (Math.abs(amount) >= 0.01) {
+      entries.push({
+        userId: u.id,
+        userName: u.name,
+        userColor: u.color,
+        amount,
+      });
+    }
+  }
+
+  entries.sort((a, b) => b.amount - a.amount);
+  return entries;
 }

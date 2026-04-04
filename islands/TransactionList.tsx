@@ -1,5 +1,6 @@
 import { useComputed, useSignal } from "@preact/signals";
 import type {
+  BalanceBreakdownEntry,
   SplitEntry,
   Transaction,
   TransactionSplit,
@@ -15,6 +16,7 @@ interface TransactionListProps {
   users: User[];
   currentUserId: string;
   registryId: string;
+  balanceBreakdown: BalanceBreakdownEntry[];
 }
 
 type SplitMode = "auto" | "percentage" | "fixed";
@@ -680,6 +682,11 @@ export default function TransactionList(props: TransactionListProps) {
                             <th class="px-4 py-3 text-xs font-semibold text-slate-400 w-24 text-center">
                               Recibió
                             </th>
+                            {props.users.length > 2 && (
+                              <th class="px-4 py-3 text-xs font-semibold text-slate-400 text-right">
+                                SALDO
+                              </th>
+                            )}
                           </tr>
                         </thead>
                         <tbody class="divide-y divide-border-custom">
@@ -742,6 +749,34 @@ export default function TransactionList(props: TransactionListProps) {
                                     class="accent-indigo-400"
                                   />
                                 </td>
+                                {props.users.length > 2 && (
+                                  <td class="px-4 py-3 text-right">
+                                    {user.id !== props.currentUserId &&
+                                      (() => {
+                                        const bd = props.balanceBreakdown.find(
+                                          (b) => b.userId === user.id,
+                                        );
+                                        if (!bd || Math.abs(bd.amount) < 0.01) return null;
+                                        return bd.amount > 0
+                                          ? (
+                                            <span class="text-xs font-semibold text-green-400">
+                                              Te debe ${bd.amount.toLocaleString(
+                                                "en-US",
+                                                { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+                                              )}
+                                            </span>
+                                          )
+                                          : (
+                                            <span class="text-xs font-semibold text-red-400">
+                                              Le debes ${Math.abs(bd.amount).toLocaleString(
+                                                "en-US",
+                                                { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+                                              )}
+                                            </span>
+                                          );
+                                      })()}
+                                  </td>
+                                )}
                               </tr>
                             );
                           })}

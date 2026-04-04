@@ -75,3 +75,10 @@ export interface RegistryMember {
   role: string;
   joinedAt: Date;
 }
+
+export interface BalanceBreakdownEntry {
+  userId: string;
+  userName: string;
+  userColor: string;
+  amount: number;
+}

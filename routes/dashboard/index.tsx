@@ -1,6 +1,7 @@
 import { define } from "../../utils.ts";
 import {
   calculateBalance,
+  calculatePairwiseBreakdown,
   getActiveTransactions,
   getSpawnCandidates,
   getUserById,
@@ -9,7 +10,8 @@ import { Head } from "fresh/runtime";
 import TransactionList from "../../islands/TransactionList.tsx";
 import CortarButton from "../../islands/CortarButton.tsx";
 import RecurringSpawn from "../../islands/RecurringSpawn.tsx";
-import type { Transaction, User } from "../../lib/types.ts";
+import BalanceBreakdown from "../../islands/BalanceBreakdown.tsx";
+import type { BalanceBreakdownEntry, Transaction, User } from "../../lib/types.ts";
 
 interface EnrichedTransaction extends Transaction {
   paidByUser: User | null;
@@ -29,6 +31,8 @@ interface DashboardData {
   balance: number;
   currentRegistryUserId: string;
   spawnCandidates: SpawnCandidate[];
+  balanceBreakdown: BalanceBreakdownEntry[];
+  usersCount: number;
 }
 
 export const handlers = define.handlers({
@@ -42,6 +46,8 @@ export const handlers = define.handlers({
           balance: 0,
           currentRegistryUserId: "",
           spawnCandidates: [],
+          balanceBreakdown: [],
+          usersCount: ctx.state.registryUsers.length,
         },
       };
     }
@@ -56,6 +62,8 @@ export const handlers = define.handlers({
           balance: 0,
           currentRegistryUserId: "",
           spawnCandidates: [],
+          balanceBreakdown: [],
+          usersCount: ctx.state.registryUsers.length,
         },
       };
     }
@@ -79,12 +87,20 @@ export const handlers = define.handlers({
       installmentTotal: c.installmentTotal,
     }));
 
+    const balanceBreakdown = calculatePairwiseBreakdown(
+      transactions,
+      registryUserId,
+      ctx.state.registryUsers,
+    );
+
     return {
       data: {
         transactions: enriched,
         balance,
         currentRegistryUserId: registryUserId,
         spawnCandidates,
+        balanceBreakdown,
+        usersCount: ctx.state.registryUsers.length,
       },
     };
   },
@@ -103,21 +119,11 @@ export default define.page(function DashboardIndex(ctx) {
         <title>A la par - Dashboard</title>
       </Head>
       <header class="p-6 bg-[#0a0a0a] border-b border-white/10 flex justify-between items-center">
-        <div>
-          <h1 class="text-sm font-medium text-gray-400 uppercase tracking-wider">
-            Balance Total
-          </h1>
-          <p
-            class={`text-4xl font-bold mt-1 ${
-              balance >= 0 ? "text-green-500" : "text-red-500"
-            }`}
-          >
-            ${Math.abs(balance).toLocaleString("en-US", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
-          </p>
-        </div>
+        <BalanceBreakdown
+          balance={balance}
+          entries={data.balanceBreakdown}
+          usersCount={data.usersCount}
+        />
         <div class="flex items-center gap-4">
           <RecurringSpawn candidates={data.spawnCandidates} />
           <a
@@ -142,12 +148,13 @@ export default define.page(function DashboardIndex(ctx) {
           <CortarButton balance={balance} hasTransactions={hasTransactions} />
         </div>
       </header>
-      <TransactionList
-        transactions={data.transactions}
-        users={users}
-        currentUserId={currentRegistryUserId}
-        registryId={ctx.state.activeRegistry?.id ?? ""}
-      />
+        <TransactionList
+          transactions={data.transactions}
+          users={users}
+          currentUserId={currentRegistryUserId}
+          registryId={ctx.state.activeRegistry?.id ?? ""}
+          balanceBreakdown={data.balanceBreakdown}
+        />
     </>
   );
 });
