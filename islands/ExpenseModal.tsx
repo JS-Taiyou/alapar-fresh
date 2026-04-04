@@ -139,9 +139,17 @@ export default function ExpenseModal(props: ExpenseModalProps) {
         const newPcts = { ...percentages.value };
         newPcts[otherId] = Math.round((100 - (newPcts[userId] ?? 0)) * 100) /
           100;
+        if (newPcts[otherId] < 0) newPcts[otherId] = 0;
         percentages.value = newPcts;
       }
     }
+  }
+
+  function updatePercentage(userId: string, raw: string) {
+    let v = Math.min(parseFloat(raw) || 0, 100);
+    if (v < 0) v = 0;
+    percentages.value = { ...percentages.value, [userId]: v };
+    autoComplementPercentage(userId);
   }
 
   function autoComplementFixed(userId: string) {
@@ -152,9 +160,18 @@ export default function ExpenseModal(props: ExpenseModalProps) {
         newAmounts[otherId] = Math.round(
           (Math.abs(amount.value) - (newAmounts[userId] ?? 0)) * 100,
         ) / 100;
+        if (newAmounts[otherId] < 0) newAmounts[otherId] = 0;
         fixedAmounts.value = newAmounts;
       }
     }
+  }
+
+  function updateFixedAmount(userId: string, raw: string) {
+    const total = Math.abs(amount.value);
+    let v = Math.min(parseFloat(raw) || 0, total);
+    if (v < 0) v = 0;
+    fixedAmounts.value = { ...fixedAmounts.value, [userId]: v };
+    autoComplementFixed(userId);
   }
 
   function setAutoSplit() {
@@ -507,12 +524,7 @@ export default function ExpenseModal(props: ExpenseModalProps) {
                                         );
                                         (e.target as HTMLInputElement).value =
                                           sanitized;
-                                        const v = parseFloat(sanitized) || 0;
-                                        percentages.value = {
-                                          ...percentages.value,
-                                          [user.id]: v,
-                                        };
-                                        autoComplementPercentage(user.id);
+                                        updatePercentage(user.id, sanitized);
                                       }}
                                     />
                                   )
@@ -539,12 +551,7 @@ export default function ExpenseModal(props: ExpenseModalProps) {
                                         );
                                         (e.target as HTMLInputElement).value =
                                           sanitized;
-                                        const v = parseFloat(sanitized) || 0;
-                                        fixedAmounts.value = {
-                                          ...fixedAmounts.value,
-                                          [user.id]: v,
-                                        };
-                                        autoComplementFixed(user.id);
+                                        updateFixedAmount(user.id, sanitized);
                                       }}
                                     />
                                   )

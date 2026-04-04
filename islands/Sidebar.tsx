@@ -12,6 +12,7 @@ interface SidebarProps {
   entities: User[];
   registryUsers: User[];
   defaultSplit: DefaultSplit | null;
+  deletableRegistryIds: Set<string>;
 }
 
 const REGISTRY_COLORS = [
@@ -227,7 +228,8 @@ export default function Sidebar(props: SidebarProps) {
                     {r.name}
                   </span>
                   {props.isOwner &&
-                    r.id === props.activeRegistryId && (
+                    r.id === props.activeRegistryId &&
+                    props.deletableRegistryIds.has(r.id) && (
                     <span class="hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
                       <button
                         type="button"

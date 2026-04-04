@@ -200,6 +200,8 @@ export default function TransactionList(props: TransactionListProps) {
   const isOpen = useSignal(false);
   const editingId = useSignal<string | null>(null);
   const submitting = useSignal(false);
+  const searchQuery = useSignal("");
+  const filterUserId = useSignal<string | null>(null);
   const amount = useSignal(0);
   const description = useSignal("");
   const notes = useSignal("");
@@ -335,9 +337,17 @@ export default function TransactionList(props: TransactionListProps) {
         const newPcts = { ...percentages.value };
         newPcts[otherId] = Math.round((100 - (newPcts[userId] ?? 0)) * 100) /
           100;
+        if (newPcts[otherId] < 0) newPcts[otherId] = 0;
         percentages.value = newPcts;
       }
     }
+  }
+
+  function updatePercentage(userId: string, raw: string) {
+    let v = Math.min(parseFloat(raw) || 0, 100);
+    if (v < 0) v = 0;
+    percentages.value = { ...percentages.value, [userId]: v };
+    autoComplementPercentage(userId);
   }
 
   function autoComplementFixed(userId: string) {
@@ -348,9 +358,18 @@ export default function TransactionList(props: TransactionListProps) {
         newAmounts[otherId] = Math.round(
           (Math.abs(amount.value) - (newAmounts[userId] ?? 0)) * 100,
         ) / 100;
+        if (newAmounts[otherId] < 0) newAmounts[otherId] = 0;
         fixedAmounts.value = newAmounts;
       }
     }
+  }
+
+  function updateFixedAmount(userId: string, raw: string) {
+    const total = Math.abs(amount.value);
+    let v = Math.min(parseFloat(raw) || 0, total);
+    if (v < 0) v = 0;
+    fixedAmounts.value = { ...fixedAmounts.value, [userId]: v };
+    autoComplementFixed(userId);
   }
 
   function setAutoSplit() {
@@ -449,6 +468,18 @@ export default function TransactionList(props: TransactionListProps) {
     });
   }
 
+  const filteredTransactions = useComputed(() => {
+    let list = transactions.value;
+    if (filterUserId.value) {
+      list = list.filter((tx) => tx.userPaid === filterUserId.value);
+    }
+    if (searchQuery.value.trim()) {
+      const q = searchQuery.value.trim().toLowerCase();
+      list = list.filter((tx) => tx.description.toLowerCase().includes(q));
+    }
+    return list;
+  });
+
   const splits = getSplits();
   const totalSplitAmount = splits.reduce((s, sp) => s + sp.amount, 0);
   const totalPct = splitMode.value === "percentage"
@@ -475,6 +506,98 @@ export default function TransactionList(props: TransactionListProps) {
             Transacciones Recientes
           </h2>
         </div>
+
+        <div class="space-y-3">
+          <div class="flex gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => filterUserId.value = null}
+              class={`text-xs font-semibold px-3 py-1.5 rounded transition-colors ${
+                filterUserId.value === null
+                  ? "bg-primary text-white shadow-sm"
+                  : "text-slate-400 hover:text-white hover:bg-white/5 border border-white/10"
+              }`}
+            >
+              Todos
+            </button>
+            {props.users.map((user) => {
+              const initials = user.name.split(" ").map((n) => n[0]).join("")
+                .substring(0, 2).toUpperCase();
+              return (
+                <button
+                  key={user.id}
+                  type="button"
+                  onClick={() => {
+                    filterUserId.value = filterUserId.value === user.id
+                      ? null
+                      : user.id;
+                  }}
+                  class={`text-xs font-semibold px-3 py-1.5 rounded transition-colors flex items-center gap-1.5 ${
+                    filterUserId.value === user.id
+                      ? "text-white shadow-sm"
+                      : "text-slate-400 hover:text-white hover:bg-white/5 border border-white/10"
+                  }`}
+                  style={filterUserId.value === user.id
+                    ? `background-color: ${user.color}`
+                    : ""}
+                >
+                  <div
+                    class="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold"
+                    style={`background-color: ${user.color}30; color: ${user.color}`}
+                  >
+                    {initials}
+                  </div>
+                  {user.name.split(" ")[0]}
+                </button>
+              );
+            })}
+          </div>
+          <div class="relative">
+            <svg
+              class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+              />
+            </svg>
+            <input
+              type="text"
+              placeholder="Buscar transacción..."
+              value={searchQuery.value}
+              onInput={(e) =>
+                searchQuery.value = (e.target as HTMLInputElement).value}
+              class="w-full pl-9 pr-4 py-2 bg-background border border-border-custom rounded-custom text-sm text-white placeholder-slate-500 focus:ring-primary focus:border-primary"
+            />
+            {searchQuery.value && (
+              <button
+                type="button"
+                onClick={() => searchQuery.value = ""}
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+              >
+                <svg
+                  class="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    d="M6 18L18 6M6 6l12 12"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                  />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+
         {transactions.value.length === 0
           ? (
             <div class="flex flex-col items-center justify-center py-20 text-center">
@@ -501,7 +624,25 @@ export default function TransactionList(props: TransactionListProps) {
               </p>
             </div>
           )
-          : transactions.value.map((tx) => (
+          : filteredTransactions.value.length === 0
+          ? (
+            <div class="flex flex-col items-center justify-center py-12 text-center">
+              <p class="text-slate-500">
+                No se encontraron transacciones con estos filtros.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  searchQuery.value = "";
+                  filterUserId.value = null;
+                }}
+                class="mt-2 text-sm text-primary hover:underline"
+              >
+                Limpiar filtros
+              </button>
+            </div>
+          )
+          : filteredTransactions.value.map((tx) => (
             <TransactionCardClickable
               key={tx.id}
               tx={tx}
@@ -1086,13 +1227,10 @@ export default function TransactionList(props: TransactionListProps) {
                                             );
                                             (e.target as HTMLInputElement)
                                               .value = sanitized;
-                                            const v = parseFloat(sanitized) ||
-                                              0;
-                                            percentages.value = {
-                                              ...percentages.value,
-                                              [user.id]: v,
-                                            };
-                                            autoComplementPercentage(user.id);
+                                            updatePercentage(
+                                              user.id,
+                                              sanitized,
+                                            );
                                           }}
                                         />
                                       )
@@ -1121,13 +1259,10 @@ export default function TransactionList(props: TransactionListProps) {
                                             );
                                             (e.target as HTMLInputElement)
                                               .value = sanitized;
-                                            const v = parseFloat(sanitized) ||
-                                              0;
-                                            fixedAmounts.value = {
-                                              ...fixedAmounts.value,
-                                              [user.id]: v,
-                                            };
-                                            autoComplementFixed(user.id);
+                                            updateFixedAmount(
+                                              user.id,
+                                              sanitized,
+                                            );
                                           }}
                                         />
                                       )
@@ -1246,13 +1381,10 @@ export default function TransactionList(props: TransactionListProps) {
                                             );
                                             (e.target as HTMLInputElement)
                                               .value = sanitized;
-                                            const v = parseFloat(sanitized) ||
-                                              0;
-                                            percentages.value = {
-                                              ...percentages.value,
-                                              [user.id]: v,
-                                            };
-                                            autoComplementPercentage(user.id);
+                                            updatePercentage(
+                                              user.id,
+                                              sanitized,
+                                            );
                                           }}
                                         />
                                       )
@@ -1281,13 +1413,10 @@ export default function TransactionList(props: TransactionListProps) {
                                             );
                                             (e.target as HTMLInputElement)
                                               .value = sanitized;
-                                            const v = parseFloat(sanitized) ||
-                                              0;
-                                            fixedAmounts.value = {
-                                              ...fixedAmounts.value,
-                                              [user.id]: v,
-                                            };
-                                            autoComplementFixed(user.id);
+                                            updateFixedAmount(
+                                              user.id,
+                                              sanitized,
+                                            );
                                           }}
                                         />
                                       )

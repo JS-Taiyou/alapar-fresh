@@ -1,8 +1,10 @@
 import { define } from "../../../utils.ts";
 import {
   deleteRegistry,
+  getRegistriesForUser,
   getTransactionCount,
   renameRegistry,
+  setUserActiveRegistry,
 } from "../../../lib/store.ts";
 
 export const handlers = define.handlers({
@@ -76,6 +78,11 @@ export const handlers = define.handlers({
         status: 500,
         headers: { "Content-Type": "application/json" },
       });
+    }
+
+    const remaining = await getRegistriesForUser(systemUserId);
+    if (remaining.length > 0) {
+      await setUserActiveRegistry(systemUserId, remaining[0].id);
     }
 
     return new Response(null, { status: 204 });
