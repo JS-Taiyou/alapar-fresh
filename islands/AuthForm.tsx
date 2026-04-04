@@ -251,7 +251,14 @@ export default function AuthForm(props: AuthFormProps) {
           ? (
             <>
               No tienes cuenta?{" "}
-              <a href="/signup" class="text-primary hover:underline">
+              <a
+                href={`/signup${
+                  redirectUrl
+                    ? `?redirect=${encodeURIComponent(redirectUrl)}`
+                    : ""
+                }`}
+                class="text-primary hover:underline"
+              >
                 Regístrate
               </a>
             </>
@@ -259,7 +266,14 @@ export default function AuthForm(props: AuthFormProps) {
           : (
             <>
               Ya tienes cuenta?{" "}
-              <a href="/login" class="text-primary hover:underline">
+              <a
+                href={`/login${
+                  redirectUrl
+                    ? `?redirect=${encodeURIComponent(redirectUrl)}`
+                    : ""
+                }`}
+                class="text-primary hover:underline"
+              >
                 Inicia sesión
               </a>
             </>
