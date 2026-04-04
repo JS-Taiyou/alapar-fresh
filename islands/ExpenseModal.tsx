@@ -399,10 +399,10 @@ export default function ExpenseModal(props: ExpenseModalProps) {
                     <button
                       type="button"
                       onClick={setAutoSplit}
-                      class={`text-xs font-semibold px-2 py-1 rounded transition-colors ${
+                      class={`text-xs font-semibold px-3 py-1.5 rounded transition-colors ${
                         splitMode.value === "auto"
-                          ? "bg-primary/20 text-primary"
-                          : "text-slate-400 hover:text-white"
+                          ? "bg-primary text-white shadow-sm"
+                          : "text-slate-400 hover:text-white hover:bg-white/5"
                       }`}
                     >
                       Auto
@@ -410,10 +410,10 @@ export default function ExpenseModal(props: ExpenseModalProps) {
                     <button
                       type="button"
                       onClick={() => splitMode.value = "percentage"}
-                      class={`text-xs font-semibold px-2 py-1 rounded transition-colors ${
+                      class={`text-xs font-semibold px-3 py-1.5 rounded transition-colors ${
                         splitMode.value === "percentage"
-                          ? "bg-primary/20 text-primary"
-                          : "text-slate-400 hover:text-white"
+                          ? "bg-primary text-white shadow-sm"
+                          : "text-slate-400 hover:text-white hover:bg-white/5"
                       }`}
                     >
                       Porcentaje
@@ -421,10 +421,10 @@ export default function ExpenseModal(props: ExpenseModalProps) {
                     <button
                       type="button"
                       onClick={() => splitMode.value = "fixed"}
-                      class={`text-xs font-semibold px-2 py-1 rounded transition-colors ${
+                      class={`text-xs font-semibold px-3 py-1.5 rounded transition-colors ${
                         splitMode.value === "fixed"
-                          ? "bg-primary/20 text-primary"
-                          : "text-slate-400 hover:text-white"
+                          ? "bg-primary text-white shadow-sm"
+                          : "text-slate-400 hover:text-white hover:bg-white/5"
                       }`}
                     >
                       Monto Fijo
