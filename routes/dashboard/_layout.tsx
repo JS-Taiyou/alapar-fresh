@@ -20,6 +20,7 @@ export default define.layout(function DashboardLayout(ctx) {
         userInitials={userInitials}
         isOwner={ctx.state.isOwner}
         entities={entities}
+        registryUsers={ctx.state.registryUsers}
         defaultSplit={ctx.state.activeRegistry?.defaultSplit ?? null}
       />
       <div class="flex-1 flex flex-col min-w-0">

@@ -10,6 +10,7 @@ interface SidebarProps {
   userInitials: string;
   isOwner: boolean;
   entities: User[];
+  registryUsers: User[];
   defaultSplit: DefaultSplit | null;
 }
 
@@ -255,7 +256,7 @@ export default function Sidebar(props: SidebarProps) {
         <div class="px-4 pb-2">
           <DefaultSplitConfig
             registryId={props.activeRegistryId}
-            users={props.registries.length > 0 ? [] : []}
+            users={props.registryUsers}
             defaultSplit={props.defaultSplit}
             isOwner={props.isOwner}
           />
