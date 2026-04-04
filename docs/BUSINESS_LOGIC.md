@@ -64,6 +64,63 @@ ELSE IF currentUser in split:
 
 ---
 
+## Pairwise Balance Breakdown
+
+In multi-user registries (3+ members), the aggregate balance doesn't reveal _who_ you owe or who owes you. The pairwise breakdown (`calculatePairwiseBreakdown`) tracks a running net between the current user and each other member.
+
+### Algorithm
+
+```
+Initialize net[otherUser] = 0 for each non-self user
+
+For each active transaction:
+  IF type is "pago":
+    IF currentUser paid:
+      net[recipient] += originalAmount
+    ELSE IF currentUser is in split:
+      net[payer] -= originalAmount
+
+  ELSE (expense):
+    divisor = installmentTotal (if parcialidad) else 1
+    currentUserSplit = user's share from split_json
+
+    IF currentUser paid:
+      For each OTHER user in split:
+        net[otherUser] += otherUser.split.amount / divisor
+    ELSE (someone else paid):
+      net[payer] -= currentUserSplit.amount / divisor
+
+Filter: only keep entries where |amount| >= $0.01
+Sort: highest amount first (creditors before debtors)
+```
+
+### Where It's Used
+
+| Location | Purpose |
+|----------|---------|
+| **Dashboard header** (`BalanceBreakdown` island) | Clickable balance opens popover with "Te debe" / "Le debes" per person (only when 3+ users) |
+| **Payment modal** (`TransactionList` island, pago mode) | SALDO column shows per-user balance so the user knows who to pay and how much (only when 3+ users) |
+
+### Example
+
+Registry with 4 users: Alice (self), Bob, Carol, Dave.
+
+Active transactions:
+- Alice paid dinner $120 (split 4 ways: $30 each)
+- Bob paid groceries $80 (split 4 ways: $20 each)
+- Carol paid Uber $40 (split 4 ways: $10 each)
+
+Alice's pairwise breakdown:
+| Person | Net | Display |
+|--------|-----|---------|
+| Bob | +$10 | "Te debe $10.00" |
+| Carol | +$20 | "Te debe $20.00" |
+| Dave | +$30 | "Te debe $30.00" |
+
+Alice's aggregate balance: $60.00 (sum of all pairwise nets).
+
+---
+
 ## Cortar (Cut/Settle)
 
 The cut operation archives all active expenses into a historical period.

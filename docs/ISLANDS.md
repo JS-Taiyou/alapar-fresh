@@ -158,9 +158,30 @@ Collapsible sidebar with user info, registry list, invite button, and actions.
 
 ---
 
+## `BalanceBreakdown` — `islands/BalanceBreakdown.tsx`
+
+**Props**: `{ balance: number, entries: BalanceBreakdownEntry[], usersCount: number }`
+
+Replaces the static balance display in the dashboard header with an interactive popover that shows pairwise debt breakdown for multi-user registries.
+
+**Behavior**:
+- Always renders the total balance amount (green if positive, red if negative)
+- When `usersCount > 2`: the balance becomes a clickable button with a chevron indicator
+- On click, opens a popover below the balance showing per-person breakdown:
+  - **"Te deben"** section (green): lists users who owe the current user, with amounts
+  - **"Debes"** section (red): lists users the current user owes, with amounts
+  - Each entry shows the user's avatar initials (colored with `userColor`), name, and signed amount
+  - Empty state: checkmark icon + "Todos están balanceados"
+- Click outside the popover to dismiss (fixed backdrop overlay)
+- When `usersCount <= 2`: behaves like the old static display (no popover, `cursor-default`)
+
+**Data source**: `calculatePairwiseBreakdown()` from `lib/store.ts`, computed server-side in the dashboard handler.
+
+---
+
 ## `TransactionList` — `islands/TransactionList.tsx`
 
-**Props**: `{ transactions: EnrichedTransaction[], users: User[], currentUserId: string, registryId: string }`
+**Props**: `{ transactions: EnrichedTransaction[], users: User[], currentUserId: string, registryId: string, balanceBreakdown: BalanceBreakdownEntry[] }`
 
 The main transaction list on the dashboard. Handles both listing and CRUD for transactions.
 
@@ -174,6 +195,14 @@ The main transaction list on the dashboard. Handles both listing and CRUD for tr
 - Different UI: shows "Pagó" and "Recibió" radio columns instead of split table
 - Creates a `TransactionSplit` with single recipient at 100%
 - Cannot select same user as both payer and recipient
+- **Pairwise balance indicators** (when registry has 3+ users):
+  - A "SALDO" column header appears in the payment table
+  - For each non-self user, shows either:
+    - **"Te debe $X"** (green) — if that user owes the current user
+    - **"Le debes $X"** (red) — if the current user owes that user
+    - Nothing — if balance between them is settled (~$0.00)
+  - Self row shows no indicator (can't owe yourself)
+  - Helps users decide who to pay and how much, without leaving the modal
 
 **Edit Mode**:
 - Pre-populates all fields from the transaction

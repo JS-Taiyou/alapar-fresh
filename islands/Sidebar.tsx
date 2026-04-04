@@ -168,14 +168,16 @@ export default function Sidebar(props: SidebarProps) {
       </div>
 
       {props.isOwner && props.activeRegistryId && (
-        <div class="px-4 pb-2">
+        <div class={collapsed.value && !mobileOpen.value ? "px-2 pb-2" : "px-4 pb-2"}>
           <button
             type="button"
             onClick={() => {
               showInvite.value = true;
             }}
-            class={`w-full flex items-center gap-2 py-2.5 px-3 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-custom text-sm font-semibold text-emerald-400 transition-all ${
-              collapsed.value && !mobileOpen.value ? "justify-center" : ""
+            class={`w-full flex items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-custom text-sm font-semibold text-emerald-400 transition-all ${
+              collapsed.value && !mobileOpen.value
+                ? "justify-center p-2 aspect-square"
+                : "justify-center py-2.5 px-3"
             }`}
           >
             <svg
@@ -196,17 +198,17 @@ export default function Sidebar(props: SidebarProps) {
         </div>
       )}
 
-      <div class="p-4 border-t border-white/10 space-y-2">
+      <div class={`border-t border-white/10 space-y-2 ${collapsed.value && !mobileOpen.value ? "p-2" : "p-4"}`}>
         <a
           href="/registries/new"
-          class={`flex items-center gap-2 py-3 px-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-custom text-sm font-semibold text-white transition-all ${
+          class={`flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-custom text-sm font-semibold text-white transition-all ${
             collapsed.value && !mobileOpen.value
-              ? "justify-center"
-              : "justify-center"
+              ? "justify-center p-2 aspect-square"
+              : "justify-center py-3 px-4"
           }`}
         >
           <svg
-            class="w-5 h-5"
+            class="w-5 h-5 shrink-0"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -227,8 +229,10 @@ export default function Sidebar(props: SidebarProps) {
         <button
           type="button"
           onClick={handleLogout}
-          class={`w-full flex items-center gap-2 py-2 px-4 text-slate-500 hover:text-red-400 transition-colors text-sm ${
-            collapsed.value && !mobileOpen.value ? "justify-center" : ""
+          class={`w-full flex items-center gap-2 text-slate-500 hover:text-red-400 transition-colors text-sm ${
+            collapsed.value && !mobileOpen.value
+              ? "justify-center p-2"
+              : "justify-center py-2 px-4"
           }`}
         >
           <svg

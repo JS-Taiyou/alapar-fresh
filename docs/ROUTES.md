@@ -75,13 +75,14 @@ Wraps all dashboard routes in a sidebar + content layout:
 3. Calculates balance (`calculateBalance`) for the current user
 4. Fetches recurring/installment spawn candidates (`getSpawnCandidates`)
 5. Enriches each transaction with `paidByUser` (the `User` record for who paid)
+6. Computes pairwise balance breakdown (`calculatePairwiseBreakdown`) showing how much each user owes/is owed by each other user
 
 **Page rendering**:
-- Header with total balance (green if positive, red if negative)
+- Header with `BalanceBreakdown` island (clickable total balance, popover for per-person breakdown when 3+ users)
 - `RecurringSpawn` island (only visible if there are candidates)
 - History link → `/dashboard/history`
 - `CortarButton` island (only active when balance = $0 and transactions exist)
-- `TransactionList` island with enriched transactions, users, and current user ID
+- `TransactionList` island with enriched transactions, users, current user ID, and pairwise breakdown data
 
 ### `/dashboard/history` — Exercise History
 

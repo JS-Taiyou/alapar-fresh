@@ -44,9 +44,9 @@ Fresh Middleware (utils.ts → State)
                │
                ▼
           Dashboard Layout (/_layout.tsx)
-               │
-               ├── Header: Balance + Recurring + History + Cortar
-               └── TransactionList: Active expenses + CRUD modal
+                │
+                ├── Header: BalanceBreakdown (popover for pairwise) + Recurring + History + Cortar
+                └── TransactionList: Active expenses + CRUD modal (with per-user balance in pago mode)
 ```
 
 ## Directory Structure
@@ -153,6 +153,8 @@ Same format as Kotlin version, stored in `split_json` column (JSONB):
 
 ## Balance Calculation
 
+### Aggregate Balance (`calculateBalance`)
+
 ```
 For each active transaction:
   If type is "pago" (payment):
@@ -172,6 +174,30 @@ For each active transaction:
 ```
 
 **Positive balance** = others owe you. **Negative balance** = you owe others.
+
+### Pairwise Breakdown (`calculatePairwiseBreakdown`)
+
+For multi-user registries (3+ members), the aggregate balance alone doesn't tell you _who_ you owe or who owes you. The pairwise breakdown solves this by tracking a running net between the current user and each other member:
+
+```
+For each active transaction:
+  If type is "pago":
+    If current user paid:  net[recipient] += originalAmount
+    If someone else paid:  net[payer] -= originalAmount
+
+  Else (expense):
+    divisor = installmentTotal (if parcialidad) else 1
+
+    If current user paid:
+      For each OTHER user in split:
+        net[otherUser] += theirSplit.amount / divisor
+    Else (someone else paid):
+      net[payer] -= currentUserSplit.amount / divisor
+```
+
+Returns a sorted list of `BalanceBreakdownEntry` (positive = owed to you, negative = you owe), filtered to entries with `|amount| >= $0.01`. Used by:
+- **`BalanceBreakdown` island**: Popover on the dashboard header showing "Te debe $X" / "Le debes $X" per person
+- **`TransactionList` island**: SALDO column in payment mode showing per-user balances to guide who to pay
 
 ## "Cortar" (Cut/Settle)
 
