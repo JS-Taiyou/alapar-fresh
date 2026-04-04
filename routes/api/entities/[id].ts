@@ -1,5 +1,5 @@
-import { define } from "../../../../utils.ts";
-import { deleteEntity, updateEntity } from "../../../../lib/store.ts";
+import { define } from "../../../utils.ts";
+import { deleteEntity, updateEntity } from "../../../lib/store.ts";
 
 export const handlers = define.handlers({
   async PUT(ctx) {
