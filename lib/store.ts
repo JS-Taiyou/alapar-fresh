@@ -640,7 +640,8 @@ export async function useInvitation(
     [invitation.registryId, systemUserId],
   );
   if (existing.rows.length > 0) {
-    throw new Error("Already a member of this registry");
+    await setUserActiveRegistry(systemUserId, invitation.registryId);
+    return invitation.registryId;
   }
 
   await query(
@@ -669,6 +670,8 @@ export async function useInvitation(
     "UPDATE invitations SET current_uses = current_uses + 1 WHERE id = $1",
     [invitation.id],
   );
+
+  await setUserActiveRegistry(systemUserId, invitation.registryId);
 
   await query(
     `INSERT INTO audit_log (actor_id, action, target_type, target_id, metadata) VALUES ($1, $2, $3, $4, $5)`,
