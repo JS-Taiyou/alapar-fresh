@@ -38,9 +38,15 @@ app.use(define.middleware(async (ctx) => {
     systemUser = await createUserFromSupabase(
       authUser.id,
       authUser.email,
-      authUser.email.split("@")[0],
+      authUser.name ?? authUser.email.split("@")[0],
     );
     await ensureUserPreferences(systemUser.id);
+  } else if (authUser.name && systemUser.name !== authUser.name) {
+    await query(
+      "UPDATE system_users SET name = $1 WHERE id = $2",
+      [authUser.name, systemUser.id],
+    );
+    systemUser = { ...systemUser, name: authUser.name };
   }
   ctx.state.systemUser = systemUser;
 

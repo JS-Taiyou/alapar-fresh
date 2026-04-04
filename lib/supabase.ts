@@ -21,6 +21,7 @@ export function getSupabaseAnonKey(): string {
 export interface AuthUser {
   id: string;
   email: string;
+  name?: string;
 }
 
 export async function getUserFromRequest(
@@ -37,6 +38,7 @@ export async function getUserFromRequest(
   return {
     id: data.user.id,
     email: data.user.email ?? "",
+    name: data.user.user_metadata?.name as string | undefined,
   };
 }
 
