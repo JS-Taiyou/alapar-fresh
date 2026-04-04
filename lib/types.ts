@@ -18,6 +18,8 @@ export interface Transaction {
   exerciseId: string | null;
   installmentCurrent: number | null;
   installmentTotal: number | null;
+  recurringDisabled: boolean;
+  recurringGroupId: string;
   notes: string;
   splitJson: TransactionSplit;
   creatorId: string;

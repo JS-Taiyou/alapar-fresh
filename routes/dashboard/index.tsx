@@ -1,30 +1,43 @@
 import { define } from "../../utils.ts";
-import { getActiveTransactions, calculateBalance, getUserById } from "../../lib/store.ts";
+import { getActiveTransactions, calculateBalance, getUserById, getSpawnCandidates } from "../../lib/store.ts";
 import { Head } from "fresh/runtime";
 import TransactionList from "../../islands/TransactionList.tsx";
+import CortarButton from "../../islands/CortarButton.tsx";
+import RecurringSpawn from "../../islands/RecurringSpawn.tsx";
 import type { Transaction, User } from "../../lib/types.ts";
 
 interface EnrichedTransaction extends Transaction {
   paidByUser: User | null;
 }
 
+interface SpawnCandidate {
+  id: string;
+  description: string;
+  type: "parcialidad" | "recurrente";
+  originalAmount: number;
+  installmentCurrent: number | null;
+  installmentTotal: number | null;
+}
+
 interface DashboardData {
   transactions: EnrichedTransaction[];
   balance: number;
   currentRegistryUserId: string;
+  spawnCandidates: SpawnCandidate[];
 }
 
 export const handlers = define.handlers({
   async GET(ctx) {
     const registryId = ctx.state.activeRegistry?.id;
     const systemUserId = ctx.state.systemUser?.id;
-    if (!registryId || !systemUserId) return { data: { transactions: [] as EnrichedTransaction[], balance: 0, currentRegistryUserId: "" } };
+    if (!registryId || !systemUserId) return { data: { transactions: [] as EnrichedTransaction[], balance: 0, currentRegistryUserId: "", spawnCandidates: [] } };
 
     const registryUserId = ctx.state.registryUsers.find((u) => u.system_user_id === systemUserId)?.id;
-    if (!registryUserId) return { data: { transactions: [] as EnrichedTransaction[], balance: 0, currentRegistryUserId: "" } };
+    if (!registryUserId) return { data: { transactions: [] as EnrichedTransaction[], balance: 0, currentRegistryUserId: "", spawnCandidates: [] } };
 
     const transactions = await getActiveTransactions(registryId);
     const balance = await calculateBalance(registryUserId, registryId);
+    const candidates = await getSpawnCandidates(registryId);
 
     const enriched: EnrichedTransaction[] = [];
     for (const tx of transactions) {
@@ -32,7 +45,16 @@ export const handlers = define.handlers({
       enriched.push({ ...tx, paidByUser: paidByUser ?? null });
     }
 
-    return { data: { transactions: enriched, balance, currentRegistryUserId: registryUserId } };
+    const spawnCandidates: SpawnCandidate[] = candidates.map((c) => ({
+      id: c.id,
+      description: c.description,
+      type: c.type as "parcialidad" | "recurrente",
+      originalAmount: c.originalAmount,
+      installmentCurrent: c.installmentCurrent,
+      installmentTotal: c.installmentTotal,
+    }));
+
+    return { data: { transactions: enriched, balance, currentRegistryUserId: registryUserId, spawnCandidates } };
   },
 });
 
@@ -56,6 +78,7 @@ export default define.page(function DashboardIndex(ctx) {
           </p>
         </div>
         <div class="flex items-center gap-4">
+          <RecurringSpawn candidates={data.spawnCandidates} />
           <a
             href="/dashboard/history"
             class="p-3 bg-card hover:bg-white/5 transition-colors rounded-custom text-gray-300"
@@ -65,15 +88,7 @@ export default define.page(function DashboardIndex(ctx) {
               <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
             </svg>
           </a>
-          <form action="/api/exercises" method="POST">
-            <button
-              type="submit"
-              disabled={!hasTransactions}
-              class={`px-6 py-3 rounded-custom font-semibold text-white shadow-lg transition-opacity ${hasTransactions ? "bg-primary hover:opacity-90" : "bg-slate-700 opacity-50 cursor-not-allowed"}`}
-            >
-              Cortar
-            </button>
-          </form>
+          <CortarButton balance={balance} hasTransactions={hasTransactions} />
         </div>
       </header>
       <TransactionList

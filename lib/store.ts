@@ -34,6 +34,8 @@ function rowToTransaction(row: Record<string, unknown>): Transaction {
     exerciseId: row.exercise_id as string | null,
     installmentCurrent: row.installment_current as number | null,
     installmentTotal: row.installment_total as number | null,
+    recurringDisabled: (row.recurring_disabled as boolean) ?? false,
+    recurringGroupId: (row.recurring_group_id as string) ?? row.id as string,
     notes: row.notes as string,
     splitJson: typeof row.split_json === "string" ? JSON.parse(row.split_json) : row.split_json as TransactionSplit,
     creatorId: row.creator_id as string,
@@ -115,9 +117,10 @@ export async function getTransactionById(id: string): Promise<Transaction | unde
 }
 
 export async function createTransaction(data: Omit<Transaction, "id" | "createdAt">): Promise<Transaction> {
+  const recurringGroupId = data.recurringGroupId ?? crypto.randomUUID();
   const result = await query(
-    `INSERT INTO transactions (registry_id, description, amount, original_amount, type, exercise_id, installment_current, installment_total, notes, split_json, creator_id, user_paid)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+    `INSERT INTO transactions (registry_id, description, amount, original_amount, type, exercise_id, installment_current, installment_total, recurring_disabled, recurring_group_id, notes, split_json, creator_id, user_paid)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *`,
     [
       data.registry_id,
       data.description,
@@ -127,6 +130,8 @@ export async function createTransaction(data: Omit<Transaction, "id" | "createdA
       data.exerciseId,
       data.installmentCurrent,
       data.installmentTotal,
+      data.recurringDisabled ?? false,
+      recurringGroupId,
       data.notes,
       JSON.stringify(data.splitJson),
       data.creatorId,
@@ -149,6 +154,7 @@ export async function updateTransaction(id: string, data: Partial<Transaction>):
   if (data.userPaid !== undefined) { sets.push(`user_paid = $${idx++}`); values.push(data.userPaid); }
   if (data.installmentCurrent !== undefined) { sets.push(`installment_current = $${idx++}`); values.push(data.installmentCurrent); }
   if (data.installmentTotal !== undefined) { sets.push(`installment_total = $${idx++}`); values.push(data.installmentTotal); }
+  if (data.recurringDisabled !== undefined) { sets.push(`recurring_disabled = $${idx++}`); values.push(data.recurringDisabled); }
   if (sets.length === 0) return getTransactionById(id);
   values.push(id);
   const result = await query(
@@ -328,4 +334,63 @@ export function buildFixedSplit(total: number, amounts: { userId: string; amount
 
 export function getMonthNameEs(date: Date): string {
   return MONTHS_ES[date.getMonth()];
+}
+
+export async function getSpawnCandidates(registryId: string): Promise<Transaction[]> {
+  const result = await query(
+    `SELECT * FROM transactions
+     WHERE registry_id = $1
+       AND recurring_disabled = false
+       AND (type = 'recurrente' OR type = 'parcialidad')
+     ORDER BY recurring_group_id, created_at DESC`,
+    [registryId],
+  );
+  const all = result.rows.map(rowToTransaction);
+
+  const disabledGroups = new Set<string>();
+  for (const t of all) {
+    if (t.recurringDisabled) disabledGroups.add(t.recurringGroupId);
+  }
+
+  const latestPerGroup = new Map<string, Transaction>();
+  for (const t of all) {
+    const existing = latestPerGroup.get(t.recurringGroupId);
+    if (!existing || t.createdAt > existing.createdAt) {
+      latestPerGroup.set(t.recurringGroupId, t);
+    }
+  }
+
+  const candidates: Transaction[] = [];
+  for (const t of latestPerGroup.values()) {
+    if (disabledGroups.has(t.recurringGroupId)) continue;
+    if (t.type === "recurrente") {
+      if (t.exerciseId !== null) candidates.push(t);
+    } else if (t.type === "parcialidad") {
+      if (t.installmentCurrent !== null && t.installmentTotal !== null && t.installmentCurrent < t.installmentTotal) {
+        candidates.push(t);
+      }
+    }
+  }
+  return candidates;
+}
+
+export async function cloneTransactionForNextPeriod(sourceId: string, installmentOffset: number = 1): Promise<Transaction> {
+  const source = await getTransactionById(sourceId);
+  if (!source) throw new Error(`Transaction ${sourceId} not found`);
+  return createTransaction({
+    registry_id: source.registry_id,
+    description: source.description,
+    amount: source.amount,
+    originalAmount: source.originalAmount,
+    type: source.type,
+    exerciseId: null,
+    installmentCurrent: source.type === "parcialidad" && source.installmentCurrent !== null ? source.installmentCurrent + installmentOffset : null,
+    installmentTotal: source.type === "parcialidad" ? source.installmentTotal : null,
+    recurringDisabled: false,
+    recurringGroupId: source.recurringGroupId,
+    notes: source.notes,
+    splitJson: source.splitJson,
+    creatorId: source.creatorId,
+    userPaid: source.userPaid,
+  });
 }

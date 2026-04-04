@@ -27,6 +27,8 @@ export const handlers = define.handlers({
       exerciseId: null,
       installmentCurrent,
       installmentTotal,
+      recurringDisabled: false,
+      recurringGroupId: crypto.randomUUID(),
       notes,
       splitJson,
       creatorId: userPaid,
