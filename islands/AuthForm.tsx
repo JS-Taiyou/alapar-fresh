@@ -179,9 +179,7 @@ export default function AuthForm(props: AuthFormProps) {
           <button
             type="button"
             class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300"
-            onMouseDown={() => showPassword.value = true}
-            onMouseUp={() => showPassword.value = false}
-            onMouseLeave={() => showPassword.value = false}
+            onClick={() => showPassword.value = !showPassword.value}
             tabIndex={-1}
             aria-label={showPassword.value
               ? "Ocultar contraseña"

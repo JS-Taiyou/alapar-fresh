@@ -398,6 +398,37 @@ export async function createRegistry(
   return registry;
 }
 
+export async function renameRegistry(
+  registryId: string,
+  name: string,
+): Promise<Registry | undefined> {
+  const result = await query(
+    "UPDATE registries SET name = $1 WHERE id = $2 RETURNING *",
+    [name, registryId],
+  );
+  if (result.rows.length === 0) return undefined;
+  return rowToRegistry(result.rows[0]);
+}
+
+export async function getTransactionCount(
+  registryId: string,
+): Promise<number> {
+  const result = await query(
+    "SELECT COUNT(*) as cnt FROM transactions WHERE registry_id = $1",
+    [registryId],
+  );
+  return parseInt(result.rows[0].cnt as string);
+}
+
+export async function deleteRegistry(registryId: string): Promise<boolean> {
+  const count = await getTransactionCount(registryId);
+  if (count > 0) return false;
+  const result = await query("DELETE FROM registries WHERE id = $1", [
+    registryId,
+  ]);
+  return (result.rowCount ?? 0) > 0;
+}
+
 export async function getUserRole(
   systemUserId: string,
   registryId: string,

@@ -31,6 +31,8 @@ export default function Sidebar(props: SidebarProps) {
   const inviteCode = useSignal("");
   const inviteError = useSignal("");
   const copied = useSignal(false);
+  const renamingId = useSignal<string | null>(null);
+  const renameValue = useSignal("");
 
   async function switchRegistry(id: string) {
     try {
@@ -86,6 +88,35 @@ export default function Sidebar(props: SidebarProps) {
     inviteCode.value = "";
     inviteError.value = "";
     copied.value = false;
+  }
+
+  function startRename(id: string, currentName: string) {
+    renamingId.value = id;
+    renameValue.value = currentName;
+  }
+
+  async function confirmRename(id: string) {
+    const name = renameValue.value.trim();
+    if (!name) return;
+    await fetch(`/api/registries/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    renamingId.value = null;
+    globalThis.location.reload();
+  }
+
+  async function handleDeleteRegistry(id: string) {
+    if (!confirm("Eliminar este registro? Esta acción no se puede deshacer.")) {
+      return;
+    }
+    const res = await fetch(`/api/registries/${id}`, { method: "DELETE" });
+    if (res.status === 409) {
+      alert("No se puede eliminar un registro con transacciones.");
+      return;
+    }
+    globalThis.location.reload();
   }
 
   const sidebarContent = (
@@ -148,27 +179,107 @@ export default function Sidebar(props: SidebarProps) {
           </h3>
         )}
         {props.registries.map((r, i) => (
-          <button
-            type="button"
-            key={r.id}
-            onClick={() => switchRegistry(r.id)}
-            class={`w-full flex items-center gap-3 px-3 py-2.5 rounded-custom transition-colors ${
-              r.id === props.activeRegistryId
-                ? "bg-white/5 border border-white/10 text-white"
-                : "hover:bg-white/5 text-gray-400 hover:text-white"
-            }`}
-            title={r.name}
-          >
-            <div
-              class="w-2 h-2 rounded-full flex-shrink-0"
-              style={`background-color: ${
-                REGISTRY_COLORS[i % REGISTRY_COLORS.length]
-              }`}
-            />
-            {(!collapsed.value || mobileOpen.value) && (
-              <span class="text-sm font-medium truncate">{r.name}</span>
-            )}
-          </button>
+          <div key={r.id} class="group relative">
+            {renamingId.value === r.id
+              ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    confirmRename(r.id);
+                  }}
+                  class="flex items-center gap-1 px-3 py-2.5 bg-white/5 border border-white/10 rounded-custom"
+                >
+                  <div
+                    class="w-2 h-2 rounded-full flex-shrink-0"
+                    style={`background-color: ${
+                      REGISTRY_COLORS[i % REGISTRY_COLORS.length]
+                    }`}
+                  />
+                  <input
+                    type="text"
+                    value={renameValue.value}
+                    onInput={(e) =>
+                      renameValue.value = (e.target as HTMLInputElement).value}
+                    onBlur={() => confirmRename(r.id)}
+                    class="flex-1 min-w-0 bg-transparent border-0 text-sm font-medium text-white focus:ring-0 p-0"
+                    autofocus
+                  />
+                </form>
+              )
+              : (
+                <button
+                  type="button"
+                  onClick={() => switchRegistry(r.id)}
+                  class={`w-full flex items-center gap-3 px-3 py-2.5 rounded-custom transition-colors ${
+                    r.id === props.activeRegistryId
+                      ? "bg-white/5 border border-white/10 text-white"
+                      : "hover:bg-white/5 text-gray-400 hover:text-white"
+                  }`}
+                  title={r.name}
+                >
+                  <div
+                    class="w-2 h-2 rounded-full flex-shrink-0"
+                    style={`background-color: ${
+                      REGISTRY_COLORS[i % REGISTRY_COLORS.length]
+                    }`}
+                  />
+                  <span class="text-sm font-medium truncate flex-1 min-w-0">
+                    {r.name}
+                  </span>
+                  {props.isOwner &&
+                    r.id === props.activeRegistryId && (
+                    <span class="hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startRename(r.id, r.name);
+                        }}
+                        class="p-1 hover:bg-white/10 rounded text-slate-500 hover:text-white transition-colors"
+                        title="Renombrar"
+                      >
+                        <svg
+                          class="w-3.5 h-3.5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                          />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteRegistry(r.id);
+                        }}
+                        class="p-1 hover:bg-red-500/20 rounded text-slate-500 hover:text-red-400 transition-colors"
+                        title="Eliminar"
+                      >
+                        <svg
+                          class="w-3.5 h-3.5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                          />
+                        </svg>
+                      </button>
+                    </span>
+                  )}
+                </button>
+              )}
+          </div>
         ))}
       </div>
 
