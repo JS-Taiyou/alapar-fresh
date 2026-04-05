@@ -10,6 +10,7 @@ export default function CortarButton(props: CortarButtonProps) {
 
   async function handleCortar() {
     if (!canCut || loading.value) return;
+    if (!confirm("¿Cortar ejercicio? Se crearán transacciones de ajuste para los saldos pendientes.")) return;
     loading.value = true;
     try {
       await fetch("/api/exercises", { method: "POST" });
