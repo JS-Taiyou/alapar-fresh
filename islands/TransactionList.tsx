@@ -236,6 +236,29 @@ export default function TransactionList(props: TransactionListProps) {
     return computeDefaultPercentages(users.value, defaultSplit.value);
   }
 
+  function saveLastSplitConfig() {
+    if (expenseType.value === "pago" || splitMode.value !== "percentage") return;
+    const key = `lastSplit_${registryId.value}`;
+    try {
+      localStorage.setItem(key, JSON.stringify({
+        percentages: percentages.value,
+        userPaid: userPaid.value,
+      }));
+    } catch { /* ignore storage errors */ }
+  }
+
+  function loadLastSplitConfig(): {
+    percentages: Record<string, number>;
+    userPaid: string;
+  } | null {
+    const key = `lastSplit_${registryId.value}`;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch { return null; }
+  }
+
   function resetForm() {
     amount.value = 0;
     description.value = "";
@@ -243,20 +266,28 @@ export default function TransactionList(props: TransactionListProps) {
     expenseType.value = "unico";
     installmentCurrent.value = 1;
     installmentTotal.value = 12;
-    userPaid.value = currentUserId.value;
     paymentRecipient.value =
       users.value.find((u) => u.id !== currentUserId.value)?.id ?? "";
-    if (
-      defaultSplit.value &&
-      defaultSplit.value.splits.length === users.value.length
-    ) {
+
+    const lastConfig = loadLastSplitConfig();
+    if (lastConfig) {
       splitMode.value = "percentage";
-      percentages.value = buildDefaultPercentages();
+      percentages.value = lastConfig.percentages;
+      userPaid.value = lastConfig.userPaid;
     } else {
-      splitMode.value = "auto";
-      percentages.value = buildDefaultPercentages();
+      userPaid.value = currentUserId.value;
+      if (
+        defaultSplit.value &&
+        defaultSplit.value.splits.length === users.value.length
+      ) {
+        splitMode.value = "percentage";
+        percentages.value = buildDefaultPercentages();
+      } else {
+        splitMode.value = "auto";
+        percentages.value = buildDefaultPercentages();
+      }
+      fixedAmounts.value = Object.fromEntries(users.value.map((u) => [u.id, 0]));
     }
-    fixedAmounts.value = Object.fromEntries(users.value.map((u) => [u.id, 0]));
     editingId.value = null;
   }
 
@@ -450,6 +481,7 @@ export default function TransactionList(props: TransactionListProps) {
           { ...created, paidByUser },
           ...transactions.value,
         ];
+        saveLastSplitConfig();
       }
       isOpen.value = false;
       editingId.value = null;
