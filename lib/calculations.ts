@@ -13,7 +13,7 @@ export function calculateBalance(
 ): number {
   let balance = 0;
   for (const tx of transactions) {
-    if (tx.type === "pago") {
+    if (tx.type === "pago" || tx.type === "ajuste") {
       if (tx.userPaid === userId) {
         balance += tx.originalAmount;
       } else {
@@ -49,7 +49,7 @@ export function calculatePairwiseBreakdown(
   }
 
   for (const tx of transactions) {
-    if (tx.type === "pago") {
+    if (tx.type === "pago" || tx.type === "ajuste") {
       if (tx.userPaid === currentUserId) {
         const recipient = tx.splitJson.splits[0];
         if (recipient && net[recipient.userId] !== undefined) {
@@ -128,7 +128,7 @@ export function calculateFullPairwiseBalances(
   }
 
   for (const tx of transactions) {
-    if (tx.type === "pago") {
+    if (tx.type === "pago" || tx.type === "ajuste") {
       const recipient = tx.splitJson.splits[0];
       if (recipient && net[tx.userPaid]?.[recipient.userId] !== undefined) {
         net[tx.userPaid][recipient.userId] += tx.originalAmount;

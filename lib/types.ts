@@ -15,7 +15,7 @@ export interface Transaction {
   description: string;
   amount: number;
   originalAmount: number;
-  type: "unico" | "parcialidad" | "recurrente" | "pago";
+  type: "unico" | "parcialidad" | "recurrente" | "pago" | "ajuste";
   exerciseId: string | null;
   installmentCurrent: number | null;
   installmentTotal: number | null;

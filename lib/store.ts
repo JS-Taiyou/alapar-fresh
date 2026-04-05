@@ -70,7 +70,7 @@ function rowToTransaction(row: Record<string, unknown>): Transaction {
     description: row.description as string,
     amount: parseFloat(row.amount as string),
     originalAmount: parseFloat(row.original_amount as string),
-    type: row.type as "unico" | "parcialidad" | "recurrente",
+    type: row.type as "unico" | "parcialidad" | "recurrente" | "pago" | "ajuste",
     exerciseId: row.exercise_id as string | null,
     installmentCurrent: row.installment_current as number | null,
     installmentTotal: row.installment_total as number | null,

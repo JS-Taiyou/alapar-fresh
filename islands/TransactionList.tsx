@@ -30,7 +30,7 @@ interface TransactionListProps {
 import type { BalanceBreakdownEntry } from "../lib/types.ts";
 
 type SplitMode = "auto" | "percentage" | "fixed";
-type TransactionType = "unico" | "parcialidad" | "recurrente" | "pago";
+type TransactionType = "unico" | "parcialidad" | "recurrente" | "pago" | "ajuste";
 
 function sanitizeDecimal(raw: string): string {
   let v = raw.replace(/[^0-9.]/g, "");
@@ -57,6 +57,43 @@ function TransactionCardClickable(props: {
   onClick: () => void;
 }) {
   const { tx, users, currentUserId } = props;
+
+  if (tx.type === "ajuste") {
+    const formattedAmount = tx.originalAmount.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+
+    return (
+      <div
+        class="w-full text-left bg-card p-5 rounded-custom border-l-4 border-l-amber-500 border border-white/5 flex justify-between items-center"
+      >
+        <div class="flex flex-col">
+          <span class="text-lg font-semibold text-white flex items-center gap-2">
+            {tx.description}
+            <span class="text-xs font-medium px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">
+              Saldo pendiente
+            </span>
+          </span>
+          <span class="text-sm text-gray-500">
+            {new Date(tx.createdAt).toLocaleDateString("es-MX", {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            })} &bull; {new Date(tx.createdAt).toLocaleTimeString("es-MX", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </span>
+        </div>
+        <div class="text-right flex flex-col items-end">
+          <span class="text-xl font-bold text-amber-400">
+            ${formattedAmount}
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   if (tx.type === "pago") {
     const isPayer = tx.userPaid === currentUserId;
@@ -306,7 +343,7 @@ export default function TransactionList(props: TransactionListProps) {
     installmentTotal.value = tx.installmentTotal ?? 12;
     userPaid.value = tx.userPaid;
 
-    if (tx.type === "pago") {
+  if (tx.type === "pago") {
       const recipientSplit = tx.splitJson.splits[0];
       if (recipientSplit) {
         paymentRecipient.value = recipientSplit.userId;
@@ -718,7 +755,7 @@ export default function TransactionList(props: TransactionListProps) {
               tx={tx}
               users={users.value}
               currentUserId={currentUserId.value}
-              onClick={() => openEdit(tx)}
+              onClick={() => tx.type !== "ajuste" && openEdit(tx)}
             />
           ))}
         <div class="h-24" />

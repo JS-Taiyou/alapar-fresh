@@ -76,7 +76,7 @@ CREATE TABLE transactions (
   description TEXT NOT NULL,
   amount NUMERIC(12,2) NOT NULL,
   original_amount NUMERIC(12,2) NOT NULL,
-  type TEXT NOT NULL DEFAULT 'unico' CHECK (type IN ('unico', 'parcialidad', 'recurrente', 'pago')),
+  type TEXT NOT NULL DEFAULT 'unico' CHECK (type IN ('unico', 'parcialidad', 'recurrente', 'pago', 'ajuste')),
   exercise_id UUID REFERENCES exercises(id) ON DELETE SET NULL,
   installment_current INTEGER,
   installment_total INTEGER,

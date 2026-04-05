@@ -20,25 +20,25 @@ export const handlers = define.handlers({
     const exercise = await createExercise(registryId);
 
     for (const debt of debts) {
-      const splits = users.map((u) => ({
-        userId: u.id,
-        percentage: u.id === debt.fromUserId ? 100 : 0,
-        amount: u.id === debt.fromUserId ? debt.amount : 0,
-      }));
-
       await createTransaction({
         registry_id: registryId,
         description: `Pendiente de ${debt.fromUserName} a favor de ${debt.toUserName}`,
         amount: debt.amount,
         originalAmount: debt.amount,
-        type: "unico",
+        type: "ajuste" as const,
         exerciseId: null,
         installmentCurrent: null,
         installmentTotal: null,
         recurringDisabled: false,
         recurringGroupId: crypto.randomUUID(),
         notes: "Ajuste de balance pendiente del ejercicio anterior",
-        splitJson: { splits },
+        splitJson: {
+          splits: [{
+            userId: debt.fromUserId,
+            percentage: 100,
+            amount: debt.amount,
+          }],
+        },
         creatorId: debt.toUserId,
         userPaid: debt.toUserId,
       });
