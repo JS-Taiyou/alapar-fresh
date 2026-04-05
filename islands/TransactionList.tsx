@@ -367,6 +367,32 @@ export default function TransactionList(props: TransactionListProps) {
     }));
   }
 
+  function handleAmountChange(raw: string) {
+    const sanitized = sanitizeDecimal(raw);
+    const newVal = parseFloat(sanitized) || 0;
+
+    if (
+      editingId.value &&
+      expenseType.value !== "pago" &&
+      Math.abs(newVal - amount.value) > 0.001
+    ) {
+      const currentSplits = getSplits();
+      const total = Math.abs(amount.value);
+      percentages.value = Object.fromEntries(
+        currentSplits.map((s) => [
+          s.userId,
+          total > 0
+            ? Math.round((s.amount / total) * 10000) / 100
+            : Math.round(10000 / users.value.length) / 100,
+        ]),
+      );
+      splitMode.value = "percentage";
+    }
+
+    amount.value = newVal;
+    return sanitized;
+  }
+
   function totalPercentage(): number {
     return Object.values(percentages.value).reduce((s, v) => s + v, 0);
   }
@@ -779,11 +805,10 @@ export default function TransactionList(props: TransactionListProps) {
                       inputmode="decimal"
                       value={amount.value || ""}
                       onInput={(e) => {
-                        const sanitized = sanitizeDecimal(
+                        const sanitized = handleAmountChange(
                           (e.target as HTMLInputElement).value,
                         );
                         (e.target as HTMLInputElement).value = sanitized;
-                        amount.value = parseFloat(sanitized) || 0;
                       }}
                       required
                     />
