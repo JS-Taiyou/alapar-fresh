@@ -1,22 +1,21 @@
 import { useSignal } from "@preact/signals";
 
 interface CortarButtonProps {
-  balance: number;
   hasTransactions: boolean;
 }
 
 export default function CortarButton(props: CortarButtonProps) {
   const loading = useSignal(false);
-  const canCut = props.hasTransactions && props.balance === 0;
+  const canCut = props.hasTransactions;
 
   async function handleCortar() {
     if (!canCut || loading.value) return;
     loading.value = true;
     try {
       await fetch("/api/exercises", { method: "POST" });
-      window.location.reload();
+      globalThis.location.reload();
     } catch {
-      window.location.reload();
+      globalThis.location.reload();
     }
   }
 

@@ -12,6 +12,7 @@ import type {
 import {
   calculateBalance as calcBalancePure,
   calculatePairwiseBreakdown as calcPairwiseBreakdownPure,
+  calculateFullPairwiseBalances as calcFullPairwisePure,
   buildEqualSplit,
   buildFixedSplit,
   buildPercentageSplit,
@@ -22,6 +23,7 @@ export {
   buildFixedSplit,
   buildPercentageSplit,
   calcPairwiseBreakdownPure as calculatePairwiseBreakdown,
+  calcFullPairwisePure as calculateFullPairwiseBalances,
 };
 
 const MONTHS_ES = [

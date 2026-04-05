@@ -104,6 +104,84 @@ export function calculatePairwiseBreakdown(
   return entries;
 }
 
+export interface PairwiseDebt {
+  fromUserId: string;
+  fromUserName: string;
+  toUserId: string;
+  toUserName: string;
+  amount: number;
+}
+
+export function calculateFullPairwiseBalances(
+  transactions: Transaction[],
+  allUsers: User[],
+): PairwiseDebt[] {
+  const userIds = allUsers.map((u) => u.id);
+  const userMap = new Map(allUsers.map((u) => [u.id, u]));
+
+  const net: Record<string, Record<string, number>> = {};
+  for (const a of userIds) {
+    net[a] = {};
+    for (const b of userIds) {
+      if (a !== b) net[a][b] = 0;
+    }
+  }
+
+  for (const tx of transactions) {
+    if (tx.type === "pago") {
+      const recipient = tx.splitJson.splits[0];
+      if (recipient && net[tx.userPaid]?.[recipient.userId] !== undefined) {
+        net[tx.userPaid][recipient.userId] += tx.originalAmount;
+      }
+      continue;
+    }
+
+    const divisor = tx.type === "parcialidad" && tx.installmentTotal
+      ? tx.installmentTotal
+      : 1;
+
+    for (const split of tx.splitJson.splits) {
+      if (split.userId !== tx.userPaid) {
+        if (net[tx.userPaid]?.[split.userId] !== undefined) {
+          net[tx.userPaid][split.userId] += split.amount / divisor;
+        }
+      }
+    }
+  }
+
+  const debts: PairwiseDebt[] = [];
+  for (let i = 0; i < userIds.length; i++) {
+    for (let j = i + 1; j < userIds.length; j++) {
+      const a = userIds[i];
+      const b = userIds[j];
+      const netAmount = Math.round(
+        ((net[a][b] ?? 0) - (net[b][a] ?? 0)) * 100,
+      ) / 100;
+      if (Math.abs(netAmount) < 0.01) continue;
+
+      if (netAmount > 0) {
+        debts.push({
+          fromUserId: b,
+          fromUserName: userMap.get(b)?.name ?? b,
+          toUserId: a,
+          toUserName: userMap.get(a)?.name ?? a,
+          amount: netAmount,
+        });
+      } else {
+        debts.push({
+          fromUserId: a,
+          fromUserName: userMap.get(a)?.name ?? a,
+          toUserId: b,
+          toUserName: userMap.get(b)?.name ?? b,
+          amount: Math.abs(netAmount),
+        });
+      }
+    }
+  }
+
+  return debts;
+}
+
 export function computeDefaultPercentages(
   users: User[],
   defaultSplit: DefaultSplit | null,

@@ -148,7 +148,7 @@ export default define.page(function DashboardIndex(ctx) {
               />
             </svg>
           </a>
-          <CortarButton balance={balance} hasTransactions={hasTransactions} />
+          <CortarButton hasTransactions={hasTransactions} />
         </div>
       </header>
       <TransactionList
