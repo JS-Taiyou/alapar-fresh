@@ -4,12 +4,25 @@ import type {
   DefaultSplit,
   Exercise,
   Registry,
-  SplitEntry,
   SystemUser,
   Transaction,
   TransactionSplit,
   User,
 } from "./types.ts";
+import {
+  calculateBalance as calcBalancePure,
+  calculatePairwiseBreakdown as calcPairwiseBreakdownPure,
+  buildEqualSplit,
+  buildFixedSplit,
+  buildPercentageSplit,
+} from "./calculations.ts";
+
+export {
+  buildEqualSplit,
+  buildFixedSplit,
+  buildPercentageSplit,
+  calcPairwiseBreakdownPure as calculatePairwiseBreakdown,
+};
 
 const MONTHS_ES = [
   "Ene",
@@ -153,6 +166,95 @@ export async function ensureUserPreferences(
      ON CONFLICT (user_id) DO NOTHING`,
     [systemUserId],
   );
+}
+
+export async function resolveUserState(supabaseAuthId: string): Promise<{
+  systemUser: SystemUser | null;
+  isEmailAllowed: boolean;
+  activeRegistry: Registry | null;
+  isOwner: boolean;
+  registries: Registry[];
+  registryUsers: User[];
+}> {
+  const userResult = await query(
+    `SELECT su.*, ae.id IS NOT NULL as is_email_allowed
+     FROM system_users su
+     LEFT JOIN allowed_emails ae ON ae.email = su.email
+     WHERE su.supabase_auth_id = $1`,
+    [supabaseAuthId],
+  );
+  if (userResult.rows.length === 0) {
+    return {
+      systemUser: null,
+      isEmailAllowed: false,
+      activeRegistry: null,
+      isOwner: false,
+      registries: [],
+      registryUsers: [],
+    };
+  }
+
+  const row = userResult.rows[0];
+  const systemUser = rowToSystemUser(row);
+  const isEmailAllowed = row.is_email_allowed as boolean;
+
+  if (!isEmailAllowed) {
+    return {
+      systemUser,
+      isEmailAllowed: false,
+      activeRegistry: null,
+      isOwner: false,
+      registries: [],
+      registryUsers: [],
+    };
+  }
+
+  const [registries, activeRegResult] = await Promise.all([
+    query(
+      `SELECT r.* FROM registries r
+       JOIN registry_members rm ON r.id = rm.registry_id
+       WHERE rm.user_id = $1
+       ORDER BY r.latest_accessed DESC`,
+      [systemUser.id],
+    ),
+    query(
+      `SELECT r.*, rm.role as active_registry_role
+       FROM registries r
+       JOIN user_preferences up ON up.active_registry_id = r.id
+       JOIN registry_members rm ON rm.registry_id = r.id AND rm.user_id = $1
+       WHERE up.user_id = $1`,
+      [systemUser.id],
+    ),
+  ]);
+
+  const registriesList = registries.rows.map(rowToRegistry);
+  let activeRegistry: Registry | null = null;
+  let isOwner = false;
+  let registryUsers: User[] = [];
+
+  if (activeRegResult.rows.length > 0) {
+    const activeRegRow = activeRegResult.rows[0];
+    activeRegistry = rowToRegistry(activeRegRow);
+    isOwner = activeRegRow.active_registry_role === "owner";
+
+    const usersResult = await query(
+      `SELECT u.*, COALESCE(su.name, u.name) as name
+       FROM users u
+       LEFT JOIN system_users su ON u.system_user_id = su.id
+       WHERE u.registry_id = $1`,
+      [activeRegistry.id],
+    );
+    registryUsers = usersResult.rows.map(rowToUser);
+  }
+
+  return {
+    systemUser,
+    isEmailAllowed: true,
+    activeRegistry,
+    isOwner,
+    registries: registriesList,
+    registryUsers,
+  };
 }
 
 export async function getUsers(registryId: string): Promise<User[]> {
@@ -303,34 +405,30 @@ export async function getExerciseById(
 }
 
 export async function createExercise(registryId: string): Promise<Exercise> {
-  const active = await getActiveTransactions(registryId);
-  const total = active.reduce((sum, t) => sum + Math.abs(t.originalAmount), 0);
-  const startDate = active.length > 0
-    ? new Date(Math.min(...active.map((t) => t.createdAt.getTime())))
-    : new Date();
-  const endDate = new Date();
-
   const result = await query(
-    `INSERT INTO exercises (registry_id, start_date, end_date, transaction_count, total_amount) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [
-      registryId,
-      startDate.toISOString(),
-      endDate.toISOString(),
-      active.length,
-      total,
-    ],
+    `WITH active AS (
+      SELECT id, original_amount, created_at
+      FROM transactions
+      WHERE registry_id = $1 AND exercise_id IS NULL
+    ),
+    new_exercise AS (
+      INSERT INTO exercises (registry_id, start_date, end_date, transaction_count, total_amount)
+      SELECT $1,
+             COALESCE(MIN(created_at), now()),
+             now(),
+             COUNT(*),
+             COALESCE(SUM(ABS(original_amount)), 0)
+      FROM active
+      RETURNING id, registry_id, start_date, end_date, transaction_count, total_amount
+    ),
+    updated AS (
+      UPDATE transactions SET exercise_id = (SELECT id FROM new_exercise)
+      WHERE registry_id = $1 AND exercise_id IS NULL
+    )
+    SELECT * FROM new_exercise`,
+    [registryId],
   );
-  const exercise = rowToExercise(result.rows[0]);
-
-  if (active.length > 0) {
-    const ids = active.map((t) => t.id);
-    await query(
-      `UPDATE transactions SET exercise_id = $1 WHERE id = ANY($2::uuid[])`,
-      [exercise.id, ids],
-    );
-  }
-
-  return exercise;
+  return rowToExercise(result.rows[0]);
 }
 
 export async function getRegistriesForUser(
@@ -420,6 +518,21 @@ export async function getTransactionCount(
   return parseInt(result.rows[0].cnt as string);
 }
 
+export async function getTransactionCounts(
+  registryIds: string[],
+): Promise<Map<string, number>> {
+  if (registryIds.length === 0) return new Map();
+  const result = await query(
+    "SELECT registry_id, COUNT(*) as cnt FROM transactions WHERE registry_id = ANY($1::uuid[]) GROUP BY registry_id",
+    [registryIds],
+  );
+  const map = new Map<string, number>();
+  for (const row of result.rows) {
+    map.set(row.registry_id as string, parseInt(row.cnt as string));
+  }
+  return map;
+}
+
 export async function deleteRegistry(registryId: string): Promise<boolean> {
   const count = await getTransactionCount(registryId);
   if (count > 0) return false;
@@ -444,72 +557,11 @@ export async function getUserRole(
 export async function calculateBalance(
   userId: string,
   registryId: string,
+  preloadedTransactions?: Transaction[],
 ): Promise<number> {
-  const active = await getActiveTransactions(registryId);
-  let balance = 0;
-  for (const tx of active) {
-    if (tx.type === "pago") {
-      if (tx.userPaid === userId) {
-        balance += tx.originalAmount;
-      } else {
-        const isInSplit = tx.splitJson.splits.some((s) => s.userId === userId);
-        if (isInSplit) balance -= tx.originalAmount;
-      }
-      continue;
-    }
-    const userSplit = tx.splitJson.splits.find((s) => s.userId === userId);
-    if (!userSplit) continue;
-    const divisor = tx.type === "parcialidad" && tx.installmentTotal
-      ? tx.installmentTotal
-      : 1;
-    const totalAmount = tx.originalAmount / divisor;
-    const splitAmount = userSplit.amount / divisor;
-    if (tx.userPaid === userId) {
-      balance += totalAmount - splitAmount;
-    } else {
-      balance -= splitAmount;
-    }
-  }
-  return balance;
-}
-
-export function buildEqualSplit(
-  total: number,
-  userIds: string[],
-): TransactionSplit {
-  const count = userIds.length;
-  const perPerson = Math.floor((total / count) * 100) / 100;
-  const remainder = Math.round((total - perPerson * count) * 100) / 100;
-  const splits: SplitEntry[] = userIds.map((uid, i) => ({
-    userId: uid,
-    percentage: Math.round((100 / count) * 100) / 100,
-    amount: perPerson + (i === 0 ? remainder : 0),
-  }));
-  return { splits };
-}
-
-export function buildPercentageSplit(
-  total: number,
-  percentages: { userId: string; percentage: number }[],
-): TransactionSplit {
-  const splits: SplitEntry[] = percentages.map((p) => ({
-    userId: p.userId,
-    percentage: p.percentage,
-    amount: Math.round(total * p.percentage) / 100,
-  }));
-  return { splits };
-}
-
-export function buildFixedSplit(
-  total: number,
-  amounts: { userId: string; amount: number }[],
-): TransactionSplit {
-  const splits: SplitEntry[] = amounts.map((a) => ({
-    userId: a.userId,
-    percentage: total > 0 ? Math.round((a.amount / total) * 10000) / 100 : 0,
-    amount: a.amount,
-  }));
-  return { splits };
+  const active = preloadedTransactions ??
+    await getActiveTransactions(registryId);
+  return calcBalancePure(active, userId);
 }
 
 export function getMonthNameEs(date: Date): string {
@@ -588,6 +640,60 @@ export async function cloneTransactionForNextPeriod(
   });
 }
 
+export async function batchCloneTransactions(
+  items: { id: string; quantity: number }[],
+): Promise<Transaction[]> {
+  if (items.length === 0) return [];
+  const ids = items.map((i) => i.id);
+  const result = await query(
+    `SELECT * FROM transactions WHERE id = ANY($1::uuid[])`,
+    [ids],
+  );
+  const sources = new Map(result.rows.map(rowToTransaction).map((t) => [t.id, t]));
+
+  const rows: unknown[][] = [];
+  for (const item of items) {
+    const source = sources.get(item.id);
+    if (!source) continue;
+    const quantity = source.type === "parcialidad" ? item.quantity : 1;
+    for (let i = 1; i <= quantity; i++) {
+      const recurringGroupId = source.recurringGroupId ?? crypto.randomUUID();
+      rows.push([
+        source.registry_id,
+        source.description,
+        source.amount,
+        source.originalAmount,
+        source.type,
+        null,
+        source.type === "parcialidad" && source.installmentCurrent !== null
+          ? source.installmentCurrent + i
+          : null,
+        source.type === "parcialidad" ? source.installmentTotal : null,
+        false,
+        recurringGroupId,
+        source.notes,
+        JSON.stringify(source.splitJson),
+        source.creatorId,
+        source.userPaid,
+      ]);
+    }
+  }
+
+  if (rows.length === 0) return [];
+
+  const cols = 14;
+  const placeholders = rows.map((_, rowIdx) =>
+    `(${Array.from({ length: cols }, (_, c) => `$${rowIdx * cols + c + 1}`).join(", ")})`
+  ).join(", ");
+  const flatValues = rows.flat();
+
+  const insertResult = await query(
+    `INSERT INTO transactions (registry_id, description, amount, original_amount, type, exercise_id, installment_current, installment_total, recurring_disabled, recurring_group_id, notes, split_json, creator_id, user_paid) VALUES ${placeholders} RETURNING *`,
+    flatValues,
+  );
+  return insertResult.rows.map(rowToTransaction);
+}
+
 export async function getEntities(registryId: string): Promise<User[]> {
   const result = await query(
     "SELECT * FROM users WHERE registry_id = $1 AND is_entity = true ORDER BY created_at",
@@ -622,21 +728,17 @@ export async function updateEntity(
 }
 
 export async function deleteEntity(entityId: string): Promise<boolean> {
-  const activeRefs = await query(
-    "SELECT 1 FROM transactions WHERE (creator_id = $1 OR user_paid = $1) AND exercise_id IS NULL LIMIT 1",
-    [entityId],
-  );
-  if (activeRefs.rows.length > 0) return false;
-
-  const splitRefs = await query(
-    "SELECT 1 FROM transactions WHERE exercise_id IS NULL AND split_json @> $1 LIMIT 1",
-    [JSON.stringify({ splits: [{ userId: entityId }] })],
-  );
-  if (splitRefs.rows.length > 0) return false;
-
   const result = await query(
-    "DELETE FROM users WHERE id = $1 AND is_entity = true",
-    [entityId],
+    `DELETE FROM users WHERE id = $1 AND is_entity = true
+     AND NOT EXISTS (
+       SELECT 1 FROM transactions
+       WHERE (creator_id = $1 OR user_paid = $1) AND exercise_id IS NULL
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM transactions
+       WHERE exercise_id IS NULL AND split_json @> $2
+     )`,
+    [entityId, JSON.stringify({ splits: [{ userId: entityId }] })],
   );
   return (result.rowCount ?? 0) > 0;
 }
@@ -872,72 +974,6 @@ export async function revokeInvitation(
       JSON.stringify({}),
     ],
   );
-}
-
-export function calculatePairwiseBreakdown(
-  transactions: Transaction[],
-  currentUserId: string,
-  allUsers: User[],
-): BalanceBreakdownEntry[] {
-  const net: Record<string, number> = {};
-  for (const u of allUsers) {
-    if (u.id !== currentUserId) net[u.id] = 0;
-  }
-
-  for (const tx of transactions) {
-    if (tx.type === "pago") {
-      if (tx.userPaid === currentUserId) {
-        const recipient = tx.splitJson.splits[0];
-        if (recipient && net[recipient.userId] !== undefined) {
-          net[recipient.userId] += tx.originalAmount;
-        }
-      } else if (
-        tx.splitJson.splits.some((s) => s.userId === currentUserId)
-      ) {
-        if (net[tx.userPaid] !== undefined) {
-          net[tx.userPaid] -= tx.originalAmount;
-        }
-      }
-      continue;
-    }
-
-    const divisor = tx.type === "parcialidad" && tx.installmentTotal
-      ? tx.installmentTotal
-      : 1;
-    const currentUserSplit = tx.splitJson.splits.find((s) =>
-      s.userId === currentUserId
-    );
-    if (!currentUserSplit) continue;
-
-    if (tx.userPaid === currentUserId) {
-      for (const split of tx.splitJson.splits) {
-        if (split.userId !== currentUserId && net[split.userId] !== undefined) {
-          net[split.userId] += split.amount / divisor;
-        }
-      }
-    } else {
-      if (net[tx.userPaid] !== undefined) {
-        net[tx.userPaid] -= currentUserSplit.amount / divisor;
-      }
-    }
-  }
-
-  const entries: BalanceBreakdownEntry[] = [];
-  for (const u of allUsers) {
-    if (u.id === currentUserId) continue;
-    const amount = Math.round((net[u.id] ?? 0) * 100) / 100;
-    if (Math.abs(amount) >= 0.01) {
-      entries.push({
-        userId: u.id,
-        userName: u.name,
-        userColor: u.color,
-        amount,
-      });
-    }
-  }
-
-  entries.sort((a, b) => b.amount - a.amount);
-  return entries;
 }
 
 export async function isEmailAllowed(email: string): Promise<boolean> {

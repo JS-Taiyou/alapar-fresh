@@ -4,7 +4,6 @@ import {
   calculatePairwiseBreakdown,
   getActiveTransactions,
   getSpawnCandidates,
-  getUserById,
 } from "../../lib/store.ts";
 import { Head } from "fresh/runtime";
 import TransactionList from "../../islands/TransactionList.tsx";
@@ -73,14 +72,14 @@ export const handlers = define.handlers({
     }
 
     const transactions = await getActiveTransactions(registryId);
-    const balance = await calculateBalance(registryUserId, registryId);
+    const balance = await calculateBalance(registryUserId, registryId, transactions);
     const candidates = await getSpawnCandidates(registryId);
 
-    const enriched: EnrichedTransaction[] = [];
-    for (const tx of transactions) {
-      const paidByUser = await getUserById(tx.userPaid);
-      enriched.push({ ...tx, paidByUser: paidByUser ?? null });
-    }
+    const userMap = new Map(ctx.state.registryUsers.map((u) => [u.id, u]));
+    const enriched = transactions.map((tx) => ({
+      ...tx,
+      paidByUser: userMap.get(tx.userPaid) ?? null,
+    }));
 
     const spawnCandidates: SpawnCandidate[] = candidates.map((c) => ({
       id: c.id,

@@ -2,7 +2,6 @@ import { define } from "../../../utils.ts";
 import {
   getExerciseById,
   getTransactionsByExercise,
-  getUserById,
 } from "../../../lib/store.ts";
 import { Head } from "fresh/runtime";
 import TransactionCard from "../../../components/TransactionCard.tsx";
@@ -31,11 +30,11 @@ export const handlers = define.handlers({
     }
 
     const txs = await getTransactionsByExercise(id);
-    const enriched: EnrichedTransaction[] = [];
-    for (const tx of txs) {
-      const paidByUser = await getUserById(tx.userPaid);
-      enriched.push({ ...tx, paidByUser: paidByUser ?? null });
-    }
+    const userMap = new Map(ctx.state.registryUsers.map((u) => [u.id, u]));
+    const enriched = txs.map((tx) => ({
+      ...tx,
+      paidByUser: userMap.get(tx.userPaid) ?? null,
+    }));
 
     return { data: { exercise, transactions: enriched } };
   },

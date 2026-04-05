@@ -1,5 +1,20 @@
 import { useSignal } from "@preact/signals";
-import type { BalanceBreakdownEntry } from "../lib/types.ts";
+import { useEffect } from "preact/hooks";
+import type {
+  BalanceBreakdownEntry,
+  DefaultSplit,
+} from "../lib/types.ts";
+import { computeDefaultPercentages } from "../lib/calculations.ts";
+import {
+  balanceSignal,
+  balanceEntriesSignal,
+  usersSignal,
+  transactionsSignal,
+  recalculateAndBroadcast,
+  initializeSignals,
+} from "./shared-signals.ts";
+
+
 
 interface BalanceBreakdownProps {
   balance: number;
@@ -7,12 +22,16 @@ interface BalanceBreakdownProps {
   usersCount: number;
 }
 
-export default function BalanceBreakdown(props: BalanceBreakdownProps) {
+export default function BalanceBreakdown(_props: BalanceBreakdownProps) {
   const showPopover = useSignal(false);
 
-  const owedToMe = props.entries.filter((e) => e.amount > 0);
-  const owedByMe = props.entries.filter((e) => e.amount < 0);
-  const canShowPopover = props.usersCount > 2;
+  const balance = balanceSignal.value;
+  const entries = balanceEntriesSignal.value;
+  const usersCount = usersSignal.value.length;
+
+  const owedToMe = entries.filter((e) => e.amount > 0);
+  const owedByMe = entries.filter((e) => e.amount < 0);
+  const canShowPopover = usersCount > 2;
 
   function toggle() {
     if (canShowPopover) showPopover.value = !showPopover.value;
@@ -22,7 +41,7 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
     showPopover.value = false;
   }
 
-  const balanceStr = Math.abs(props.balance).toLocaleString("en-US", {
+  const balanceStr = Math.abs(balance).toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -62,7 +81,7 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
         </div>
         <p
           class={`text-4xl font-bold mt-1 ${
-            props.balance >= 0 ? "text-green-500" : "text-red-500"
+            balance >= 0 ? "text-green-500" : "text-red-500"
           }`}
         >
           ${balanceStr}
@@ -85,7 +104,7 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
               </p>
             </div>
 
-            {props.entries.length === 0
+            {entries.length === 0
               ? (
                 <div class="px-4 py-6 text-center">
                   <svg

@@ -1,16 +1,22 @@
 import { useComputed, useSignal } from "@preact/signals";
 import type {
-  BalanceBreakdownEntry,
-  DefaultSplit,
   SplitEntry,
-  Transaction,
   TransactionSplit,
   User,
 } from "../lib/types.ts";
-
-interface EnrichedTransaction extends Transaction {
-  paidByUser: User | null;
-}
+import {
+  type EnrichedTransaction,
+  transactionsSignal,
+  usersSignal,
+  currentUserIdSignal,
+  registryIdSignal,
+  defaultSplitSignal,
+  balanceEntriesSignal,
+  recalculateAndBroadcast,
+  computeDefaultPercentages,
+  initializeSignals,
+} from "./shared-signals.ts";
+import type { DefaultSplit } from "../lib/types.ts";
 
 interface TransactionListProps {
   transactions: EnrichedTransaction[];
@@ -20,6 +26,8 @@ interface TransactionListProps {
   balanceBreakdown: BalanceBreakdownEntry[];
   defaultSplit: DefaultSplit | null;
 }
+
+import type { BalanceBreakdownEntry } from "../lib/types.ts";
 
 type SplitMode = "auto" | "percentage" | "fixed";
 type TransactionType = "unico" | "parcialidad" | "recurrente" | "pago";
@@ -42,37 +50,19 @@ function sanitizeInteger(raw: string): string {
   return raw.replace(/[^0-9]/g, "");
 }
 
-function computeDefaultPercentages(
-  users: User[],
-  defaultSplit: DefaultSplit | null,
-): Record<string, number> {
-  if (defaultSplit && defaultSplit.splits.length === users.length) {
-    const userIds = new Set(users.map((u) => u.id));
-    const allPresent = defaultSplit.splits.every((s) => userIds.has(s.userId));
-    if (allPresent) {
-      return Object.fromEntries(
-        defaultSplit.splits.map((s) => [s.userId, s.percentage]),
-      );
-    }
-  }
-  return Object.fromEntries(
-    users.map((u) => [u.id, Math.round(10000 / users.length) / 100]),
-  );
-}
-
 function TransactionCardClickable(props: {
   tx: EnrichedTransaction;
   users: User[];
   currentUserId: string;
   onClick: () => void;
 }) {
-  const { tx, currentUserId } = props;
+  const { tx, users, currentUserId } = props;
 
   if (tx.type === "pago") {
     const isPayer = tx.userPaid === currentUserId;
     const recipientSplit = tx.splitJson.splits[0];
     const recipientUser = recipientSplit
-      ? props.users.find((u) => u.id === recipientSplit.userId)
+      ? users.find((u) => u.id === recipientSplit.userId)
       : null;
     const payerUser = tx.paidByUser;
     const formattedAmount = tx.originalAmount.toLocaleString("en-US", {
@@ -196,7 +186,27 @@ function TransactionCardClickable(props: {
 }
 
 export default function TransactionList(props: TransactionListProps) {
-  const transactions = useSignal<EnrichedTransaction[]>(props.transactions);
+  const transactions = transactionsSignal;
+  const users = usersSignal;
+  const currentUserId = currentUserIdSignal;
+  const registryId = registryIdSignal;
+  const defaultSplit = defaultSplitSignal;
+
+  const initialized = useSignal(false);
+  if (!initialized.value) {
+    initializeSignals({
+      transactions: props.transactions,
+      users: props.users,
+      currentUserId: props.currentUserId,
+      registryId: props.registryId,
+      balance: 0,
+      balanceBreakdown: props.balanceBreakdown,
+      defaultSplit: props.defaultSplit,
+    });
+    recalculateAndBroadcast();
+    initialized.value = true;
+  }
+
   const isOpen = useSignal(false);
   const editingId = useSignal<string | null>(null);
   const submitting = useSignal(false);
@@ -209,21 +219,21 @@ export default function TransactionList(props: TransactionListProps) {
   const installmentCurrent = useSignal(1);
   const installmentTotal = useSignal(12);
   const splitMode = useSignal<SplitMode>("auto");
-  const userPaid = useSignal(props.currentUserId);
+  const userPaid = useSignal(currentUserId.value);
   const paymentRecipient = useSignal<string>(
-    props.users.find((u) => u.id !== props.currentUserId)?.id ?? "",
+    users.value.find((u) => u.id !== currentUserId.value)?.id ?? "",
   );
   const percentages = useSignal<Record<string, number>>(
-    computeDefaultPercentages(props.users, props.defaultSplit),
+    computeDefaultPercentages(users.value, defaultSplit.value),
   );
   const fixedAmounts = useSignal<Record<string, number>>(
-    Object.fromEntries(props.users.map((u) => [u.id, 0])),
+    Object.fromEntries(users.value.map((u) => [u.id, 0])),
   );
 
   const isEditing = useComputed(() => editingId.value !== null);
 
   function buildDefaultPercentages(): Record<string, number> {
-    return computeDefaultPercentages(props.users, props.defaultSplit);
+    return computeDefaultPercentages(users.value, defaultSplit.value);
   }
 
   function resetForm() {
@@ -233,12 +243,12 @@ export default function TransactionList(props: TransactionListProps) {
     expenseType.value = "unico";
     installmentCurrent.value = 1;
     installmentTotal.value = 12;
-    userPaid.value = props.currentUserId;
+    userPaid.value = currentUserId.value;
     paymentRecipient.value =
-      props.users.find((u) => u.id !== props.currentUserId)?.id ?? "";
+      users.value.find((u) => u.id !== currentUserId.value)?.id ?? "";
     if (
-      props.defaultSplit &&
-      props.defaultSplit.splits.length === props.users.length
+      defaultSplit.value &&
+      defaultSplit.value.splits.length === users.value.length
     ) {
       splitMode.value = "percentage";
       percentages.value = buildDefaultPercentages();
@@ -246,7 +256,7 @@ export default function TransactionList(props: TransactionListProps) {
       splitMode.value = "auto";
       percentages.value = buildDefaultPercentages();
     }
-    fixedAmounts.value = Object.fromEntries(props.users.map((u) => [u.id, 0]));
+    fixedAmounts.value = Object.fromEntries(users.value.map((u) => [u.id, 0]));
     editingId.value = null;
   }
 
@@ -301,23 +311,23 @@ export default function TransactionList(props: TransactionListProps) {
   function getSplits(): SplitEntry[] {
     const total = Math.abs(amount.value);
     if (splitMode.value === "auto") {
-      const count = props.users.length;
+      const count = users.value.length;
       const perPerson = Math.floor((total / count) * 100) / 100;
       const remainder = Math.round((total - perPerson * count) * 100) / 100;
-      return props.users.map((u, i) => ({
+      return users.value.map((u, i) => ({
         userId: u.id,
         percentage: Math.round((100 / count) * 100) / 100,
         amount: perPerson + (i === 0 ? remainder : 0),
       }));
     }
     if (splitMode.value === "percentage") {
-      return props.users.map((u) => ({
+      return users.value.map((u) => ({
         userId: u.id,
         percentage: percentages.value[u.id] ?? 0,
         amount: Math.round(total * (percentages.value[u.id] ?? 0)) / 100,
       }));
     }
-    return props.users.map((u) => ({
+    return users.value.map((u) => ({
       userId: u.id,
       percentage: total > 0
         ? Math.round(((fixedAmounts.value[u.id] ?? 0) / total) * 10000) / 100
@@ -331,8 +341,8 @@ export default function TransactionList(props: TransactionListProps) {
   }
 
   function autoComplementPercentage(userId: string) {
-    if (props.users.length === 2) {
-      const otherId = props.users.find((u) => u.id !== userId)?.id;
+    if (users.value.length === 2) {
+      const otherId = users.value.find((u) => u.id !== userId)?.id;
       if (otherId) {
         const newPcts = { ...percentages.value };
         newPcts[otherId] = Math.round((100 - (newPcts[userId] ?? 0)) * 100) /
@@ -351,8 +361,8 @@ export default function TransactionList(props: TransactionListProps) {
   }
 
   function autoComplementFixed(userId: string) {
-    if (props.users.length === 2) {
-      const otherId = props.users.find((u) => u.id !== userId)?.id;
+    if (users.value.length === 2) {
+      const otherId = users.value.find((u) => u.id !== userId)?.id;
       if (otherId) {
         const newAmounts = { ...fixedAmounts.value };
         newAmounts[otherId] = Math.round(
@@ -375,9 +385,9 @@ export default function TransactionList(props: TransactionListProps) {
   function setAutoSplit() {
     splitMode.value = "auto";
     percentages.value = Object.fromEntries(
-      props.users.map((
+      users.value.map((
         u,
-      ) => [u.id, Math.round((100 / props.users.length) * 100) / 100]),
+      ) => [u.id, Math.round((100 / users.value.length) * 100) / 100]),
     );
   }
 
@@ -408,7 +418,7 @@ export default function TransactionList(props: TransactionListProps) {
     form.append("splitJson", JSON.stringify(splitJson));
     form.append("userPaid", userPaid.value);
     form.append("notes", notes.value);
-    form.append("registryId", props.registryId);
+    form.append("registryId", registryId.value);
     if (expenseType.value === "parcialidad") {
       form.append("installmentCurrent", installmentCurrent.value.toString());
       form.append("installmentTotal", installmentTotal.value.toString());
@@ -422,7 +432,7 @@ export default function TransactionList(props: TransactionListProps) {
         });
         if (!res.ok) throw new Error("Update failed");
         const updated = await res.json();
-        const paidByUser = props.users.find((u) => u.id === updated.userPaid) ??
+        const paidByUser = users.value.find((u) => u.id === updated.userPaid) ??
           null;
         transactions.value = transactions.value.map((t) =>
           t.id === editingId.value ? { ...updated, paidByUser } : t
@@ -434,7 +444,7 @@ export default function TransactionList(props: TransactionListProps) {
         });
         if (!res.ok) throw new Error("Create failed");
         const created = await res.json();
-        const paidByUser = props.users.find((u) => u.id === created.userPaid) ??
+        const paidByUser = users.value.find((u) => u.id === created.userPaid) ??
           null;
         transactions.value = [
           { ...created, paidByUser },
@@ -443,7 +453,8 @@ export default function TransactionList(props: TransactionListProps) {
       }
       isOpen.value = false;
       editingId.value = null;
-      globalThis.location.reload();
+      submitting.value = false;
+      recalculateAndBroadcast();
     } catch {
       submitting.value = false;
     }
@@ -459,7 +470,8 @@ export default function TransactionList(props: TransactionListProps) {
         transactions.value = transactions.value.filter((t) => t.id !== id);
         isOpen.value = false;
         editingId.value = null;
-        globalThis.location.reload();
+        submitting.value = false;
+        recalculateAndBroadcast();
       } else {
         submitting.value = false;
       }
@@ -520,7 +532,7 @@ export default function TransactionList(props: TransactionListProps) {
             >
               Todos
             </button>
-            {props.users.map((user) => {
+            {users.value.map((user) => {
               const initials = user.name.split(" ").map((n) => n[0]).join("")
                 .substring(0, 2).toUpperCase();
               return (
@@ -646,8 +658,8 @@ export default function TransactionList(props: TransactionListProps) {
             <TransactionCardClickable
               key={tx.id}
               tx={tx}
-              users={props.users}
-              currentUserId={props.currentUserId}
+              users={users.value}
+              currentUserId={currentUserId.value}
               onClick={() => openEdit(tx)}
             />
           ))}
@@ -881,7 +893,7 @@ export default function TransactionList(props: TransactionListProps) {
                             <th class="px-4 py-3 text-xs font-semibold text-slate-400 w-24 text-center">
                               Recibió
                             </th>
-                            {props.users.length > 2 && (
+                            {users.value.length > 2 && (
                               <th class="px-4 py-3 text-xs font-semibold text-slate-400 text-right">
                                 SALDO
                               </th>
@@ -889,7 +901,7 @@ export default function TransactionList(props: TransactionListProps) {
                           </tr>
                         </thead>
                         <tbody class="divide-y divide-border-custom">
-                          {props.users.map((user) => {
+                          {users.value.map((user) => {
                             const initials = user.name.split(" ").map((n) =>
                               n[0]
                             ).join("").substring(0, 2).toUpperCase();
@@ -905,7 +917,7 @@ export default function TransactionList(props: TransactionListProps) {
                                     </div>
                                     <span class="text-sm font-medium text-white">
                                       {user.name}
-                                      {user.id === props.currentUserId && (
+                                      {user.id === currentUserId.value && (
                                         <span class="text-slate-500 ml-1">
                                           (Tú)
                                         </span>
@@ -928,7 +940,7 @@ export default function TransactionList(props: TransactionListProps) {
                                       userPaid.value = user.id;
                                       if (paymentRecipient.value === user.id) {
                                         paymentRecipient.value =
-                                          props.users.find((u) =>
+                                          users.value.find((u) =>
                                             u.id !== user.id
                                           )?.id ?? "";
                                       }
@@ -945,19 +957,19 @@ export default function TransactionList(props: TransactionListProps) {
                                     onChange={() => {
                                       paymentRecipient.value = user.id;
                                       if (userPaid.value === user.id) {
-                                        userPaid.value = props.users.find((u) =>
+                                        userPaid.value = users.value.find((u) =>
                                           u.id !== user.id
-                                        )?.id ?? props.currentUserId;
+                                        )?.id ?? currentUserId.value;
                                       }
                                     }}
                                     class="accent-indigo-400"
                                   />
                                 </td>
-                                {props.users.length > 2 && (
+                                {users.value.length > 2 && (
                                   <td class="px-4 py-3 text-right">
-                                    {user.id !== props.currentUserId &&
+                                    {user.id !== currentUserId.value &&
                                       (() => {
-                                        const bd = props.balanceBreakdown.find(
+                                        const bd = balanceEntriesSignal.value.find(
                                           (b) => b.userId === user.id,
                                         );
                                         if (!bd || Math.abs(bd.amount) < 0.01) {
@@ -998,12 +1010,12 @@ export default function TransactionList(props: TransactionListProps) {
                       </table>
 
                       <div class="md:hidden divide-y divide-border-custom">
-                        {props.users.map((user) => {
+                        {users.value.map((user) => {
                           const initials = user.name.split(" ").map((n) => n[0])
                             .join("").substring(0, 2).toUpperCase();
-                          const bd = props.users.length > 2 &&
-                              user.id !== props.currentUserId
-                            ? props.balanceBreakdown.find((b) =>
+                          const bd = users.value.length > 2 &&
+                              user.id !== currentUserId.value
+                            ? balanceEntriesSignal.value.find((b) =>
                               b.userId === user.id
                             )
                             : null;
@@ -1025,7 +1037,7 @@ export default function TransactionList(props: TransactionListProps) {
                                     userPaid.value = user.id;
                                     if (paymentRecipient.value === user.id) {
                                       paymentRecipient.value =
-                                        props.users.find((u) =>
+                                        users.value.find((u) =>
                                           u.id !== user.id
                                         )?.id ?? "";
                                     }
@@ -1045,9 +1057,9 @@ export default function TransactionList(props: TransactionListProps) {
                                   onChange={() => {
                                     paymentRecipient.value = user.id;
                                     if (userPaid.value === user.id) {
-                                      userPaid.value = props.users.find((u) =>
+                                      userPaid.value = users.value.find((u) =>
                                         u.id !== user.id
-                                      )?.id ?? props.currentUserId;
+                                      )?.id ?? currentUserId.value;
                                     }
                                   }}
                                   class="accent-indigo-400"
@@ -1063,7 +1075,7 @@ export default function TransactionList(props: TransactionListProps) {
                                   </div>
                                   <span class="text-sm font-medium text-white truncate">
                                     {user.name}
-                                    {user.id === props.currentUserId && (
+                                    {user.id === currentUserId.value && (
                                       <span class="text-slate-500 ml-1">
                                         (Tú)
                                       </span>
@@ -1130,7 +1142,7 @@ export default function TransactionList(props: TransactionListProps) {
                         <button
                           type="button"
                           onClick={() => {
-                            if (props.defaultSplit) {
+                            if (defaultSplit.value) {
                               splitMode.value = "percentage";
                               percentages.value = buildDefaultPercentages();
                             } else {
@@ -1178,7 +1190,7 @@ export default function TransactionList(props: TransactionListProps) {
                           </tr>
                         </thead>
                         <tbody class="divide-y divide-border-custom">
-                          {props.users.map((user) => {
+                          {users.value.map((user) => {
                             const split = splits.find((s) =>
                               s.userId === user.id
                             );
@@ -1197,7 +1209,7 @@ export default function TransactionList(props: TransactionListProps) {
                                     </div>
                                     <span class="text-sm font-medium text-white">
                                       {user.name}
-                                      {user.id === props.currentUserId && (
+                                      {user.id === currentUserId.value && (
                                         <span class="text-slate-500 ml-1">
                                           (Tú)
                                         </span>
@@ -1321,7 +1333,7 @@ export default function TransactionList(props: TransactionListProps) {
                       </table>
 
                       <div class="md:hidden divide-y divide-border-custom">
-                        {props.users.map((user) => {
+                        {users.value.map((user) => {
                           const split = splits.find((s) =>
                             s.userId === user.id
                           );
@@ -1352,7 +1364,7 @@ export default function TransactionList(props: TransactionListProps) {
                                   </div>
                                   <span class="text-sm font-medium text-white truncate">
                                     {user.name}
-                                    {user.id === props.currentUserId && (
+                                    {user.id === currentUserId.value && (
                                       <span class="text-slate-500 ml-1">
                                         (Tú)
                                       </span>

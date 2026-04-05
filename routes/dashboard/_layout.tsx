@@ -1,5 +1,5 @@
 import { define } from "../../utils.ts";
-import { getTransactionCount } from "../../lib/store.ts";
+import { getTransactionCounts } from "../../lib/store.ts";
 import Sidebar from "../../islands/Sidebar.tsx";
 
 export default define.layout(async function DashboardLayout(ctx) {
@@ -13,9 +13,13 @@ export default define.layout(async function DashboardLayout(ctx) {
   const entities = ctx.state.registryUsers.filter((u) => u.isEntity);
 
   const deletableRegistryIds = new Set<string>();
-  for (const r of ctx.state.registries) {
-    const count = await getTransactionCount(r.id);
-    if (count === 0) deletableRegistryIds.add(r.id);
+  if (ctx.state.registries.length > 0) {
+    const counts = await getTransactionCounts(
+      ctx.state.registries.map((r) => r.id),
+    );
+    for (const r of ctx.state.registries) {
+      if ((counts.get(r.id) ?? 0) === 0) deletableRegistryIds.add(r.id);
+    }
   }
 
   return (

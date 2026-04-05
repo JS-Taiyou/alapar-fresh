@@ -5,6 +5,11 @@ import type {
   TransactionSplit,
   User,
 } from "../lib/types.ts";
+import {
+  transactionsSignal,
+  usersSignal,
+  recalculateAndBroadcast,
+} from "./shared-signals.ts";
 
 interface ExpenseModalProps {
   users: User[];
@@ -210,8 +215,15 @@ export default function ExpenseModal(props: ExpenseModalProps) {
         body: form,
       });
       if (!res.ok) throw new Error("Create failed");
+      const created = await res.json();
+      const paidByUser = usersSignal.value.find((u) => u.id === created.userPaid) ??
+        null;
+      transactionsSignal.value = [
+        { ...created, paidByUser },
+        ...transactionsSignal.value,
+      ];
       isOpen.value = false;
-      globalThis.location.reload();
+      recalculateAndBroadcast();
     } catch {
       submitting.value = false;
     }
