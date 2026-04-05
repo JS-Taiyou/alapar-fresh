@@ -121,13 +121,13 @@ export default define.page(function DashboardIndex(ctx) {
       <Head>
         <title>A la par - Dashboard</title>
       </Head>
-      <header class="p-6 bg-[#0a0a0a] border-b border-white/10 flex justify-between items-center">
+      <header class="p-4 sm:p-6 bg-[#0a0a0a] border-b border-white/10 flex justify-between items-center gap-2">
         <BalanceBreakdown
           balance={balance}
           entries={data.balanceBreakdown}
           usersCount={data.usersCount}
         />
-        <div class="flex items-center gap-4">
+        <div class="flex items-center gap-2 sm:gap-4 shrink-0">
           <RecurringSpawn candidates={data.spawnCandidates} />
           <a
             href="/dashboard/history"

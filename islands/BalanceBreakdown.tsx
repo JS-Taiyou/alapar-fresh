@@ -47,16 +47,16 @@ export default function BalanceBreakdown(_props: BalanceBreakdownProps) {
   });
 
   return (
-    <div class="relative">
+    <div class="relative min-w-0 shrink">
       <button
         type="button"
         onClick={toggle}
-        class={`text-left ${
+        class={`text-left min-w-0 ${
           canShowPopover ? "cursor-pointer group" : "cursor-default"
         }`}
       >
         <div class="flex items-center gap-2">
-          <span class="text-sm font-medium text-gray-400 uppercase tracking-wider">
+          <span class="text-xs sm:text-sm font-medium text-gray-400 uppercase tracking-wider">
             Balance Total
           </span>
           {canShowPopover && (
@@ -80,7 +80,7 @@ export default function BalanceBreakdown(_props: BalanceBreakdownProps) {
           )}
         </div>
         <p
-          class={`text-4xl font-bold mt-1 ${
+          class={`text-2xl sm:text-3xl lg:text-4xl font-bold mt-1 truncate ${
             balance >= 0 ? "text-green-500" : "text-red-500"
           }`}
         >

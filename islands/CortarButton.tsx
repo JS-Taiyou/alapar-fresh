@@ -25,7 +25,7 @@ export default function CortarButton(props: CortarButtonProps) {
       type="button"
       onClick={handleCortar}
       disabled={!canCut || loading.value}
-      class={`px-6 py-3 rounded-custom font-semibold text-white shadow-lg transition-opacity ${
+      class={`px-4 py-2 sm:px-6 sm:py-3 text-sm sm:text-base rounded-custom font-semibold text-white shadow-lg transition-opacity ${
         canCut && !loading.value
           ? "bg-primary hover:opacity-90"
           : "bg-slate-700 opacity-50 cursor-not-allowed"

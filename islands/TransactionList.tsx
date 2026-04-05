@@ -610,7 +610,7 @@ export default function TransactionList(props: TransactionListProps) {
       <main class="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4 relative">
         <div class="flex justify-between items-center mb-2">
           <h2 class="text-lg font-semibold text-gray-200">
-            Transacciones Recientes
+            Ejercicio actual
           </h2>
         </div>
 
