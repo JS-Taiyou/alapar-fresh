@@ -13,3 +13,4 @@ vendor/
 
 .kilo
 mockups/*
+.vscode

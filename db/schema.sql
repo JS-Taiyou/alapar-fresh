@@ -135,3 +135,9 @@ CREATE INDEX idx_users_registry ON users(registry_id);
 CREATE INDEX idx_exercises_registry ON exercises(registry_id);
 CREATE INDEX idx_registry_members_user ON registry_members(user_id);
 CREATE INDEX idx_registry_members_registry ON registry_members(registry_id);
+
+-- Additional performance indexes
+CREATE INDEX idx_transactions_user_paid ON transactions(user_paid);
+CREATE INDEX idx_transactions_recurring_group ON transactions(recurring_group_id);
+CREATE INDEX idx_transactions_split_json ON transactions USING gin(split_json);
+CREATE INDEX idx_transactions_active ON transactions(registry_id) WHERE exercise_id IS NULL;
