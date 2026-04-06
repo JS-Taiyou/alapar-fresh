@@ -1,3 +1,4 @@
+import { useSignal } from "@preact/signals";
 import { define } from "../../utils.ts";
 import {
   calculateBalance,
@@ -12,13 +13,11 @@ import RecurringSpawn from "../../islands/RecurringSpawn.tsx";
 import BalanceBreakdown from "../../islands/BalanceBreakdown.tsx";
 import type {
   BalanceBreakdownEntry,
+  DefaultSplit,
   Transaction,
   User,
 } from "../../lib/types.ts";
-
-interface EnrichedTransaction extends Transaction {
-  paidByUser: User | null;
-}
+import type { EnrichedTransaction } from "../../islands/shared-signals.ts";
 
 interface SpawnCandidate {
   id: string;
@@ -72,7 +71,11 @@ export const handlers = define.handlers({
     }
 
     const transactions = await getActiveTransactions(registryId);
-    const balance = await calculateBalance(registryUserId, registryId, transactions);
+    const balance = await calculateBalance(
+      registryUserId,
+      registryId,
+      transactions,
+    );
     const candidates = await getSpawnCandidates(registryId);
 
     const userMap = new Map(ctx.state.registryUsers.map((u) => [u.id, u]));
@@ -111,10 +114,19 @@ export const handlers = define.handlers({
 
 export default define.page(function DashboardIndex(ctx) {
   const data = ctx.data as DashboardData;
-  const balance = data.balance;
-  const users = ctx.state.registryUsers;
-  const currentRegistryUserId = data.currentRegistryUserId;
   const hasTransactions = data.transactions.length > 0;
+
+  const $transactions = useSignal<EnrichedTransaction[]>(data.transactions);
+  const $users = useSignal<User[]>(ctx.state.registryUsers);
+  const $currentUserId = useSignal(data.currentRegistryUserId);
+  const $registryId = useSignal(ctx.state.activeRegistry?.id ?? "");
+  const $balance = useSignal(data.balance);
+  const $balanceEntries = useSignal<BalanceBreakdownEntry[]>(
+    data.balanceBreakdown,
+  );
+  const $defaultSplit = useSignal<DefaultSplit | null>(
+    ctx.state.activeRegistry?.defaultSplit ?? null,
+  );
 
   return (
     <>
@@ -123,9 +135,9 @@ export default define.page(function DashboardIndex(ctx) {
       </Head>
       <header class="p-4 sm:p-6 bg-[#0a0a0a] border-b border-white/10 flex justify-between items-center gap-2">
         <BalanceBreakdown
-          balance={balance}
-          entries={data.balanceBreakdown}
-          usersCount={data.usersCount}
+          balance={$balance}
+          entries={$balanceEntries}
+          users={$users}
         />
         <div class="flex items-center gap-2 sm:gap-4 shrink-0">
           <RecurringSpawn candidates={data.spawnCandidates} />
@@ -152,12 +164,13 @@ export default define.page(function DashboardIndex(ctx) {
         </div>
       </header>
       <TransactionList
-        transactions={data.transactions}
-        users={users}
-        currentUserId={currentRegistryUserId}
-        registryId={ctx.state.activeRegistry?.id ?? ""}
-        balanceBreakdown={data.balanceBreakdown}
-        defaultSplit={ctx.state.activeRegistry?.defaultSplit ?? null}
+        transactions={$transactions}
+        users={$users}
+        currentUserId={$currentUserId}
+        registryId={$registryId}
+        balance={$balance}
+        balanceEntries={$balanceEntries}
+        defaultSplit={$defaultSplit}
       />
     </>
   );

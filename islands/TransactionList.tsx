@@ -1,36 +1,35 @@
-import { useComputed, useSignal } from "@preact/signals";
+import { type Signal, useComputed, useSignal } from "@preact/signals";
 import type {
+  BalanceBreakdownEntry,
+  DefaultSplit,
   SplitEntry,
   TransactionSplit,
   User,
 } from "../lib/types.ts";
+import { type EnrichedTransaction } from "./shared-signals.ts";
 import {
-  type EnrichedTransaction,
-  transactionsSignal,
-  usersSignal,
-  currentUserIdSignal,
-  registryIdSignal,
-  defaultSplitSignal,
-  balanceEntriesSignal,
-  recalculateAndBroadcast,
+  calculateBalance,
+  calculatePairwiseBreakdown,
   computeDefaultPercentages,
-  initializeSignals,
-} from "./shared-signals.ts";
-import type { DefaultSplit } from "../lib/types.ts";
+} from "../lib/calculations.ts";
 
 interface TransactionListProps {
-  transactions: EnrichedTransaction[];
-  users: User[];
-  currentUserId: string;
-  registryId: string;
-  balanceBreakdown: BalanceBreakdownEntry[];
-  defaultSplit: DefaultSplit | null;
+  transactions: Signal<EnrichedTransaction[]>;
+  users: Signal<User[]>;
+  currentUserId: Signal<string>;
+  registryId: Signal<string>;
+  balance: Signal<number>;
+  balanceEntries: Signal<BalanceBreakdownEntry[]>;
+  defaultSplit: Signal<DefaultSplit | null>;
 }
 
-import type { BalanceBreakdownEntry } from "../lib/types.ts";
-
 type SplitMode = "auto" | "percentage" | "fixed";
-type TransactionType = "unico" | "parcialidad" | "recurrente" | "pago" | "ajuste";
+type TransactionType =
+  | "unico"
+  | "parcialidad"
+  | "recurrente"
+  | "pago"
+  | "ajuste";
 
 function sanitizeDecimal(raw: string): string {
   let v = raw.replace(/[^0-9.]/g, "");
@@ -65,9 +64,7 @@ function TransactionCardClickable(props: {
     });
 
     return (
-      <div
-        class="w-full text-left bg-card p-5 rounded-custom border-l-4 border-l-amber-500 border border-white/5 flex justify-between items-center"
-      >
+      <div class="w-full text-left bg-card p-5 rounded-custom border-l-4 border-l-amber-500 border border-white/5 flex justify-between items-center">
         <div class="flex flex-col">
           <span class="text-lg font-semibold text-white flex items-center gap-2">
             {tx.description}
@@ -223,25 +220,21 @@ function TransactionCardClickable(props: {
 }
 
 export default function TransactionList(props: TransactionListProps) {
-  const transactions = transactionsSignal;
-  const users = usersSignal;
-  const currentUserId = currentUserIdSignal;
-  const registryId = registryIdSignal;
-  const defaultSplit = defaultSplitSignal;
+  const transactions = props.transactions;
+  const users = props.users;
+  const currentUserId = props.currentUserId;
+  const registryId = props.registryId;
+  const defaultSplit = props.defaultSplit;
+  const balance = props.balance;
+  const balanceEntries = props.balanceEntries;
 
-  const initialized = useSignal(false);
-  if (!initialized.value) {
-    initializeSignals({
-      transactions: props.transactions,
-      users: props.users,
-      currentUserId: props.currentUserId,
-      registryId: props.registryId,
-      balance: 0,
-      balanceBreakdown: props.balanceBreakdown,
-      defaultSplit: props.defaultSplit,
-    });
-    recalculateAndBroadcast();
-    initialized.value = true;
+  function recalculate() {
+    balance.value = calculateBalance(transactions.value, currentUserId.value);
+    balanceEntries.value = calculatePairwiseBreakdown(
+      transactions.value,
+      currentUserId.value,
+      users.value,
+    );
   }
 
   const isOpen = useSignal(false);
@@ -274,13 +267,18 @@ export default function TransactionList(props: TransactionListProps) {
   }
 
   function saveLastSplitConfig() {
-    if (expenseType.value === "pago" || splitMode.value !== "percentage") return;
+    if (expenseType.value === "pago" || splitMode.value !== "percentage") {
+      return;
+    }
     const key = `lastSplit_${registryId.value}`;
     try {
-      localStorage.setItem(key, JSON.stringify({
-        percentages: percentages.value,
-        userPaid: userPaid.value,
-      }));
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          percentages: percentages.value,
+          userPaid: userPaid.value,
+        }),
+      );
     } catch { /* ignore storage errors */ }
   }
 
@@ -293,7 +291,9 @@ export default function TransactionList(props: TransactionListProps) {
       const raw = localStorage.getItem(key);
       if (!raw) return null;
       return JSON.parse(raw);
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }
 
   function resetForm() {
@@ -323,7 +323,9 @@ export default function TransactionList(props: TransactionListProps) {
         splitMode.value = "auto";
         percentages.value = buildDefaultPercentages();
       }
-      fixedAmounts.value = Object.fromEntries(users.value.map((u) => [u.id, 0]));
+      fixedAmounts.value = Object.fromEntries(
+        users.value.map((u) => [u.id, 0]),
+      );
     }
     editingId.value = null;
   }
@@ -343,7 +345,7 @@ export default function TransactionList(props: TransactionListProps) {
     installmentTotal.value = tx.installmentTotal ?? 12;
     userPaid.value = tx.userPaid;
 
-  if (tx.type === "pago") {
+    if (tx.type === "pago") {
       const recipientSplit = tx.splitJson.splits[0];
       if (recipientSplit) {
         paymentRecipient.value = recipientSplit.userId;
@@ -549,7 +551,7 @@ export default function TransactionList(props: TransactionListProps) {
       isOpen.value = false;
       editingId.value = null;
       submitting.value = false;
-      recalculateAndBroadcast();
+      recalculate();
     } catch {
       submitting.value = false;
     }
@@ -566,7 +568,7 @@ export default function TransactionList(props: TransactionListProps) {
         isOpen.value = false;
         editingId.value = null;
         submitting.value = false;
-        recalculateAndBroadcast();
+        recalculate();
       } else {
         submitting.value = false;
       }
@@ -1063,7 +1065,7 @@ export default function TransactionList(props: TransactionListProps) {
                                   <td class="px-4 py-3 text-right">
                                     {user.id !== currentUserId.value &&
                                       (() => {
-                                        const bd = balanceEntriesSignal.value.find(
+                                        const bd = balanceEntries.value.find(
                                           (b) => b.userId === user.id,
                                         );
                                         if (!bd || Math.abs(bd.amount) < 0.01) {
@@ -1109,7 +1111,7 @@ export default function TransactionList(props: TransactionListProps) {
                             .join("").substring(0, 2).toUpperCase();
                           const bd = users.value.length > 2 &&
                               user.id !== currentUserId.value
-                            ? balanceEntriesSignal.value.find((b) =>
+                            ? balanceEntries.value.find((b) =>
                               b.userId === user.id
                             )
                             : null;

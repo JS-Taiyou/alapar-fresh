@@ -1,33 +1,18 @@
-import { useSignal } from "@preact/signals";
-import { useEffect } from "preact/hooks";
-import type {
-  BalanceBreakdownEntry,
-  DefaultSplit,
-} from "../lib/types.ts";
-import { computeDefaultPercentages } from "../lib/calculations.ts";
-import {
-  balanceSignal,
-  balanceEntriesSignal,
-  usersSignal,
-  transactionsSignal,
-  recalculateAndBroadcast,
-  initializeSignals,
-} from "./shared-signals.ts";
-
-
+import { type Signal, useSignal } from "@preact/signals";
+import type { BalanceBreakdownEntry, User } from "../lib/types.ts";
 
 interface BalanceBreakdownProps {
-  balance: number;
-  entries: BalanceBreakdownEntry[];
-  usersCount: number;
+  balance: Signal<number>;
+  entries: Signal<BalanceBreakdownEntry[]>;
+  users: Signal<User[]>;
 }
 
-export default function BalanceBreakdown(_props: BalanceBreakdownProps) {
+export default function BalanceBreakdown(props: BalanceBreakdownProps) {
   const showPopover = useSignal(false);
 
-  const balance = balanceSignal.value;
-  const entries = balanceEntriesSignal.value;
-  const usersCount = usersSignal.value.length;
+  const balance = props.balance.value;
+  const entries = props.entries.value;
+  const usersCount = props.users.value.length;
 
   const owedToMe = entries.filter((e) => e.amount > 0);
   const owedByMe = entries.filter((e) => e.amount < 0);
