@@ -1,6 +1,10 @@
 import { define } from "../../utils.ts";
 import { Head } from "fresh/runtime";
-import { getExercises, getMonthNameEs } from "../../lib/store.ts";
+import {
+  getExercises,
+  getMonthNameEs,
+  getTransactionsByExercise,
+} from "../../lib/store.ts";
 import ExerciseCard from "../../components/ExerciseCard.tsx";
 import SearchBar from "../../islands/SearchBar.tsx";
 
@@ -8,6 +12,7 @@ interface HistoryData {
   grouped: Record<number, Awaited<ReturnType<typeof getExercises>>>;
   years: number[];
   exercises: Awaited<ReturnType<typeof getExercises>>;
+  personalTotals: Map<string, number>;
 }
 
 export const handlers = define.handlers({
@@ -22,11 +27,49 @@ export const handlers = define.handlers({
           >,
           years: [] as number[],
           exercises: [] as Awaited<ReturnType<typeof getExercises>>,
+          personalTotals: new Map<string, number>(),
         },
       };
     }
 
     const exercises = await getExercises(registryId);
+    const currentUserId = ctx.state.systemUser
+      ? ctx.state.registryUsers.find((u) =>
+          u.system_user_id === ctx.state.systemUser!.id
+        )?.id ?? ""
+      : "";
+
+    const personalTotals = new Map<string, number>();
+    await Promise.all(exercises.map(async (ex) => {
+      const txs = await getTransactionsByExercise(ex.id);
+      const total = txs.reduce((sum, tx) => {
+        if (tx.type === "pago" || tx.type === "ajuste") {
+          if (tx.userPaid === currentUserId) {
+            return sum + tx.originalAmount;
+          }
+          const isInSplit = tx.splitJson.splits.some((s) =>
+            s.userId === currentUserId
+          );
+          if (isInSplit) return sum - tx.originalAmount;
+          return sum;
+        }
+        const isPaidByMe = tx.userPaid === currentUserId;
+        const userSplit = tx.splitJson.splits.find((s) =>
+          s.userId === currentUserId
+        );
+        const divisor = tx.type === "parcialidad" && tx.installmentTotal
+          ? tx.installmentTotal
+          : 1;
+        const perInstallmentTotal = tx.originalAmount / divisor;
+        const perInstallmentSplit = (userSplit?.amount ?? 0) / divisor;
+        const personalBalance = isPaidByMe
+          ? perInstallmentTotal - perInstallmentSplit
+          : -perInstallmentSplit;
+        return sum + personalBalance;
+      }, 0);
+      personalTotals.set(ex.id, total);
+    }));
+
     const grouped: Record<number, typeof exercises> = {};
     for (const ex of exercises) {
       const year = ex.startDate.getFullYear();
@@ -35,7 +78,7 @@ export const handlers = define.handlers({
     }
     const years = Object.keys(grouped).map(Number).sort((a, b) => b - a);
 
-    return { data: { grouped, years, exercises } };
+    return { data: { grouped, years, exercises, personalTotals } };
   },
 });
 
@@ -109,6 +152,7 @@ export default define.page(function HistoryPage(ctx) {
                     exercise={ex}
                     monthName={getMonthNameEs(ex.startDate).toUpperCase()
                       .substring(0, 3)}
+                    personalTotal={data.personalTotals.get(ex.id)}
                   />
                 ))}
               </div>

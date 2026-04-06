@@ -3,10 +3,15 @@ import type { Exercise } from "../lib/types.ts";
 interface ExerciseCardProps {
   exercise: Exercise;
   monthName: string;
+  personalTotal?: number;
 }
 
 export default function ExerciseCard(props: ExerciseCardProps) {
-  const { exercise, monthName } = props;
+  const { exercise, monthName, personalTotal } = props;
+
+  const totalDisplay = personalTotal !== undefined
+    ? `${personalTotal >= 0 ? "+" : "-"}$${Math.abs(personalTotal).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : `$${exercise.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   return (
     <a
@@ -26,10 +31,7 @@ export default function ExerciseCard(props: ExerciseCardProps) {
           </p>
           <p class="text-xs text-slate-500">
             {exercise.transactionCount}{" "}
-            Gastos &bull; Total: ${exercise.totalAmount.toLocaleString(
-              "en-US",
-              { minimumFractionDigits: 2, maximumFractionDigits: 2 },
-            )}
+            Gastos &bull; Total: {totalDisplay}
           </p>
         </div>
       </div>

@@ -20,7 +20,7 @@ export const handlers = define.handlers({
   async GET(ctx) {
     const id = ctx.params.id;
     const exercise = await getExerciseById(id);
-    if (!exercise) {
+  if (!exercise) {
       return {
         data: {
           exercise: undefined,
@@ -68,6 +68,32 @@ export default define.page(function ExerciseDetail(ctx) {
       </>
     );
   }
+
+  const personalTotal = data.transactions.reduce((sum, tx) => {
+    if (tx.type === "pago" || tx.type === "ajuste") {
+      if (tx.userPaid === currentRegistryUserId) {
+        return sum + tx.originalAmount;
+      }
+      const isInSplit = tx.splitJson.splits.some((s) =>
+        s.userId === currentRegistryUserId
+      );
+      if (isInSplit) return sum - tx.originalAmount;
+      return sum;
+    }
+    const isPaidByMe = tx.userPaid === currentRegistryUserId;
+    const userSplit = tx.splitJson.splits.find((s) =>
+      s.userId === currentRegistryUserId
+    );
+    const divisor = tx.type === "parcialidad" && tx.installmentTotal
+      ? tx.installmentTotal
+      : 1;
+    const perInstallmentTotal = tx.originalAmount / divisor;
+    const perInstallmentSplit = (userSplit?.amount ?? 0) / divisor;
+    const personalBalance = isPaidByMe
+      ? perInstallmentTotal - perInstallmentSplit
+      : -perInstallmentSplit;
+    return sum + personalBalance;
+  }, 0);
 
   const monthNames = [
     "enero",
@@ -119,8 +145,7 @@ export default define.page(function ExerciseDetail(ctx) {
                 {exercise.startDate.getFullYear()}
               </h1>
               <p class="text-slate-400 text-sm">
-                {exercise.transactionCount}{" "}
-                gastos &bull; Total: ${exercise.totalAmount.toLocaleString(
+                {exercise.transactionCount} movimientos &bull; Total: {(personalTotal >= 0 ? "+" : "-")}${Math.abs(personalTotal).toLocaleString(
                   "en-US",
                   { minimumFractionDigits: 2, maximumFractionDigits: 2 },
                 )}

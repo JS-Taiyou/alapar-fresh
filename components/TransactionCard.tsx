@@ -10,7 +10,7 @@ interface TransactionCardProps {
 export default function TransactionCard(props: TransactionCardProps) {
   const { transaction: tx, paidByUser, currentUserId, allUsers } = props;
 
-  if (tx.type === "pago") {
+  if (tx.type === "pago" || tx.type === "ajuste") {
     const isPayer = tx.userPaid === currentUserId;
     const recipientSplit = tx.splitJson.splits[0];
     const recipientUser = recipientSplit && allUsers
@@ -22,20 +22,32 @@ export default function TransactionCard(props: TransactionCardProps) {
       maximumFractionDigits: 2,
     });
 
+    const badgeBg = tx.type === "pago"
+      ? "bg-indigo-500/20 text-indigo-300 border-l-indigo-500"
+      : "bg-amber-500/20 text-amber-300 border-l-amber-500";
+    const badgeText = tx.type === "pago" ? "Pago" : "Ajuste";
+    const amountColor = tx.type === "pago"
+      ? "text-indigo-400"
+      : "text-amber-400";
+
     let label = "";
     if (isPayer && recipientUser) {
       label = `Le pagaste a ${recipientUser.name}`;
     } else if (!isPayer && payerUser) {
-      label = `Te pagó ${payerUser.name}`;
+      label = `Te pag\u00f3 ${payerUser.name}`;
     }
 
     return (
-      <div class="bg-card p-5 rounded-custom border-l-4 border-l-indigo-500 border border-white/5 flex justify-between items-center">
+      <div
+        class={`bg-card p-5 rounded-custom border-l-4 ${badgeBg} border border-white/5 flex justify-between items-center`}
+      >
         <div class="flex flex-col">
           <span class="text-lg font-semibold text-white flex items-center gap-2">
             {tx.description}
-            <span class="text-xs font-medium px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300">
-              Pago
+            <span
+              class={`text-xs font-medium px-2 py-0.5 rounded ${badgeBg}`}
+            >
+              {badgeText}
             </span>
           </span>
           <span class="text-sm text-gray-500">
@@ -43,20 +55,22 @@ export default function TransactionCard(props: TransactionCardProps) {
               month: "short",
               day: "numeric",
               year: "numeric",
-            })} &bull; {tx.createdAt.toLocaleTimeString("es-MX", {
+            })} &bull;{" "}
+            {tx.createdAt.toLocaleTimeString("es-MX", {
               hour: "2-digit",
               minute: "2-digit",
             })}
             {label && (
               <>
-                {" "}&bull; <span class="text-indigo-400">{label}</span>
+                {" "}&bull;{" "}
+                <span class={amountColor}>{label}</span>
               </>
             )}
           </span>
         </div>
         <div class="text-right flex flex-col items-end">
-          <span class="text-xl font-bold text-indigo-400">
-            ${formattedAmount}
+          <span class={`text-xl font-bold ${amountColor}`}>
+            {isPayer ? "+" : "-"}${formattedAmount}
           </span>
         </div>
       </div>
@@ -64,7 +78,9 @@ export default function TransactionCard(props: TransactionCardProps) {
   }
 
   const isPaidByMe = tx.userPaid === currentUserId;
-  const userSplit = tx.splitJson.splits.find((s) => s.userId === currentUserId);
+  const userSplit = tx.splitJson.splits.find((s) =>
+    s.userId === currentUserId
+  );
   const divisor = tx.type === "parcialidad" && tx.installmentTotal
     ? tx.installmentTotal
     : 1;
@@ -84,7 +100,8 @@ export default function TransactionCard(props: TransactionCardProps) {
             month: "short",
             day: "numeric",
             year: "numeric",
-          })} &bull; {tx.createdAt.toLocaleTimeString("es-MX", {
+          })} &bull;{" "}
+          {tx.createdAt.toLocaleTimeString("es-MX", {
             hour: "2-digit",
             minute: "2-digit",
           })}
@@ -92,7 +109,7 @@ export default function TransactionCard(props: TransactionCardProps) {
             <>
               {" "}&bull;{" "}
               <span class={isPaidByMe ? "text-primary" : "text-slate-400"}>
-                {isPaidByMe ? "Tú pagaste" : paidByUser.name}
+                {isPaidByMe ? "T\u00fa pagaste" : paidByUser.name}
               </span>
             </>
           )}
@@ -113,10 +130,11 @@ export default function TransactionCard(props: TransactionCardProps) {
             isPositive ? "text-green-500" : "text-red-500"
           }`}
         >
-          {isPositive ? "+" : "-"}${Math.abs(personalBalance).toLocaleString(
-            "en-US",
-            { minimumFractionDigits: 2, maximumFractionDigits: 2 },
-          )}
+          {isPositive ? "+" : "-"}{" "}
+          ${Math.abs(personalBalance).toLocaleString("en-US", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}
         </span>
         <span class="text-xs text-slate-500">
           de ${perInstallmentTotal.toLocaleString("en-US", {
