@@ -786,10 +786,7 @@ export default function TransactionList(props: TransactionListProps) {
         <div
           class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay"
           onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              isOpen.value = false;
-              editingId.value = null;
-            }
+            e.stopPropagation();
           }}
         >
           <div class="bg-surface border border-border-custom w-full max-w-2xl rounded-custom shadow-2xl flex flex-col overflow-hidden">
