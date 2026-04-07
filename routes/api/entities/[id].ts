@@ -14,7 +14,15 @@ export const handlers = define.handlers({
       });
     }
 
-    const entity = await updateEntity(id, name.trim(), color);
+    const registryId = ctx.state.activeRegistry?.id;
+    if (!registryId) {
+      return new Response(JSON.stringify({ error: "Sin registro activo" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const entity = await updateEntity(registryId, id, name.trim(), color);
     if (!entity) {
       return new Response(JSON.stringify({ error: "Entidad no encontrada" }), {
         status: 404,
@@ -36,7 +44,15 @@ export const handlers = define.handlers({
 
   async DELETE(ctx) {
     const id = ctx.params.id;
-    const deleted = await deleteEntity(id);
+    const registryId = ctx.state.activeRegistry?.id;
+    if (!registryId) {
+      return new Response(JSON.stringify({ error: "Sin registro activo" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const deleted = await deleteEntity(registryId, id);
     if (!deleted) {
       return new Response(
         JSON.stringify({

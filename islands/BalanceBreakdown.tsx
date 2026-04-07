@@ -1,10 +1,10 @@
 import { type Signal, useSignal } from "@preact/signals";
-import type { BalanceBreakdownEntry, User } from "../lib/types.ts";
+import type { BalanceBreakdownEntry, Participant } from "../lib/types.ts";
 
 interface BalanceBreakdownProps {
   balance: Signal<number>;
   entries: Signal<BalanceBreakdownEntry[]>;
-  users: Signal<User[]>;
+  users: Signal<Participant[]>;
 }
 
 export default function BalanceBreakdown(props: BalanceBreakdownProps) {

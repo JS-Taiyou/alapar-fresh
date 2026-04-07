@@ -14,8 +14,8 @@ import BalanceBreakdown from "../../islands/BalanceBreakdown.tsx";
 import type {
   BalanceBreakdownEntry,
   DefaultSplit,
+  Participant,
   Transaction,
-  User,
 } from "../../lib/types.ts";
 import type { EnrichedTransaction } from "../../islands/shared-signals.ts";
 
@@ -31,7 +31,7 @@ interface SpawnCandidate {
 interface DashboardData {
   transactions: EnrichedTransaction[];
   balance: number;
-  currentRegistryUserId: string;
+  currentUserId: string;
   spawnCandidates: SpawnCandidate[];
   balanceBreakdown: BalanceBreakdownEntry[];
   usersCount: number;
@@ -40,48 +40,34 @@ interface DashboardData {
 export const handlers = define.handlers({
   async GET(ctx) {
     const registryId = ctx.state.activeRegistry?.id;
-    const systemUserId = ctx.state.systemUser?.id;
-    if (!registryId || !systemUserId) {
+    const userId = ctx.state.user?.id;
+    if (!registryId || !userId) {
       return {
         data: {
           transactions: [] as EnrichedTransaction[],
           balance: 0,
-          currentRegistryUserId: "",
+          currentUserId: "",
           spawnCandidates: [],
           balanceBreakdown: [],
-          usersCount: ctx.state.registryUsers.length,
-        },
-      };
-    }
-
-    const registryUserId = ctx.state.registryUsers.find((u) =>
-      u.system_user_id === systemUserId
-    )?.id;
-    if (!registryUserId) {
-      return {
-        data: {
-          transactions: [] as EnrichedTransaction[],
-          balance: 0,
-          currentRegistryUserId: "",
-          spawnCandidates: [],
-          balanceBreakdown: [],
-          usersCount: ctx.state.registryUsers.length,
+          usersCount: ctx.state.participants.length,
         },
       };
     }
 
     const transactions = await getActiveTransactions(registryId);
     const balance = await calculateBalance(
-      registryUserId,
+      userId,
       registryId,
       transactions,
     );
     const candidates = await getSpawnCandidates(registryId);
 
-    const userMap = new Map(ctx.state.registryUsers.map((u) => [u.id, u]));
+    const participantMap = new Map(
+      ctx.state.participants.map((p) => [p.id, p]),
+    );
     const enriched = transactions.map((tx) => ({
       ...tx,
-      paidByUser: userMap.get(tx.userPaid) ?? null,
+      paidByUser: participantMap.get(tx.userPaid) ?? null,
     }));
 
     const spawnCandidates: SpawnCandidate[] = candidates.map((c) => ({
@@ -95,18 +81,18 @@ export const handlers = define.handlers({
 
     const balanceBreakdown = calculatePairwiseBreakdown(
       transactions,
-      registryUserId,
-      ctx.state.registryUsers,
+      userId,
+      ctx.state.participants,
     );
 
     return {
       data: {
         transactions: enriched,
         balance,
-        currentRegistryUserId: registryUserId,
+        currentUserId: userId,
         spawnCandidates,
         balanceBreakdown,
-        usersCount: ctx.state.registryUsers.length,
+        usersCount: ctx.state.participants.length,
       },
     };
   },
@@ -117,8 +103,8 @@ export default define.page(function DashboardIndex(ctx) {
   const hasTransactions = data.transactions.length > 0;
 
   const $transactions = useSignal<EnrichedTransaction[]>(data.transactions);
-  const $users = useSignal<User[]>(ctx.state.registryUsers);
-  const $currentUserId = useSignal(data.currentRegistryUserId);
+  const $users = useSignal<Participant[]>(ctx.state.participants);
+  const $currentUserId = useSignal(data.currentUserId);
   const $registryId = useSignal(ctx.state.activeRegistry?.id ?? "");
   const $balance = useSignal(data.balance);
   const $balanceEntries = useSignal<BalanceBreakdownEntry[]>(
@@ -127,6 +113,8 @@ export default define.page(function DashboardIndex(ctx) {
   const $defaultSplit = useSignal<DefaultSplit | null>(
     ctx.state.activeRegistry?.defaultSplit ?? null,
   );
+
+  const entityIds = new Set(ctx.state.entities.map((e) => e.id));
 
   return (
     <>
@@ -171,6 +159,7 @@ export default define.page(function DashboardIndex(ctx) {
         balance={$balance}
         balanceEntries={$balanceEntries}
         defaultSplit={$defaultSplit}
+        entityIds={entityIds}
       />
     </>
   );

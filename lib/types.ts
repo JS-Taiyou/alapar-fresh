@@ -1,13 +1,16 @@
-export interface User {
+export interface Participant {
   id: string;
-  registry_id: string;
-  system_user_id: string | null;
-  email: string;
   name: string;
   color: string;
-  isEntity: boolean;
+}
+
+export interface User extends Participant {
+  email: string;
+  supabaseAuthId: string | null;
   createdAt: Date;
 }
+
+export interface Entity extends Participant {}
 
 export interface Transaction {
   id: string;
@@ -23,7 +26,7 @@ export interface Transaction {
   recurringGroupId: string;
   notes: string;
   splitJson: TransactionSplit;
-  creatorId: string;
+  creatorId: string | null;
   userPaid: string;
   createdAt: Date;
 }
@@ -64,20 +67,6 @@ export interface SplitEntry {
 
 export interface TransactionSplit {
   splits: SplitEntry[];
-}
-
-export interface SystemUser {
-  id: string;
-  email: string;
-  name: string;
-  supabaseAuthId: string | null;
-}
-
-export interface UserPreferences {
-  id: string;
-  userId: string;
-  activeRegistryId: string | null;
-  updatedAt: Date;
 }
 
 export interface RegistryMember {

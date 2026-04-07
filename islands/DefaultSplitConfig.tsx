@@ -23,7 +23,7 @@ export default function DefaultSplitConfig(props: DefaultSplitConfigProps) {
   const error = useSignal("");
   const success = useSignal(false);
 
-  const currentMembers = props.users.filter((u) => !u.isEntity);
+  const currentMembers = props.users;
 
   const initialPercentages = (): Record<string, number> => {
     if (

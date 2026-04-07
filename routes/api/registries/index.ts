@@ -5,7 +5,7 @@ export const handlers = define.handlers({
   async POST(ctx) {
     const form = await ctx.req.formData();
     const name = form.get("name") as string;
-    const userId = ctx.state.systemUser?.id;
+    const userId = ctx.state.user?.id;
     if (name && userId) {
       await createRegistry(name, userId);
     }

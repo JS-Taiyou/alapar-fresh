@@ -13,10 +13,12 @@ export const app = new App<State>();
 app.use(staticFiles());
 
 app.use(define.middleware(async (ctx) => {
-  ctx.state.systemUser = null;
+  ctx.state.user = null;
   ctx.state.activeRegistry = null;
   ctx.state.registries = [];
   ctx.state.registryUsers = [];
+  ctx.state.entities = [];
+  ctx.state.participants = [];
   ctx.state.supabaseAuthId = null;
   ctx.state.isOwner = false;
 
@@ -27,14 +29,14 @@ app.use(define.middleware(async (ctx) => {
 
   const state = await resolveUserState(authUser.id);
 
-  if (!state.systemUser) {
-    const systemUser = await createUserFromSupabase(
+  if (!state.user) {
+    const user = await createUserFromSupabase(
       authUser.id,
       authUser.email,
       authUser.name ?? authUser.email.split("@")[0],
     );
-    await ensureUserPreferences(systemUser.id);
-    ctx.state.systemUser = systemUser;
+    await ensureUserPreferences(user.id);
+    ctx.state.user = user;
     return await ctx.next();
   }
 
@@ -42,24 +44,20 @@ app.use(define.middleware(async (ctx) => {
     return ctx.redirect("/login?error=unauthorized");
   }
 
-  if (authUser.name && state.systemUser.name !== authUser.name) {
-    await Promise.all([
-      query(
-        "UPDATE system_users SET name = $1 WHERE id = $2",
-        [authUser.name, state.systemUser.id],
-      ),
-      query(
-        "UPDATE users SET name = $1 WHERE system_user_id = $2",
-        [authUser.name, state.systemUser.id],
-      ),
-    ]);
-    state.systemUser = { ...state.systemUser, name: authUser.name };
+  if (authUser.name && state.user.name !== authUser.name) {
+    await query(
+      "UPDATE users SET name = $1 WHERE id = $2",
+      [authUser.name, state.user.id],
+    );
+    state.user = { ...state.user, name: authUser.name };
   }
 
-  ctx.state.systemUser = state.systemUser;
+  ctx.state.user = state.user;
   ctx.state.registries = state.registries;
   ctx.state.activeRegistry = state.activeRegistry;
   ctx.state.registryUsers = state.registryUsers;
+  ctx.state.entities = state.entities;
+  ctx.state.participants = state.participants;
   ctx.state.isOwner = state.isOwner;
 
   return await ctx.next();
@@ -67,7 +65,7 @@ app.use(define.middleware(async (ctx) => {
 
 app.use(define.middleware(async (ctx) => {
   const path = new URL(ctx.req.url).pathname;
-  const hasUser = ctx.state.systemUser !== null;
+  const hasUser = ctx.state.user !== null;
   const hasRegistry = ctx.state.activeRegistry !== null;
 
   const publicPaths = [

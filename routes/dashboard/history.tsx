@@ -33,10 +33,8 @@ export const handlers = define.handlers({
     }
 
     const exercises = await getExercises(registryId);
-    const currentUserId = ctx.state.systemUser
-      ? ctx.state.registryUsers.find((u) =>
-          u.system_user_id === ctx.state.systemUser!.id
-        )?.id ?? ""
+    const currentUserId = ctx.state.user
+      ? ctx.state.user.id
       : "";
 
     const personalTotals = new Map<string, number>();

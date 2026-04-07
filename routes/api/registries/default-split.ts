@@ -37,7 +37,7 @@ export const handlers = define.handlers({
       );
     }
 
-    const registryUserIds = ctx.state.registryUsers.map((u) => u.id);
+    const registryUserIds = ctx.state.participants.map((u) => u.id);
     const allValid = splits.every((s) => registryUserIds.includes(s.userId));
     if (!allValid) {
       return new Response(

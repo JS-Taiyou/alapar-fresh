@@ -3,16 +3,17 @@
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- System-level users (auth identity, bridged from Supabase)
-CREATE TABLE system_users (
+-- Users (auth + profile in one table)
+CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
   supabase_auth_id UUID UNIQUE,
+  color TEXT NOT NULL DEFAULT '#093eaa',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_system_users_supabase_auth_id ON system_users(supabase_auth_id);
+CREATE INDEX idx_users_supabase_auth_id ON users(supabase_auth_id);
 
 -- Registries (groups) - central hub replacing per-group SQLite DBs
 CREATE TABLE registries (
@@ -23,6 +24,7 @@ CREATE TABLE registries (
   latest_accessed TIMESTAMPTZ NOT NULL DEFAULT now(),
   default_split_json JSONB DEFAULT NULL,
   default_split_member_count INTEGER DEFAULT NULL,
+  entities_json JSONB DEFAULT '[]',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -30,7 +32,7 @@ CREATE TABLE registries (
 CREATE TABLE registry_members (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   registry_id UUID NOT NULL REFERENCES registries(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES system_users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   role TEXT NOT NULL DEFAULT 'member',
   joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE(registry_id, user_id)
@@ -39,25 +41,12 @@ CREATE TABLE registry_members (
 -- Per-user preferences (active registry, etc.)
 CREATE TABLE user_preferences (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL UNIQUE REFERENCES system_users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
   active_registry_id UUID REFERENCES registries(id) ON DELETE SET NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_user_preferences_user ON user_preferences(user_id);
-
--- Per-registry user profiles (includes entities/third parties)
-CREATE TABLE users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  registry_id UUID NOT NULL REFERENCES registries(id) ON DELETE CASCADE,
-  system_user_id UUID REFERENCES system_users(id) ON DELETE CASCADE,
-  email TEXT NOT NULL DEFAULT '',
-  name TEXT NOT NULL,
-  color TEXT NOT NULL DEFAULT '#093eaa',
-  is_entity BOOLEAN NOT NULL DEFAULT false,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CHECK (system_user_id IS NOT NULL OR is_entity = true)
-);
 
 -- Exercises (cuts/settlements) - before transactions due to FK
 CREATE TABLE exercises (
@@ -70,6 +59,8 @@ CREATE TABLE exercises (
 );
 
 -- Transactions
+-- user_paid may reference either users.id (real member) or an entity ID from registries.entities_json
+-- creator_id always references a real user
 CREATE TABLE transactions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   registry_id UUID NOT NULL REFERENCES registries(id) ON DELETE CASCADE,
@@ -84,8 +75,8 @@ CREATE TABLE transactions (
   recurring_group_id UUID,
   notes TEXT NOT NULL DEFAULT '',
   split_json JSONB NOT NULL DEFAULT '{"splits":[]}',
-  creator_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  user_paid UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  creator_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  user_paid UUID NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -94,7 +85,7 @@ CREATE TABLE invitations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   registry_id UUID NOT NULL REFERENCES registries(id) ON DELETE CASCADE,
   code TEXT NOT NULL UNIQUE,
-  created_by UUID NOT NULL REFERENCES system_users(id),
+  created_by UUID NOT NULL REFERENCES users(id),
   expires_at TIMESTAMPTZ,
   max_uses INTEGER,
   current_uses INTEGER NOT NULL DEFAULT 0,
@@ -108,7 +99,7 @@ CREATE INDEX idx_invitations_registry ON invitations(registry_id);
 -- Audit log
 CREATE TABLE audit_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  actor_id UUID REFERENCES system_users(id),
+  actor_id UUID REFERENCES users(id),
   action TEXT NOT NULL,
   target_type TEXT NOT NULL,
   target_id UUID,
@@ -131,7 +122,6 @@ CREATE INDEX idx_allowed_emails_email ON allowed_emails(email);
 -- Indexes
 CREATE INDEX idx_transactions_registry ON transactions(registry_id);
 CREATE INDEX idx_transactions_exercise ON transactions(exercise_id);
-CREATE INDEX idx_users_registry ON users(registry_id);
 CREATE INDEX idx_exercises_registry ON exercises(registry_id);
 CREATE INDEX idx_registry_members_user ON registry_members(user_id);
 CREATE INDEX idx_registry_members_registry ON registry_members(registry_id);

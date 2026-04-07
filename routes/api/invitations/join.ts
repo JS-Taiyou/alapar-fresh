@@ -5,7 +5,7 @@ export const handlers = define.handlers({
   async POST(ctx) {
     const body = await ctx.req.json();
     const code = body.code as string;
-    const systemUserId = ctx.state.systemUser?.id;
+    const systemUserId = ctx.state.user?.id;
 
     if (!code || !systemUserId) {
       return new Response(JSON.stringify({ error: "Missing data" }), {

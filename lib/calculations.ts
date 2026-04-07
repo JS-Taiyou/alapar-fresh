@@ -1,6 +1,7 @@
 import type {
   BalanceBreakdownEntry,
   DefaultSplit,
+  Participant,
   SplitEntry,
   Transaction,
   TransactionSplit,
@@ -41,10 +42,10 @@ export function calculateBalance(
 export function calculatePairwiseBreakdown(
   transactions: Transaction[],
   currentUserId: string,
-  allUsers: User[],
+  allParticipants: Participant[],
 ): BalanceBreakdownEntry[] {
   const net: Record<string, number> = {};
-  for (const u of allUsers) {
+  for (const u of allParticipants) {
     if (u.id !== currentUserId) net[u.id] = 0;
   }
 
@@ -87,7 +88,7 @@ export function calculatePairwiseBreakdown(
   }
 
   const entries: BalanceBreakdownEntry[] = [];
-  for (const u of allUsers) {
+  for (const u of allParticipants) {
     if (u.id === currentUserId) continue;
     const amount = Math.round((net[u.id] ?? 0) * 100) / 100;
     if (Math.abs(amount) >= 0.01) {
@@ -114,10 +115,10 @@ export interface PairwiseDebt {
 
 export function calculateFullPairwiseBalances(
   transactions: Transaction[],
-  allUsers: User[],
+  allParticipants: Participant[],
 ): PairwiseDebt[] {
-  const userIds = allUsers.map((u) => u.id);
-  const userMap = new Map(allUsers.map((u) => [u.id, u]));
+  const userIds = allParticipants.map((u) => u.id);
+  const userMap = new Map(allParticipants.map((u) => [u.id, u]));
 
   const net: Record<string, Record<string, number>> = {};
   for (const a of userIds) {
@@ -183,11 +184,11 @@ export function calculateFullPairwiseBalances(
 }
 
 export function computeDefaultPercentages(
-  users: User[],
+  participants: Participant[],
   defaultSplit: DefaultSplit | null,
 ): Record<string, number> {
-  if (defaultSplit && defaultSplit.splits.length === users.length) {
-    const userIds = new Set(users.map((u) => u.id));
+  if (defaultSplit && defaultSplit.splits.length === participants.length) {
+    const userIds = new Set(participants.map((u) => u.id));
     const allPresent = defaultSplit.splits.every((s) => userIds.has(s.userId));
     if (allPresent) {
       return Object.fromEntries(
@@ -196,7 +197,7 @@ export function computeDefaultPercentages(
     }
   }
   return Object.fromEntries(
-    users.map((u) => [u.id, Math.round(10000 / users.length) / 100]),
+    participants.map((u) => [u.id, Math.round(10000 / participants.length) / 100]),
   );
 }
 
@@ -222,7 +223,7 @@ export function buildPercentageSplit(
   const splits: SplitEntry[] = percentages.map((p) => ({
     userId: p.userId,
     percentage: p.percentage,
-    amount: Math.round(total * p.percentage) / 100,
+    amount: Math.round(total * p.percentage / 100),
   }));
   return { splits };
 }

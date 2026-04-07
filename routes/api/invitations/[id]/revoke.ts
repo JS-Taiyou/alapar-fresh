@@ -4,7 +4,7 @@ import { getUserRole, revokeInvitation } from "../../../../lib/store.ts";
 export const handlers = define.handlers({
   async POST(ctx) {
     const invitationId = ctx.params.id;
-    const systemUserId = ctx.state.systemUser?.id;
+    const systemUserId = ctx.state.user?.id;
     const activeRegistryId = ctx.state.activeRegistry?.id;
 
     if (!invitationId || !systemUserId || !activeRegistryId) {

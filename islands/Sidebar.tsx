@@ -1,5 +1,5 @@
 import { useSignal } from "@preact/signals";
-import type { DefaultSplit, Registry, User } from "../lib/types.ts";
+import type { DefaultSplit, Entity, Registry, User } from "../lib/types.ts";
 import EntityManager from "./EntityManager.tsx";
 import DefaultSplitConfig from "./DefaultSplitConfig.tsx";
 
@@ -9,7 +9,7 @@ interface SidebarProps {
   userName: string;
   userInitials: string;
   isOwner: boolean;
-  entities: User[];
+  entities: Entity[];
   registryUsers: User[];
   defaultSplit: DefaultSplit | null;
   deletableRegistryIds: Set<string>;

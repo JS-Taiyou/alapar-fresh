@@ -1,15 +1,15 @@
 import { useSignal } from "@preact/signals";
-import type { User } from "../lib/types.ts";
+import type { Entity } from "../lib/types.ts";
 
 interface EntityManagerProps {
   registryId: string;
-  entities: User[];
+  entities: Entity[];
   onUpdate: () => void;
 }
 
 export default function EntityManager(props: EntityManagerProps) {
   const isOpen = useSignal(false);
-  const entities = useSignal<User[]>([...props.entities]);
+  const entities = useSignal<Entity[]>([...props.entities]);
   const newName = useSignal("");
   const newColor = useSignal("#6b7280");
   const editingId = useSignal<string | null>(null);
@@ -103,7 +103,7 @@ export default function EntityManager(props: EntityManagerProps) {
     loading.value = false;
   }
 
-  function startEdit(entity: User) {
+  function startEdit(entity: Entity) {
     editingId.value = entity.id;
     editName.value = entity.name;
     editColor.value = entity.color;

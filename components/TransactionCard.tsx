@@ -1,10 +1,10 @@
-import type { Transaction, User } from "../lib/types.ts";
+import type { Participant, Transaction } from "../lib/types.ts";
 
 interface TransactionCardProps {
   transaction: Transaction;
-  paidByUser: User | null;
+  paidByUser: Participant | null;
   currentUserId: string;
-  allUsers?: User[];
+  allUsers?: Participant[];
 }
 
 export default function TransactionCard(props: TransactionCardProps) {

@@ -1,10 +1,12 @@
 import { createDefine } from "fresh";
-import type { Registry, SystemUser, User } from "./lib/types.ts";
+import type { Entity, Participant, Registry, User } from "./lib/types.ts";
 
 export interface State {
-  systemUser: SystemUser | null;
+  user: User | null;
   activeRegistry: Registry | null;
   registryUsers: User[];
+  entities: Entity[];
+  participants: Participant[];
   registries: Registry[];
   supabaseAuthId: string | null;
   isOwner: boolean;

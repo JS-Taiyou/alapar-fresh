@@ -5,7 +5,7 @@ export const handlers = define.handlers({
   async GET(ctx) {
     const url = new URL(ctx.req.url);
     const registryId = url.searchParams.get("registryId");
-    const systemUserId = ctx.state.systemUser?.id;
+    const systemUserId = ctx.state.user?.id;
 
     if (!registryId || !systemUserId) {
       return new Response(JSON.stringify({ error: "Missing data" }), {

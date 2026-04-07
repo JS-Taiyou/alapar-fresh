@@ -5,9 +5,9 @@ export const handlers = define.handlers({
   async POST(ctx) {
     const body = await ctx.req.json();
     const registryId = body.registryId as string;
-    const systemUserId = ctx.state.systemUser?.id;
+    const userId = ctx.state.user?.id;
 
-    if (!registryId || !systemUserId) {
+    if (!registryId || !userId) {
       return new Response(JSON.stringify({ error: "Missing data" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
@@ -22,7 +22,7 @@ export const handlers = define.handlers({
       });
     }
 
-    await setUserActiveRegistry(systemUserId, registryId);
+    await setUserActiveRegistry(userId, registryId);
 
     return new Response(JSON.stringify({ ok: true }), {
       headers: { "Content-Type": "application/json" },

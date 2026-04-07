@@ -14,7 +14,7 @@ export const handlers = define.handlers({
     const active = await getActiveTransactions(registryId);
     if (active.length === 0) return ctx.redirect("/dashboard");
 
-    const users = ctx.state.registryUsers;
+    const users = ctx.state.participants;
     const debts = calculateFullPairwiseBalances(active, users);
 
     const exercise = await createExercise(registryId);

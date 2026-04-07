@@ -2,9 +2,9 @@ import { type Signal, useComputed, useSignal } from "@preact/signals";
 import type {
   BalanceBreakdownEntry,
   DefaultSplit,
+  Participant,
   SplitEntry,
   TransactionSplit,
-  User,
 } from "../lib/types.ts";
 import { type EnrichedTransaction } from "./shared-signals.ts";
 import {
@@ -15,12 +15,13 @@ import {
 
 interface TransactionListProps {
   transactions: Signal<EnrichedTransaction[]>;
-  users: Signal<User[]>;
+  users: Signal<Participant[]>;
   currentUserId: Signal<string>;
   registryId: Signal<string>;
   balance: Signal<number>;
   balanceEntries: Signal<BalanceBreakdownEntry[]>;
   defaultSplit: Signal<DefaultSplit | null>;
+  entityIds: Set<string>;
 }
 
 type SplitMode = "auto" | "percentage" | "fixed";
@@ -51,7 +52,7 @@ function sanitizeInteger(raw: string): string {
 
 function TransactionCardClickable(props: {
   tx: EnrichedTransaction;
-  users: User[];
+  users: Participant[];
   currentUserId: string;
   onClick: () => void;
 }) {
@@ -1015,7 +1016,7 @@ export default function TransactionList(props: TransactionListProps) {
                                           (Tú)
                                         </span>
                                       )}
-                                      {user.isEntity && (
+                                      {props.entityIds.has(user.id) && (
                                         <span class="text-xs ml-1 px-1.5 py-0.5 rounded bg-slate-700 text-slate-400">
                                           tercero
                                         </span>
@@ -1173,7 +1174,7 @@ export default function TransactionList(props: TransactionListProps) {
                                         (Tú)
                                       </span>
                                     )}
-                                    {user.isEntity && (
+                                    {props.entityIds.has(user.id) && (
                                       <span class="text-xs ml-1 px-1 py-0.5 rounded bg-slate-700 text-slate-400">
                                         tercero
                                       </span>
@@ -1307,7 +1308,7 @@ export default function TransactionList(props: TransactionListProps) {
                                           (Tú)
                                         </span>
                                       )}
-                                      {user.isEntity && (
+                                      {props.entityIds.has(user.id) && (
                                         <span class="text-xs ml-1 px-1.5 py-0.5 rounded bg-slate-700 text-slate-400">
                                           tercero
                                         </span>
@@ -1462,7 +1463,7 @@ export default function TransactionList(props: TransactionListProps) {
                                         (Tú)
                                       </span>
                                     )}
-                                    {user.isEntity && (
+                                    {props.entityIds.has(user.id) && (
                                       <span class="text-xs ml-1 px-1 py-0.5 rounded bg-slate-700 text-slate-400">
                                         tercero
                                       </span>

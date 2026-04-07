@@ -17,7 +17,6 @@ export const handlers = define.handlers({
         id: e.id,
         name: e.name,
         color: e.color,
-        isEntity: e.isEntity,
       }))),
       {
         headers: { "Content-Type": "application/json" },

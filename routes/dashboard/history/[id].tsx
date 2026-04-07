@@ -5,10 +5,10 @@ import {
 } from "../../../lib/store.ts";
 import { Head } from "fresh/runtime";
 import TransactionCard from "../../../components/TransactionCard.tsx";
-import type { Transaction, User } from "../../../lib/types.ts";
+import type { Participant, Transaction } from "../../../lib/types.ts";
 
 interface EnrichedTransaction extends Transaction {
-  paidByUser: User | null;
+  paidByUser: Participant | null;
 }
 
 interface ExerciseDetailData {
@@ -30,10 +30,12 @@ export const handlers = define.handlers({
     }
 
     const txs = await getTransactionsByExercise(id);
-    const userMap = new Map(ctx.state.registryUsers.map((u) => [u.id, u]));
+    const participantMap = new Map(
+      ctx.state.participants.map((p) => [p.id, p]),
+    );
     const enriched = txs.map((tx) => ({
       ...tx,
-      paidByUser: userMap.get(tx.userPaid) ?? null,
+      paidByUser: participantMap.get(tx.userPaid) ?? null,
     }));
 
     return { data: { exercise, transactions: enriched } };
@@ -43,10 +45,9 @@ export const handlers = define.handlers({
 export default define.page(function ExerciseDetail(ctx) {
   const data = ctx.data as ExerciseDetailData;
   const { exercise } = data;
-  const currentUser = ctx.state.systemUser;
+  const currentUser = ctx.state.user;
   const currentRegistryUserId = currentUser
-    ? ctx.state.registryUsers.find((u) => u.system_user_id === currentUser.id)
-      ?.id ?? ""
+    ? currentUser.id
     : "";
 
   if (!exercise) {
@@ -160,7 +161,7 @@ export default define.page(function ExerciseDetail(ctx) {
                 transaction={tx}
                 paidByUser={tx.paidByUser ?? null}
                 currentUserId={currentRegistryUserId}
-                allUsers={ctx.state.registryUsers}
+                allUsers={ctx.state.participants}
               />
             ))}
           </div>

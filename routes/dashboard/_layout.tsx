@@ -3,14 +3,12 @@ import { getTransactionCounts } from "../../lib/store.ts";
 import Sidebar from "../../islands/Sidebar.tsx";
 
 export default define.layout(async function DashboardLayout(ctx) {
-  const user = ctx.state.systemUser;
+  const user = ctx.state.user;
   const userName = user?.name ?? "Usuario";
   const userInitials = userName.split(" ").map((n) => n[0]).join("").substring(
     0,
     2,
   ).toUpperCase();
-
-  const entities = ctx.state.registryUsers.filter((u) => u.isEntity);
 
   const deletableRegistryIds = new Set<string>();
   if (ctx.state.registries.length > 0) {
@@ -30,7 +28,7 @@ export default define.layout(async function DashboardLayout(ctx) {
         userName={userName}
         userInitials={userInitials}
         isOwner={ctx.state.isOwner}
-        entities={entities}
+        entities={ctx.state.entities}
         registryUsers={ctx.state.registryUsers}
         defaultSplit={ctx.state.activeRegistry?.defaultSplit ?? null}
         deletableRegistryIds={deletableRegistryIds}

@@ -10,7 +10,7 @@ import {
 export const handlers = define.handlers({
   async PATCH(ctx) {
     const id = ctx.params.id;
-    const systemUserId = ctx.state.systemUser?.id;
+    const systemUserId = ctx.state.user?.id;
     if (!systemUserId) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -48,7 +48,7 @@ export const handlers = define.handlers({
 
   async DELETE(ctx) {
     const id = ctx.params.id;
-    const systemUserId = ctx.state.systemUser?.id;
+    const systemUserId = ctx.state.user?.id;
     if (!systemUserId) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,

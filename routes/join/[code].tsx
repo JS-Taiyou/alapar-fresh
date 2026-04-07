@@ -25,7 +25,7 @@ interface JoinData {
 
 export default define.page(function JoinPage(ctx) {
   const data = ctx.data as JoinData;
-  const isLoggedIn = ctx.state.systemUser !== null;
+  const isLoggedIn = ctx.state.user !== null;
 
   if (!data.invitation) {
     return (

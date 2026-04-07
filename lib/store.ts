@@ -2,9 +2,10 @@ import { query } from "./db.ts";
 import type {
   BalanceBreakdownEntry,
   DefaultSplit,
+  Entity,
   Exercise,
+  Participant,
   Registry,
-  SystemUser,
   Transaction,
   TransactionSplit,
   User,
@@ -41,24 +42,13 @@ const MONTHS_ES = [
   "Dic",
 ];
 
-function rowToSystemUser(row: Record<string, unknown>): SystemUser {
-  return {
-    id: row.id as string,
-    email: row.email as string,
-    name: row.name as string,
-    supabaseAuthId: (row.supabase_auth_id as string) ?? null,
-  };
-}
-
 function rowToUser(row: Record<string, unknown>): User {
   return {
     id: row.id as string,
-    registry_id: row.registry_id as string,
-    system_user_id: (row.system_user_id as string) ?? null,
-    email: (row.email as string) ?? "",
     name: row.name as string,
     color: row.color as string,
-    isEntity: (row.is_entity as boolean) ?? false,
+    email: row.email as string,
+    supabaseAuthId: (row.supabase_auth_id as string) ?? null,
     createdAt: new Date(row.created_at as string),
   };
 }
@@ -115,99 +105,105 @@ function rowToRegistry(row: Record<string, unknown>): Registry {
 
 export async function getUserBySupabaseId(
   supabaseAuthId: string,
-): Promise<SystemUser | null> {
+): Promise<User | null> {
   const result = await query(
-    "SELECT * FROM system_users WHERE supabase_auth_id = $1",
+    "SELECT * FROM users WHERE supabase_auth_id = $1",
     [supabaseAuthId],
   );
   if (result.rows.length === 0) return null;
-  return rowToSystemUser(result.rows[0]);
+  return rowToUser(result.rows[0]);
 }
 
 export async function createUserFromSupabase(
   supabaseAuthId: string,
   email: string,
   name: string,
-): Promise<SystemUser> {
+): Promise<User> {
   const result = await query(
-    "INSERT INTO system_users (id, email, name, supabase_auth_id) VALUES ($1, $2, $3, $4) ON CONFLICT (supabase_auth_id) DO UPDATE SET email = $2, name = $3 RETURNING *",
-    [crypto.randomUUID(), email, name, supabaseAuthId],
+    "INSERT INTO users (email, name, supabase_auth_id, color) VALUES ($1, $2, $3, $4) ON CONFLICT (supabase_auth_id) DO UPDATE SET email = $1, name = $2 RETURNING *",
+    [email, name, supabaseAuthId, "#093eaa"],
   );
-  return rowToSystemUser(result.rows[0]);
+  return rowToUser(result.rows[0]);
 }
 
 export async function getUserActiveRegistry(
-  systemUserId: string,
+  userId: string,
 ): Promise<Registry | null> {
   const result = await query(
     `SELECT r.* FROM registries r
      JOIN user_preferences up ON up.active_registry_id = r.id
      WHERE up.user_id = $1`,
-    [systemUserId],
+    [userId],
   );
   if (result.rows.length === 0) return null;
   return rowToRegistry(result.rows[0]);
 }
 
 export async function setUserActiveRegistry(
-  systemUserId: string,
+  userId: string,
   registryId: string,
 ): Promise<void> {
   await query(
     `INSERT INTO user_preferences (user_id, active_registry_id, updated_at) VALUES ($1, $2, now())
      ON CONFLICT (user_id) DO UPDATE SET active_registry_id = $2, updated_at = now()`,
-    [systemUserId, registryId],
+    [userId, registryId],
   );
 }
 
 export async function ensureUserPreferences(
-  systemUserId: string,
+  userId: string,
 ): Promise<void> {
   await query(
     `INSERT INTO user_preferences (user_id, active_registry_id) VALUES ($1, NULL)
      ON CONFLICT (user_id) DO NOTHING`,
-    [systemUserId],
+    [userId],
   );
 }
 
 export async function resolveUserState(supabaseAuthId: string): Promise<{
-  systemUser: SystemUser | null;
+  user: User | null;
   isEmailAllowed: boolean;
   activeRegistry: Registry | null;
   isOwner: boolean;
   registries: Registry[];
   registryUsers: User[];
+  entities: Entity[];
+  participants: Participant[];
 }> {
   const userResult = await query(
-    `SELECT su.*, ae.id IS NOT NULL as is_email_allowed
-     FROM system_users su
-     LEFT JOIN allowed_emails ae ON ae.email = su.email
-     WHERE su.supabase_auth_id = $1`,
+    `SELECT u.*, ae.id IS NOT NULL as is_email_allowed
+     FROM users u
+     LEFT JOIN allowed_emails ae ON ae.email = u.email
+     WHERE u.supabase_auth_id = $1`,
     [supabaseAuthId],
   );
   if (userResult.rows.length === 0) {
     return {
-      systemUser: null,
+      user: null,
       isEmailAllowed: false,
       activeRegistry: null,
       isOwner: false,
       registries: [],
       registryUsers: [],
+      entities: [],
+      participants: [],
     };
   }
 
   const row = userResult.rows[0];
-  const systemUser = rowToSystemUser(row);
+  const user = rowToUser(row);
   const isEmailAllowed = row.is_email_allowed as boolean;
 
   if (!isEmailAllowed) {
     return {
-      systemUser,
+      user,
       isEmailAllowed: false,
       activeRegistry: null,
       isOwner: false,
       registries: [],
       registryUsers: [],
+      entities: [],
+      participants: [],
     };
   }
 
@@ -217,7 +213,7 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
        JOIN registry_members rm ON r.id = rm.registry_id
        WHERE rm.user_id = $1
        ORDER BY r.latest_accessed DESC`,
-      [systemUser.id],
+      [user.id],
     ),
     query(
       `SELECT r.*, rm.role as active_registry_role
@@ -225,7 +221,7 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
        JOIN user_preferences up ON up.active_registry_id = r.id
        JOIN registry_members rm ON rm.registry_id = r.id AND rm.user_id = $1
        WHERE up.user_id = $1`,
-      [systemUser.id],
+      [user.id],
     ),
   ]);
 
@@ -233,6 +229,8 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
   let activeRegistry: Registry | null = null;
   let isOwner = false;
   let registryUsers: User[] = [];
+  let entities: Entity[] = [];
+  let participants: Participant[] = [];
 
   if (activeRegResult.rows.length > 0) {
     const activeRegRow = activeRegResult.rows[0];
@@ -240,28 +238,38 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
     isOwner = activeRegRow.active_registry_role === "owner";
 
     const usersResult = await query(
-      `SELECT u.*, COALESCE(su.name, u.name) as name
-       FROM users u
-       LEFT JOIN system_users su ON u.system_user_id = su.id
-       WHERE u.registry_id = $1`,
+      `SELECT u.* FROM users u
+       JOIN registry_members rm ON rm.user_id = u.id
+       WHERE rm.registry_id = $1`,
       [activeRegistry.id],
     );
     registryUsers = usersResult.rows.map(rowToUser);
+
+    entities = await getEntities(activeRegistry.id);
+
+    participants = [
+      ...registryUsers.map((u) => ({ id: u.id, name: u.name, color: u.color })),
+      ...entities.map((e) => ({ id: e.id, name: e.name, color: e.color })),
+    ];
   }
 
   return {
-    systemUser,
+    user,
     isEmailAllowed: true,
     activeRegistry,
     isOwner,
     registries: registriesList,
     registryUsers,
+    entities,
+    participants,
   };
 }
 
 export async function getUsers(registryId: string): Promise<User[]> {
   const result = await query(
-    "SELECT u.*, COALESCE(su.name, u.name) as name FROM users u LEFT JOIN system_users su ON u.system_user_id = su.id WHERE u.registry_id = $1",
+    `SELECT u.* FROM users u
+     JOIN registry_members rm ON rm.user_id = u.id
+     WHERE rm.registry_id = $1`,
     [registryId],
   );
   return result.rows.map(rowToUser);
@@ -434,18 +442,18 @@ export async function createExercise(registryId: string): Promise<Exercise> {
 }
 
 export async function getRegistriesForUser(
-  systemUserId: string,
+  userId: string,
 ): Promise<Registry[]> {
   const result = await query(
     `SELECT r.* FROM registries r JOIN registry_members rm ON r.id = rm.registry_id WHERE rm.user_id = $1 ORDER BY r.latest_accessed DESC`,
-    [systemUserId],
+    [userId],
   );
   return result.rows.map(rowToRegistry);
 }
 
 export async function createRegistry(
   name: string,
-  systemUserId: string,
+  userId: string,
 ): Promise<Registry> {
   const dbName = name.toLowerCase().replace(/\s+/g, "_").replace(
     /[^a-z0-9_]/g,
@@ -467,33 +475,16 @@ export async function createRegistry(
 
   const existingMember = await query(
     "SELECT registry_id FROM registry_members WHERE registry_id = $1 AND user_id = $2",
-    [registry.id, systemUserId],
+    [registry.id, userId],
   );
   if (existingMember.rows.length === 0) {
     await query(
       "INSERT INTO registry_members (registry_id, user_id, role) VALUES ($1, $2, 'owner')",
-      [registry.id, systemUserId],
+      [registry.id, userId],
     );
   }
 
-  const sysUser = await query("SELECT * FROM system_users WHERE id = $1", [
-    systemUserId,
-  ]);
-  if (sysUser.rows.length > 0) {
-    const su = rowToSystemUser(sysUser.rows[0]);
-    const existing = await query(
-      "SELECT id FROM users WHERE registry_id = $1 AND system_user_id = $2",
-      [registry.id, su.id],
-    );
-    if (existing.rows.length === 0) {
-      await query(
-        "INSERT INTO users (registry_id, system_user_id, email, name, color) VALUES ($1, $2, $3, $4, $5) RETURNING *",
-        [registry.id, su.id, su.email, su.name, "#093eaa"],
-      );
-    }
-  }
-
-  await setUserActiveRegistry(systemUserId, registry.id);
+  await setUserActiveRegistry(userId, registry.id);
 
   return registry;
 }
@@ -545,12 +536,12 @@ export async function deleteRegistry(registryId: string): Promise<boolean> {
 }
 
 export async function getUserRole(
-  systemUserId: string,
+  userId: string,
   registryId: string,
 ): Promise<string | null> {
   const result = await query(
     "SELECT role FROM registry_members WHERE registry_id = $1 AND user_id = $2",
-    [registryId, systemUserId],
+    [registryId, userId],
   );
   if (result.rows.length === 0) return null;
   return result.rows[0].role as string;
@@ -696,60 +687,91 @@ export async function batchCloneTransactions(
   return insertResult.rows.map(rowToTransaction);
 }
 
-export async function getEntities(registryId: string): Promise<User[]> {
+export async function getEntities(registryId: string): Promise<Entity[]> {
   const result = await query(
-    "SELECT * FROM users WHERE registry_id = $1 AND is_entity = true ORDER BY created_at",
+    "SELECT entities_json FROM registries WHERE id = $1",
     [registryId],
   );
-  return result.rows.map(rowToUser);
+  if (result.rows.length === 0) return [];
+  const raw = result.rows[0].entities_json;
+  if (!raw) return [];
+  const parsed = typeof raw === "string" ? JSON.parse(raw) : raw as unknown[];
+  return parsed.map((e: Record<string, unknown>) => ({
+    id: e.id as string,
+    name: e.name as string,
+    color: e.color as string,
+  }));
 }
 
 export async function createEntity(
   registryId: string,
   name: string,
   color?: string,
-): Promise<User> {
-  const result = await query(
-    "INSERT INTO users (registry_id, name, color, is_entity) VALUES ($1, $2, $3, true) RETURNING *",
-    [registryId, name, color ?? "#6b7280"],
+): Promise<Entity> {
+  const entities = await getEntities(registryId);
+  let maxId = 0;
+  for (const e of entities) {
+    const num = parseInt(e.id, 10);
+    if (!isNaN(num) && num > maxId) maxId = num;
+  }
+  const entity: Entity = {
+    id: String(maxId + 1),
+    name,
+    color: color ?? "#6b7280",
+  };
+  entities.push(entity);
+  await query(
+    "UPDATE registries SET entities_json = $1 WHERE id = $2",
+    [JSON.stringify(entities), registryId],
   );
-  return rowToUser(result.rows[0]);
+  return entity;
 }
 
 export async function updateEntity(
+  registryId: string,
   entityId: string,
   name: string,
   color?: string,
-): Promise<User | undefined> {
-  const result = await query(
-    "UPDATE users SET name = $1, color = COALESCE($2, color) WHERE id = $3 AND is_entity = true RETURNING *",
-    [name, color ?? null, entityId],
+): Promise<Entity | undefined> {
+  const entities = await getEntities(registryId);
+  const idx = entities.findIndex((e) => e.id === entityId);
+  if (idx === -1) return undefined;
+  entities[idx] = { ...entities[idx], name, color: color ?? entities[idx].color };
+  await query(
+    "UPDATE registries SET entities_json = $1 WHERE id = $2",
+    [JSON.stringify(entities), registryId],
   );
-  if (result.rows.length === 0) return undefined;
-  return rowToUser(result.rows[0]);
+  return entities[idx];
 }
 
-export async function deleteEntity(entityId: string): Promise<boolean> {
-  const result = await query(
-    `DELETE FROM users WHERE id = $1 AND is_entity = true
-     AND NOT EXISTS (
-       SELECT 1 FROM transactions
-       WHERE (creator_id = $1 OR user_paid = $1) AND exercise_id IS NULL
-     )
-     AND NOT EXISTS (
-       SELECT 1 FROM transactions
-       WHERE exercise_id IS NULL AND split_json @> $2
-     )`,
-    [entityId, JSON.stringify({ splits: [{ userId: entityId }] })],
+export async function deleteEntity(
+  registryId: string,
+  entityId: string,
+): Promise<boolean> {
+  const txCheck = await query(
+    `SELECT 1 FROM transactions WHERE registry_id = $1
+     AND exercise_id IS NULL
+     AND (user_paid = $2 OR split_json @> $3)`,
+    [registryId, entityId, JSON.stringify({ splits: [{ userId: entityId }] })],
   );
-  return (result.rowCount ?? 0) > 0;
+  if (txCheck.rows.length > 0) return false;
+
+  const entities = await getEntities(registryId);
+  const idx = entities.findIndex((e) => e.id === entityId);
+  if (idx === -1) return false;
+  entities.splice(idx, 1);
+  await query(
+    "UPDATE registries SET entities_json = $1 WHERE id = $2",
+    [JSON.stringify(entities), registryId],
+  );
+  return true;
 }
 
 export async function getRegistryMemberCount(
   registryId: string,
 ): Promise<number> {
   const result = await query(
-    "SELECT COUNT(*) as cnt FROM users WHERE registry_id = $1 AND is_entity = false",
+    "SELECT COUNT(*) as cnt FROM registry_members WHERE registry_id = $1",
     [registryId],
   );
   return parseInt(result.rows[0].cnt as string);
@@ -868,7 +890,7 @@ export async function getInvitationByCode(code: string): Promise<
 
 export async function useInvitation(
   code: string,
-  systemUserId: string,
+  userId: string,
 ): Promise<string> {
   const invitation = await getInvitationByCode(code);
   if (!invitation) throw new Error("Invitation not found");
@@ -882,48 +904,31 @@ export async function useInvitation(
 
   const existing = await query(
     "SELECT registry_id FROM registry_members WHERE registry_id = $1 AND user_id = $2",
-    [invitation.registryId, systemUserId],
+    [invitation.registryId, userId],
   );
   if (existing.rows.length > 0) {
-    await setUserActiveRegistry(systemUserId, invitation.registryId);
+    await setUserActiveRegistry(userId, invitation.registryId);
     return invitation.registryId;
   }
 
   await query(
     "INSERT INTO registry_members (registry_id, user_id, role) VALUES ($1, $2, 'member')",
-    [invitation.registryId, systemUserId],
+    [invitation.registryId, userId],
   );
-
-  const sysUser = await query("SELECT * FROM system_users WHERE id = $1", [
-    systemUserId,
-  ]);
-  if (sysUser.rows.length > 0) {
-    const su = rowToSystemUser(sysUser.rows[0]);
-    const existingUser = await query(
-      "SELECT id FROM users WHERE registry_id = $1 AND system_user_id = $2",
-      [invitation.registryId, su.id],
-    );
-    if (existingUser.rows.length === 0) {
-      await query(
-        "INSERT INTO users (registry_id, system_user_id, email, name, color) VALUES ($1, $2, $3, $4, $5)",
-        [invitation.registryId, su.id, su.email, su.name, "#093eaa"],
-      );
-    }
-  }
 
   await query(
     "UPDATE invitations SET current_uses = current_uses + 1 WHERE id = $1",
     [invitation.id],
   );
 
-  await setUserActiveRegistry(systemUserId, invitation.registryId);
+  await setUserActiveRegistry(userId, invitation.registryId);
 
   await invalidateDefaultSplitIfNeeded(invitation.registryId);
 
   await query(
     `INSERT INTO audit_log (actor_id, action, target_type, target_id, metadata) VALUES ($1, $2, $3, $4, $5)`,
     [
-      systemUserId,
+      userId,
       "invite_used",
       "invitation",
       invitation.id,
@@ -960,7 +965,7 @@ export async function getInvitationsForRegistry(registryId: string): Promise<{
 
 export async function revokeInvitation(
   invitationId: string,
-  systemUserId: string,
+  userId: string,
 ): Promise<void> {
   await query(
     "UPDATE invitations SET revoked_at = now() WHERE id = $1",
@@ -969,7 +974,7 @@ export async function revokeInvitation(
   await query(
     `INSERT INTO audit_log (actor_id, action, target_type, target_id, metadata) VALUES ($1, $2, $3, $4, $5)`,
     [
-      systemUserId,
+      userId,
       "invite_revoked",
       "invitation",
       invitationId,
