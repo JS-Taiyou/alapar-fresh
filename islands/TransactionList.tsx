@@ -249,6 +249,8 @@ export default function TransactionList(props: TransactionListProps) {
   const expenseType = useSignal<TransactionType>("unico");
   const installmentCurrent = useSignal(1);
   const installmentTotal = useSignal(12);
+  const installmentInputMode = useSignal<"total" | "installment">("total");
+  const installmentAmount = useSignal(0);
   const splitMode = useSignal<SplitMode>("auto");
   const userPaid = useSignal(currentUserId.value);
   const paymentRecipient = useSignal<string>(
@@ -304,6 +306,8 @@ export default function TransactionList(props: TransactionListProps) {
     expenseType.value = "unico";
     installmentCurrent.value = 1;
     installmentTotal.value = 12;
+    installmentInputMode.value = "total";
+    installmentAmount.value = 0;
     paymentRecipient.value =
       users.value.find((u) => u.id !== currentUserId.value)?.id ?? "";
 
@@ -344,6 +348,10 @@ export default function TransactionList(props: TransactionListProps) {
     expenseType.value = tx.type;
     installmentCurrent.value = tx.installmentCurrent ?? 1;
     installmentTotal.value = tx.installmentTotal ?? 12;
+    installmentInputMode.value = "total";
+    installmentAmount.value = tx.installmentTotal
+      ? Math.round((tx.originalAmount / tx.installmentTotal) * 100) / 100
+      : 0;
     userPaid.value = tx.userPaid;
 
     if (tx.type === "pago") {
@@ -430,6 +438,33 @@ export default function TransactionList(props: TransactionListProps) {
     }
 
     amount.value = newVal;
+    return sanitized;
+  }
+
+  function handleInstallmentAmountChange(raw: string) {
+    const sanitized = sanitizeDecimal(raw);
+    const newVal = parseFloat(sanitized) || 0;
+    installmentAmount.value = newVal;
+    const total = Math.round(newVal * installmentTotal.value * 100) / 100;
+
+    if (
+      editingId.value &&
+      Math.abs(total - amount.value) > 0.001
+    ) {
+      const currentSplits = getSplits();
+      const currentTotal = Math.abs(amount.value);
+      percentages.value = Object.fromEntries(
+        currentSplits.map((s) => [
+          s.userId,
+          currentTotal > 0
+            ? Math.round((s.amount / currentTotal) * 10000) / 100
+            : Math.round(10000 / users.value.length) / 100,
+        ]),
+      );
+      splitMode.value = "percentage";
+    }
+
+    amount.value = total;
     return sanitized;
   }
 
@@ -850,7 +885,12 @@ export default function TransactionList(props: TransactionListProps) {
                     class="block text-sm font-medium text-slate-300"
                     for="total-amount"
                   >
-                    {isPago ? "Monto del Pago" : "Monto Total"}
+                    {isPago
+                      ? "Monto del Pago"
+                      : expenseType.value === "parcialidad" &&
+                          installmentInputMode.value === "installment"
+                        ? "Monto por Parcialidad"
+                        : "Monto Total"}
                   </label>
                   <div class="relative">
                     <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
@@ -861,16 +901,40 @@ export default function TransactionList(props: TransactionListProps) {
                       id="total-amount"
                       type="text"
                       inputmode="decimal"
-                      value={amount.value || ""}
+                      value={expenseType.value === "parcialidad" &&
+                          installmentInputMode.value === "installment"
+                        ? installmentAmount.value || ""
+                        : amount.value || ""}
                       onInput={(e) => {
-                        const sanitized = handleAmountChange(
-                          (e.target as HTMLInputElement).value,
-                        );
-                        (e.target as HTMLInputElement).value = sanitized;
+                        if (
+                          expenseType.value === "parcialidad" &&
+                          installmentInputMode.value === "installment"
+                        ) {
+                          const sanitized =
+                            handleInstallmentAmountChange(
+                              (e.target as HTMLInputElement).value,
+                            );
+                          (e.target as HTMLInputElement).value = sanitized;
+                        } else {
+                          const sanitized = handleAmountChange(
+                            (e.target as HTMLInputElement).value,
+                          );
+                          (e.target as HTMLInputElement).value = sanitized;
+                        }
                       }}
                       required
                     />
                   </div>
+                  {expenseType.value === "parcialidad" &&
+                    installmentInputMode.value === "installment" &&
+                    installmentTotal.value > 0 && (
+                    <p class="text-xs text-slate-400 mt-1">
+                      Total: ${Math.abs(amount.value).toLocaleString("en-US", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })} ({installmentTotal.value} parcialidades)
+                    </p>
+                  )}
                 </div>
                 <div class="space-y-2">
                   <label class="block text-sm font-medium text-slate-300">
@@ -909,42 +973,83 @@ export default function TransactionList(props: TransactionListProps) {
               </div>
 
               {expenseType.value === "parcialidad" && (
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div class="space-y-2">
-                    <label class="block text-sm font-medium text-slate-300">
-                      Parcialidad Actual
-                    </label>
-                    <div class="flex items-center gap-3">
-                      <select
-                        class="block w-full px-4 py-2 bg-background border border-border-custom rounded-custom text-white focus:ring-primary focus:border-primary"
-                        value={installmentCurrent.value}
-                        onChange={(e) =>
-                          installmentCurrent.value = parseInt(
-                            (e.target as HTMLSelectElement).value,
+                <div class="space-y-4">
+                  <div class="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        installmentInputMode.value = "total";
+                      }}
+                      class={`flex-1 py-1.5 text-xs font-medium rounded-custom transition-colors border ${
+                        installmentInputMode.value === "total"
+                          ? "bg-primary/20 border-primary text-white"
+                          : "bg-background border-border-custom text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      Monto Total
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        installmentInputMode.value = "installment";
+                        if (installmentAmount.value === 0 && amount.value > 0) {
+                          installmentAmount.value =
+                            Math.round((amount.value / installmentTotal.value) * 100) /
+                            100;
+                        }
+                      }}
+                      class={`flex-1 py-1.5 text-xs font-medium rounded-custom transition-colors border ${
+                        installmentInputMode.value === "installment"
+                          ? "bg-primary/20 border-primary text-white"
+                          : "bg-background border-border-custom text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      Monto por Parcialidad
+                    </button>
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="space-y-2">
+                      <label class="block text-sm font-medium text-slate-300">
+                        Parcialidad Actual
+                      </label>
+                      <div class="flex items-center gap-3">
+                        <select
+                          class="block w-full px-4 py-2 bg-background border border-border-custom rounded-custom text-white focus:ring-primary focus:border-primary"
+                          value={installmentCurrent.value}
+                          onChange={(e) =>
+                            installmentCurrent.value = parseInt(
+                              (e.target as HTMLSelectElement).value,
+                            )}
+                        >
+                          {Array.from(
+                            { length: installmentTotal.value },
+                            (_, i) => (
+                              <option key={i + 1} value={i + 1}>{i + 1}</option>
+                            ),
                           )}
-                      >
-                        {Array.from(
-                          { length: installmentTotal.value },
-                          (_, i) => (
-                            <option key={i + 1} value={i + 1}>{i + 1}</option>
-                          ),
-                        )}
-                      </select>
-                      <span class="text-slate-500">de</span>
-                      <input
-                        class="block w-20 px-4 py-2 bg-background border border-border-custom rounded-custom text-white focus:ring-primary focus:border-primary"
-                        type="text"
-                        inputmode="numeric"
-                        value={installmentTotal.value}
-                        onInput={(e) => {
-                          const sanitized = sanitizeInteger(
-                            (e.target as HTMLInputElement).value,
-                          );
-                          (e.target as HTMLInputElement).value = sanitized;
-                          installmentTotal.value = parseInt(sanitized) || 12;
-                        }}
-                      />
-                      <span class="text-slate-500">meses</span>
+                        </select>
+                        <span class="text-slate-500">de</span>
+                        <input
+                          class="block w-20 px-4 py-2 bg-background border border-border-custom rounded-custom text-white focus:ring-primary focus:border-primary"
+                          type="text"
+                          inputmode="numeric"
+                          value={installmentTotal.value}
+                          onInput={(e) => {
+                            const sanitized = sanitizeInteger(
+                              (e.target as HTMLInputElement).value,
+                            );
+                            (e.target as HTMLInputElement).value = sanitized;
+                            const newTotal = parseInt(sanitized) || 12;
+                            installmentTotal.value = newTotal;
+                            if (installmentInputMode.value === "installment") {
+                              amount.value = Math.round(
+                                installmentAmount.value * newTotal * 100,
+                              ) / 100;
+                            }
+                          }}
+                        />
+                        <span class="text-slate-500">meses</span>
+                      </div>
                     </div>
                   </div>
                 </div>
