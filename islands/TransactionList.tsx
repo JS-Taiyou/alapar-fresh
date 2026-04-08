@@ -542,7 +542,6 @@ export default function TransactionList(props: TransactionListProps) {
   async function handleSubmit(e: Event) {
     e.preventDefault();
     if (submitting.value) return;
-    submitting.value = true;
 
     let splitJson: TransactionSplit;
 
@@ -558,75 +557,114 @@ export default function TransactionList(props: TransactionListProps) {
       splitJson = { splits: getSplits() };
     }
 
+    const paidByUser = users.value.find((u) => u.id === userPaid.value) ??
+      null;
+
+    const optimisticId = editingId.value ?? crypto.randomUUID();
+
+    const optimistic: EnrichedTransaction = {
+      id: optimisticId,
+      registry_id: registryId.value,
+      description: description.value || "Pago",
+      amount: amount.value,
+      originalAmount: Math.abs(amount.value),
+      type: expenseType.value,
+      exerciseId: null,
+      installmentCurrent: expenseType.value === "parcialidad"
+        ? installmentCurrent.value
+        : null,
+      installmentTotal: expenseType.value === "parcialidad"
+        ? installmentTotal.value
+        : null,
+      recurringDisabled: false,
+      recurringGroupId: optimisticId,
+      notes: notes.value,
+      splitJson,
+      creatorId: currentUserId.value,
+      userPaid: userPaid.value,
+      createdAt: new Date(),
+      paidByUser,
+    };
+
+    const wasEditing = editingId.value;
+
+    if (wasEditing) {
+      transactions.value = transactions.value.map((t) =>
+        t.id === wasEditing ? optimistic : t
+      );
+    } else {
+      transactions.value = [optimistic, ...transactions.value];
+    }
+
+    isOpen.value = false;
+    editingId.value = null;
+    recalculate();
+
     const form = new FormData();
-    form.append("description", description.value || "Pago");
-    form.append("amount", amount.value.toString());
-    form.append("originalAmount", Math.abs(amount.value).toString());
-    form.append("type", expenseType.value);
+    form.append("description", optimistic.description);
+    form.append("amount", optimistic.amount.toString());
+    form.append("originalAmount", optimistic.originalAmount.toString());
+    form.append("type", optimistic.type);
     form.append("splitJson", JSON.stringify(splitJson));
-    form.append("userPaid", userPaid.value);
-    form.append("notes", notes.value);
-    form.append("registryId", registryId.value);
-    if (expenseType.value === "parcialidad") {
+    form.append("userPaid", optimistic.userPaid);
+    form.append("notes", optimistic.notes);
+    form.append("registryId", optimistic.registry_id);
+    if (optimistic.type === "parcialidad") {
       form.append("installmentCurrent", installmentCurrent.value.toString());
       form.append("installmentTotal", installmentTotal.value.toString());
     }
 
     try {
-      if (editingId.value) {
-        const res = await fetch(`/api/transactions/${editingId.value}`, {
+      if (wasEditing) {
+        const res = await fetch(`/api/transactions/${wasEditing}`, {
           method: "PUT",
           body: form,
         });
-        if (!res.ok) throw new Error("Update failed");
-        const updated = await res.json();
-        const paidByUser = users.value.find((u) => u.id === updated.userPaid) ??
-          null;
-        transactions.value = transactions.value.map((t) =>
-          t.id === editingId.value ? { ...updated, paidByUser } : t
-        );
+        if (res.ok) {
+          const updated = await res.json();
+          const serverPaidBy = users.value.find((u) =>
+            u.id === updated.userPaid
+          ) ?? null;
+          transactions.value = transactions.value.map((t) =>
+            t.id === wasEditing
+              ? { ...updated, paidByUser: serverPaidBy }
+              : t
+          );
+          recalculate();
+        }
       } else {
         const res = await fetch("/api/transactions", {
           method: "POST",
           body: form,
         });
-        if (!res.ok) throw new Error("Create failed");
-        const created = await res.json();
-        const paidByUser = users.value.find((u) => u.id === created.userPaid) ??
-          null;
-        transactions.value = [
-          { ...created, paidByUser },
-          ...transactions.value,
-        ];
+        if (res.ok) {
+          const created = await res.json();
+          const serverPaidBy = users.value.find((u) =>
+            u.id === created.userPaid
+          ) ?? null;
+          transactions.value = transactions.value.map((t) =>
+            t.id === optimisticId
+              ? { ...created, paidByUser: serverPaidBy }
+              : t
+          );
+          recalculate();
+        }
         saveLastSplitConfig();
       }
-      isOpen.value = false;
-      editingId.value = null;
-      submitting.value = false;
-      recalculate();
     } catch {
-      submitting.value = false;
+      // server response will correct on next page load
     }
   }
 
   function handleDelete() {
-    if (!editingId.value || submitting.value) return;
+    if (!editingId.value) return;
     if (!confirm("Eliminar esta transacción?")) return;
-    submitting.value = true;
     const id = editingId.value;
-    fetch(`/api/transactions/${id}`, { method: "DELETE" }).then((res) => {
-      if (res.ok) {
-        transactions.value = transactions.value.filter((t) => t.id !== id);
-        isOpen.value = false;
-        editingId.value = null;
-        submitting.value = false;
-        recalculate();
-      } else {
-        submitting.value = false;
-      }
-    }).catch(() => {
-      submitting.value = false;
-    });
+    transactions.value = transactions.value.filter((t) => t.id !== id);
+    isOpen.value = false;
+    editingId.value = null;
+    recalculate();
+    fetch(`/api/transactions/${id}`, { method: "DELETE" }).catch(() => {});
   }
 
   const filteredTransactions = useComputed(() => {
