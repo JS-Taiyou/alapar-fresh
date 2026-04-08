@@ -823,6 +823,27 @@ export default function TransactionList(props: TransactionListProps) {
               onSubmit={handleSubmit}
               class="p-6 space-y-8 overflow-y-auto max-h-[75vh]"
             >
+              <div class="space-y-2">
+                <label
+                  class="block text-sm font-medium text-slate-300"
+                  for="description"
+                >
+                  Descripción
+                </label>
+                <input
+                  class="block w-full px-4 py-2.5 bg-background border border-border-custom rounded-custom text-white focus:ring-primary focus:border-primary"
+                  id="description"
+                  type="text"
+                  placeholder={isPago
+                    ? "Ej: Pago de balance"
+                    : "Ej: Supermercado semanal"}
+                  value={description.value}
+                  onInput={(e) =>
+                    description.value = (e.target as HTMLInputElement).value}
+                  {...(isPago ? {} : { required: true })}
+                />
+              </div>
+
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="space-y-2">
                   <label
@@ -928,27 +949,6 @@ export default function TransactionList(props: TransactionListProps) {
                   </div>
                 </div>
               )}
-
-              <div class="space-y-2">
-                <label
-                  class="block text-sm font-medium text-slate-300"
-                  for="description"
-                >
-                  Descripción
-                </label>
-                <input
-                  class="block w-full px-4 py-2.5 bg-background border border-border-custom rounded-custom text-white focus:ring-primary focus:border-primary"
-                  id="description"
-                  type="text"
-                  placeholder={isPago
-                    ? "Ej: Pago de balance"
-                    : "Ej: Supermercado semanal"}
-                  value={description.value}
-                  onInput={(e) =>
-                    description.value = (e.target as HTMLInputElement).value}
-                  {...(isPago ? {} : { required: true })}
-                />
-              </div>
 
               <div class="space-y-2">
                 <label

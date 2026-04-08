@@ -36,9 +36,11 @@ Fresh Middleware (utils.ts → State)
      ├── No auth cookie → Public routes (/, /login, /signup, /join/[code])
      │
      └── Auth cookie valid → Resolve State:
-          ├── systemUser (from Supabase Auth ID → system_users)
+          ├── user (from Supabase Auth ID → users table)
           ├── activeRegistry (from user_preferences.active_registry_id)
-          ├── registryUsers (users in active registry)
+          ├── registryUsers (real users in active registry via registry_members)
+          ├── entities (third-parties from registries.entities_json)
+          ├── participants (combined: registryUsers + entities)
           ├── registries (all registries user belongs to)
           └── isOwner (role check on active registry)
                │
@@ -68,9 +70,10 @@ alapar-fresh/
 │   │       └── [id].tsx       # Exercise detail
 │   └── api/                   # API endpoints
 │       ├── auth/              # Auth callback + logout
+│       ├── entities/          # Entity CRUD (terceros)
 │       ├── exercises/         # Create exercise + carry-forward
 │       ├── invitations/       # CRUD + join
-│       ├── registries/        # Create + switch
+│       ├── registries/        # Create + switch + default-split
 │       └── transactions/      # CRUD + disable-recurring
 ├── islands/                   # Interactive client-side Preact components
 ├── components/                # Server-side presentational components
@@ -78,9 +81,14 @@ alapar-fresh/
 │   ├── db.ts                  # PostgreSQL connection pool
 │   ├── supabase.ts            # Supabase client + auth helpers
 │   ├── store.ts               # Data access layer (queries + business logic)
+│   ├── calculations.ts        # Pure balance/split calculation functions
 │   └── types.ts               # TypeScript interfaces
 ├── db/
-│   └── schema.sql             # Full PostgreSQL schema
+│   ├── schema.sql             # Full PostgreSQL schema
+│   ├── seed.sql               # Seed data
+│   ├── migrate_entities_phase1.sql  # Extract entities to JSON
+│   ├── migrate_entities_phase2.sql  # Clean up entity columns
+│   └── migrate_merge_users.sql      # Merge system_users into users
 └── utils.ts                   # Fresh State definition + createDefine
 ```
 
@@ -97,7 +105,7 @@ alapar-fresh/
 
 - **Email allowlist**: `AuthForm.tsx` hardcodes allowed emails for signup
 - **Role-based access**: Registry membership tracked in `registry_members` with `owner` or `member` roles
-- **Owner-only actions**: Creating/revoking invitations
+- **Owner-only actions**: Creating/revoking invitations, configuring default split
 - **Member gating**: `ctx.state.registries` only contains registries the user belongs to
 
 ## State Management
@@ -108,14 +116,18 @@ Every request within an authenticated context has:
 
 ```typescript
 interface State {
-  systemUser: SystemUser | null;       // Global user identity
-  activeRegistry: Registry | null;     // Currently selected registry
-  registryUsers: User[];               // Users in active registry
-  registries: Registry[];              // All registries for this user
-  supabaseAuthId: string | null;       // Supabase auth UUID
-  isOwner: boolean;                    // Is user owner of active registry
+  user: User | null;                    // Single user identity (merged auth + profile)
+  activeRegistry: Registry | null;      // Currently selected registry
+  registryUsers: User[];                // Real users in active registry (via registry_members)
+  entities: Entity[];                   // Third-party entities (from registries.entities_json)
+  participants: Participant[];          // Combined: registryUsers + entities
+  registries: Registry[];               // All registries for this user
+  supabaseAuthId: string | null;        // Supabase auth UUID
+  isOwner: boolean;                     // Is user owner of active registry
 }
 ```
+
+**Key concept — `Participant`**: Both real users and entities share the base interface `{ id, name, color }`. Calculations (balance, pairwise breakdown) operate on `Participant[]` and don't care whether a participant is a real user or an entity. The `entityIds: Set<string>` is passed separately to TransactionList for "tercero" badges.
 
 ### Client State (Preact Signals)
 
@@ -134,6 +146,8 @@ Same format as Kotlin version, stored in `split_json` column (JSONB):
 }
 ```
 
+The `userId` can be either a `users.id` or an entity ID from `registries.entities_json`.
+
 ## Split Modes
 
 | Mode | Behavior |
@@ -150,6 +164,7 @@ Same format as Kotlin version, stored in `split_json` column (JSONB):
 | `parcialidad` | Parcialidad | Installment: amount divided by `installmentTotal` |
 | `recurrente` | Recurrente | Recurring: clones itself on carry-forward |
 | `pago` | Pago | Direct payment between users (affects balance differently) |
+| `ajuste` | Ajuste | Balance adjustment (created during carry-forward) |
 
 ## Balance Calculation
 
@@ -157,7 +172,7 @@ Same format as Kotlin version, stored in `split_json` column (JSONB):
 
 ```
 For each active transaction:
-  If type is "pago" (payment):
+  If type is "pago" or "ajuste":
     If current user paid: balance += originalAmount
     Else if user is in split: balance -= originalAmount
 
@@ -177,11 +192,11 @@ For each active transaction:
 
 ### Pairwise Breakdown (`calculatePairwiseBreakdown`)
 
-For multi-user registries (3+ members), the aggregate balance alone doesn't tell you _who_ you owe or who owes you. The pairwise breakdown solves this by tracking a running net between the current user and each other member:
+For multi-user registries (3+ members), the aggregate balance alone doesn't tell you _who_ you owe or who owes you. The pairwise breakdown solves this by tracking a running net between the current user and each other participant:
 
 ```
 For each active transaction:
-  If type is "pago":
+  If type is "pago" or "ajuste":
     If current user paid:  net[recipient] += originalAmount
     If someone else paid:  net[payer] -= originalAmount
 
@@ -195,9 +210,28 @@ For each active transaction:
       net[payer] -= currentUserSplit.amount / divisor
 ```
 
-Returns a sorted list of `BalanceBreakdownEntry` (positive = owed to you, negative = you owe), filtered to entries with `|amount| >= $0.01`. Used by:
-- **`BalanceBreakdown` island**: Popover on the dashboard header showing "Te debe $X" / "Le debes $X" per person
-- **`TransactionList` island**: SALDO column in payment mode showing per-user balances to guide who to pay
+Returns a sorted list of `BalanceBreakdownEntry` (positive = owed to you, negative = you owe), filtered to entries with `|amount| >= $0.01`.
+
+## Entities (Terceros)
+
+Third-party participants (landlords, companies, etc.) that aren't real users. Stored as JSON in `registries.entities_json` with auto-incrementing integer IDs.
+
+**Key behaviors**:
+- Appear in split dropdowns alongside real users
+- Can be selected as "who paid" (user_paid)
+- Marked with a "tercero" badge in the UI
+- Managed by the owner via `EntityManager` island
+- Cannot be deleted if referenced by active transactions
+
+## Default Split
+
+Registry owners can configure custom default split percentages that pre-fill when creating new transactions.
+
+**Key behaviors**:
+- Stored as JSON in `registries.default_split_json` with `default_split_member_count`
+- Auto-invalidates when member count changes (reverts to equal split)
+- Only configurable by the registry owner
+- Pre-fills percentage mode in the transaction modal
 
 ## "Cortar" (Cut/Settle)
 

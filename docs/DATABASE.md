@@ -10,17 +10,18 @@ Single PostgreSQL database (Supabase-hosted) with UUID primary keys. All per-reg
 
 ## Tables
 
-### `system_users` — Global User Identity
+### `users` — Unified User Identity + Profile
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
-| id | UUID | PK, auto | Unique identifier |
+| id | UUID | PK, auto | Unique identifier (the single user ID used everywhere) |
 | email | TEXT | NOT NULL, UNIQUE | User email |
 | name | TEXT | NOT NULL | Display name |
 | supabase_auth_id | UUID | UNIQUE | Links to Supabase Auth |
+| color | TEXT | NOT NULL, default '#093eaa' | Hex color for avatar |
 | created_at | TIMESTAMPTZ | NOT NULL, default now() | Creation timestamp |
 
-**Purpose**: Bridges Supabase Auth to the application's data model. One row per registered user.
+**Purpose**: Single table per user. Combines auth identity (email, supabase_auth_id) with app profile (name, color). Created at signup time. One row per real person, shared across all registries.
 
 ---
 
@@ -33,9 +34,21 @@ Single PostgreSQL database (Supabase-hosted) with UUID primary keys. All per-reg
 | db_name | TEXT | NOT NULL, UNIQUE | Slug: lowercase, underscores (e.g., "viaje_a_la_playa") |
 | is_default | BOOLEAN | NOT NULL, default false | Legacy field |
 | latest_accessed | TIMESTAMPTZ | NOT NULL, default now() | Last access time |
+| default_split_json | JSONB | nullable | Custom default split percentages |
+| default_split_member_count | INTEGER | nullable | Member count when default was set (auto-invalidates on change) |
+| entities_json | JSONB | default '[]' | Third-party entities stored as JSON array |
 | created_at | TIMESTAMPTZ | NOT NULL, default now() | Creation timestamp |
 
 **Purpose**: Central hub for each expense group. `db_name` is derived from the name during creation.
+
+**Entities JSON format**:
+```json
+[
+  { "id": "1", "name": "Landlord", "color": "#6b7280" },
+  { "id": "2", "name": "Insurance Co", "color": "#f97316" }
+]
+```
+Entity IDs are auto-incrementing integers (starting from 1). They are scoped to the registry and can be referenced in `transactions.user_paid` and `split_json`.
 
 ---
 
@@ -45,14 +58,14 @@ Single PostgreSQL database (Supabase-hosted) with UUID primary keys. All per-reg
 |--------|------|-------------|-------------|
 | id | UUID | PK, auto | Unique identifier |
 | registry_id | UUID | FK → registries, CASCADE | Target registry |
-| user_id | UUID | FK → system_users, CASCADE | Member |
+| user_id | UUID | FK → users, CASCADE | Member |
 | role | TEXT | NOT NULL, default 'member' | `'owner'` or `'member'` |
 | joined_at | TIMESTAMPTZ | NOT NULL, default now() | Join timestamp |
 
 **Unique**: `(registry_id, user_id)` — one membership per user per registry.
 
 **Roles**:
-- `owner`: Can create/revoke invitations. Assigned to the creator.
+- `owner`: Can create/revoke invitations, configure default split. Assigned to the creator.
 - `member`: Standard access, can view/create transactions.
 
 ---
@@ -62,27 +75,11 @@ Single PostgreSQL database (Supabase-hosted) with UUID primary keys. All per-reg
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | id | UUID | PK, auto | Unique identifier |
-| user_id | UUID | FK → system_users, CASCADE, UNIQUE | User |
+| user_id | UUID | FK → users, CASCADE, UNIQUE | User |
 | active_registry_id | UUID | FK → registries, SET NULL | Currently selected registry |
 | updated_at | TIMESTAMPTZ | NOT NULL, default now() | Last update timestamp |
 
 **Purpose**: Tracks which registry the user is currently viewing. Upserted on registry switch and invitation acceptance.
-
----
-
-### `users` — Per-Registry User Profiles
-
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | UUID | PK, auto | Unique identifier |
-| registry_id | UUID | FK → registries, CASCADE | Registry scope |
-| system_user_id | UUID | FK → system_users, CASCADE | Links to global identity |
-| email | TEXT | NOT NULL | Email (denormalized) |
-| name | TEXT | NOT NULL | Display name (denormalized) |
-| color | TEXT | NOT NULL, default '#093eaa' | Hex color for avatar |
-| created_at | TIMESTAMPTZ | NOT NULL, default now() | Creation timestamp |
-
-**Purpose**: Each registry has its own set of user profiles. Created when a user joins or creates a registry. The `system_user_id` links back to the global identity.
 
 ---
 
@@ -106,11 +103,11 @@ Single PostgreSQL database (Supabase-hosted) with UUID primary keys. All per-reg
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | id | UUID | PK, auto | Unique identifier |
-| registry_id | UUID | FK → registries, CASCADE | Registry scope |
+| registry_id | UUID | FK → registries, RESTRICT | Registry scope |
 | description | TEXT | NOT NULL | What the expense is for |
 | amount | NUMERIC(12,2) | NOT NULL | Current amount |
 | original_amount | NUMERIC(12,2) | NOT NULL | Full/original amount |
-| type | TEXT | NOT NULL, CHECK | `'unico'`, `'parcialidad'`, `'recurrente'`, `'pago'` |
+| type | TEXT | NOT NULL, CHECK | `'unico'`, `'parcialidad'`, `'recurrente'`, `'pago'`, `'ajuste'` |
 | exercise_id | UUID | FK → exercises, SET NULL | NULL = active, non-null = archived |
 | installment_current | INTEGER | nullable | Current installment number |
 | installment_total | INTEGER | nullable | Total installments |
@@ -118,11 +115,14 @@ Single PostgreSQL database (Supabase-hosted) with UUID primary keys. All per-reg
 | recurring_group_id | UUID | nullable | Groups recurring clones together |
 | notes | TEXT | NOT NULL, default '' | Optional notes |
 | split_json | JSONB | NOT NULL, default '{"splits":[]}' | Split data (see below) |
-| creator_id | UUID | FK → users, CASCADE | Who created it |
-| user_paid | UUID | FK → users, CASCADE | Who paid |
+| creator_id | UUID | FK → users, SET NULL | Who created it (nullable to preserve transactions if user deleted) |
+| user_paid | UUID | NOT NULL | Who paid (no FK — can be a user ID or entity ID from registries.entities_json) |
 | created_at | TIMESTAMPTZ | NOT NULL, default now() | Creation timestamp |
 
-**Indexes**: `registry_id`, `exercise_id`
+**Key design decisions**:
+- `user_paid` has **no FK constraint** — it can reference either `users.id` (real member) or an entity ID from `registries.entities_json`
+- `creator_id` uses **SET NULL** on delete — transactions are preserved if a user is deleted
+- `creator_id` is **nullable** for the same reason
 
 ---
 
@@ -133,7 +133,7 @@ Single PostgreSQL database (Supabase-hosted) with UUID primary keys. All per-reg
 | id | UUID | PK, auto | Unique identifier |
 | registry_id | UUID | FK → registries, CASCADE | Target registry |
 | code | TEXT | NOT NULL, UNIQUE | 8-char alphanumeric code |
-| created_by | UUID | FK → system_users | Creator |
+| created_by | UUID | FK → users | Creator |
 | expires_at | TIMESTAMPTZ | nullable | Expiration time |
 | max_uses | INTEGER | nullable | Maximum accepted uses |
 | current_uses | INTEGER | NOT NULL, default 0 | Current accepted count |
@@ -151,7 +151,7 @@ Single PostgreSQL database (Supabase-hosted) with UUID primary keys. All per-reg
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | id | UUID | PK, auto | Unique identifier |
-| actor_id | UUID | FK → system_users, nullable | Who performed the action |
+| actor_id | UUID | FK → users, SET NULL | Who performed the action |
 | action | TEXT | NOT NULL | Action name (e.g., `invite_created`) |
 | target_type | TEXT | NOT NULL | Target entity type |
 | target_id | UUID | nullable | Target entity ID |
@@ -159,6 +159,16 @@ Single PostgreSQL database (Supabase-hosted) with UUID primary keys. All per-reg
 | created_at | TIMESTAMPTZ | NOT NULL, default now() | Timestamp |
 
 **Tracked actions**: `invite_created`, `invite_used`, `invite_revoked`
+
+---
+
+### `allowed_emails` — Registration Allowlist
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | UUID | PK, auto | Unique identifier |
+| email | TEXT | NOT NULL, UNIQUE | Allowed email address |
+| created_at | TIMESTAMPTZ | NOT NULL, default now() | Creation timestamp |
 
 ---
 
@@ -183,7 +193,7 @@ The `split_json` JSONB field in transactions:
 }
 ```
 
-For `pago` (payment) type, split contains single recipient:
+For `pago` (payment) and `ajuste` (adjustment) types, split contains single recipient:
 ```json
 {
   "splits": [
@@ -196,16 +206,29 @@ For `pago` (payment) type, split contains single recipient:
 }
 ```
 
+The `userId` can be either a `users.id` (real member) or an entity ID from `registries.entities_json`.
+
 ---
 
 ## Entity Relationships
 
 ```
-system_users ──┬── registry_members ──── registries
-               │                              │
-               ├── user_preferences           ├── users (per-registry profiles)
-               │                              ├── transactions
-               │                              ├── exercises
-               │                              └── invitations
-               └── audit_log
+users ──┬── registry_members ──── registries
+        │                              │
+        ├── user_preferences           ├── transactions (via creator_id)
+        │                              ├── exercises
+        ├── invitations (created_by)   ├── invitations
+        │                              └── entities (stored in entities_json)
+        └── audit_log (actor_id)
 ```
+
+---
+
+## Migrations
+
+Migrations must be run in order:
+
+1. **`migrate_entities_phase1.sql`** — Adds `entities_json` to registries, extracts entities from `users` table, drops FK on `user_paid`, changes `creator_id` from CASCADE to SET NULL
+2. **Manual step** — Deduplicate `users` table (one row per real person per registry, keeping the ID referenced by the most transactions)
+3. **`migrate_entities_phase2.sql`** — Drops `is_entity`, `registry_id` columns from `users`
+4. **`migrate_merge_users.sql`** — Merges `system_users` into `users` table, remaps all FK references, drops `system_users` table

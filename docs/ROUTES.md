@@ -61,28 +61,29 @@ All under `routes/dashboard/`. Protected by shared layout.
 **File**: `routes/dashboard/_layout.tsx`
 
 Wraps all dashboard routes in a sidebar + content layout:
-- Renders `Sidebar` island with user info, registry list, invite button
-- Passes `ctx.state.registries`, `activeRegistry`, `isOwner` as props
-- Computes `userInitials` from system user name
+- Renders `Sidebar` island with user info, registry list, entities, default split, invite button
+- Passes `ctx.state.registries`, `activeRegistry`, `isOwner`, `entities`, `registryUsers`, `defaultSplit` as props
+- Computes `userInitials` from user name
+- Fetches transaction counts per registry for deletable registry detection
 
 ### `/dashboard` — Main Dashboard
 
 **File**: `routes/dashboard/index.tsx`
 
 **Handler (GET)**:
-1. Resolves `registryUserId` from `ctx.state.registryUsers` matching the current system user
+1. Gets `userId` directly from `ctx.state.user.id` (no mapping needed — single user ID)
 2. Fetches active transactions (`getActiveTransactions`)
 3. Calculates balance (`calculateBalance`) for the current user
 4. Fetches recurring/installment spawn candidates (`getSpawnCandidates`)
-5. Enriches each transaction with `paidByUser` (the `User` record for who paid)
-6. Computes pairwise balance breakdown (`calculatePairwiseBreakdown`) showing how much each user owes/is owed by each other user
+5. Enriches each transaction with `paidByUser` (looked up from `participants` map)
+6. Computes pairwise balance breakdown (`calculatePairwiseBreakdown`) using `participants` array
 
 **Page rendering**:
-- Header with `BalanceBreakdown` island (clickable total balance, popover for per-person breakdown when 3+ users)
+- Header with `BalanceBreakdown` island (clickable total balance, popover for per-person breakdown)
 - `RecurringSpawn` island (only visible if there are candidates)
 - History link → `/dashboard/history`
-- `CortarButton` island (only active when balance = $0 and transactions exist)
-- `TransactionList` island with enriched transactions, users, current user ID, and pairwise breakdown data
+- `CortarButton` island (only active when transactions exist)
+- `TransactionList` island with enriched transactions, participants, current user ID, default split, and entity IDs
 
 ### `/dashboard/history` — Exercise History
 
@@ -95,7 +96,7 @@ Wraps all dashboard routes in a sidebar + content layout:
 
 **Page rendering**:
 - Back button → `/dashboard`
-- `SearchBar` island (client-side filter — note: currently filters visually via CSS, the actual filtering is not implemented server-side)
+- `SearchBar` island (client-side filter — currently cosmetic only)
 - Exercises grouped by year with `ExerciseCard` components
 - Empty state if no exercises exist
 
@@ -106,11 +107,11 @@ Wraps all dashboard routes in a sidebar + content layout:
 **Handler (GET)**:
 1. Fetches exercise by ID (`getExerciseById`)
 2. Fetches all transactions in that exercise (`getTransactionsByExercise`)
-3. Enriches each with `paidByUser`
+3. Enriches each with `paidByUser` (looked up from `participants` map)
 
 **Page rendering**:
 - Exercise title: "Corte {month} {year}" in Spanish
-- Transaction count and total amount
+- Transaction count and personal total amount
 - List of `TransactionCard` components (server-rendered, not interactive)
 - "Corte no encontrado" fallback if exercise doesn't exist
 
@@ -139,11 +140,10 @@ Clears auth cookies and redirects to `/login`.
 
 **File**: `routes/api/registries/index.ts`
 
-Receives form data with `name`. Creates registry via `createRegistry(name, systemUserId)` which:
+Receives form data with `name`. Creates registry via `createRegistry(name, userId)` which:
 - Generates `db_name` from the name (lowercase, spaces→underscores)
 - Creates registry record
 - Adds current user as `owner` in `registry_members`
-- Creates user record in registry's `users` table
 - Sets as active registry
 - Redirects to `/dashboard`
 
@@ -152,6 +152,36 @@ Receives form data with `name`. Creates registry via `createRegistry(name, syste
 **File**: `routes/api/registries/switch.ts`
 
 Receives JSON `{ registryId }`. Validates user is a member of the target registry. Updates `user_preferences.active_registry_id`. Returns `{ ok: true }`.
+
+### `/api/registries/[id]` — Rename/Delete Registry
+
+**File**: `routes/api/registries/[id].ts`
+
+**PATCH**: Renames registry. Returns updated registry JSON.
+
+**DELETE**: Deletes registry only if it has zero transactions. Redirects remaining registries.
+
+### `/api/registries/default-split` — Configure Default Split (POST/DELETE)
+
+**File**: `routes/api/registries/default-split.ts`
+
+**POST**: Owner-only. Receives JSON `{ splits: [{ userId, percentage }], registryId }`. Validates that all userIds are members of the registry. Saves to `registries.default_split_json`.
+
+**DELETE**: Owner-only. Clears default split for the registry.
+
+### `/api/entities` — Entity CRUD
+
+**File**: `routes/api/entities/index.ts`
+
+**GET**: Returns all entities for a registry (query param `registryId`).
+
+**POST**: Creates a new entity in `registries.entities_json`. Auto-increments integer ID.
+
+**File**: `routes/api/entities/[id].ts`
+
+**PUT**: Updates entity name/color.
+
+**DELETE**: Deletes entity only if it has no active transactions (checks `user_paid` and `split_json`).
 
 ### `/api/transactions` — Create Transaction (POST)
 
@@ -183,12 +213,10 @@ Receives JSON `{ id }`. Sets `recurring_disabled = true` on the transaction. Use
 
 Creates an exercise (cut) for the active registry:
 1. Checks for active transactions
-2. If any exist, calls `createExercise()` which:
-   - Calculates date range (earliest transaction → now)
-   - Sums total amounts
-   - Creates exercise record
-   - Assigns all active transactions to the exercise
-3. Redirects to `/dashboard`
+2. Computes pairwise debts using `calculateFullPairwiseBalances()` with `participants`
+3. Creates exercise record, archives all active transactions
+4. Creates `ajuste` transactions for any outstanding debts to carry into next period
+5. Redirects to `/dashboard`
 
 ### `/api/exercises/carry-forward` — Carry Forward Recurring (POST)
 
@@ -211,9 +239,9 @@ Owner-only. Receives JSON `{ registryId, expiresAt?, maxUses? }`. Generates 8-ch
 
 Receives JSON `{ code }`. Validates invitation (not expired, not revoked, under max uses). If user is already a member, just sets active registry. Otherwise:
 - Adds user to `registry_members` as `member`
-- Creates user record in registry's `users` table
 - Increments invitation's `current_uses`
 - Sets as active registry
+- Invalidates default split if member count changed
 - Logs to audit log
 
 Returns `{ registryId }` or error.

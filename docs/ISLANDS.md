@@ -24,43 +24,46 @@ Client-side authentication form using Supabase JS SDK directly in the browser.
 
 ## `CortarButton` — `islands/CortarButton.tsx`
 
-**Props**: `{ balance: number, hasTransactions: boolean }`
+**Props**: `{ hasTransactions: boolean }`
 
 The "Cortar" (cut/settle) button in the dashboard header.
 
 **Business Logic**:
-- Button is **only enabled** when `balance === 0` AND `hasTransactions === true`
-- This enforces that all debts must be settled (balance zeroed via payments) before cutting
+- Button is **only enabled** when `hasTransactions === true`
 - On click, POSTs to `/api/exercises` to create the exercise, then reloads
 
-**Disabled state**: Grayed out, `cursor-not-allowed`, when conditions aren't met.
+**Disabled state**: Grayed out, `cursor-not-allowed`, when no transactions exist.
 
 ---
 
-## `ExpenseModal` — `islands/ExpenseModal.tsx`
+## `EntityManager` — `islands/EntityManager.tsx`
 
-**Props**: `{ users: User[], currentUserId: string, registryId: string }`
+**Props**: `{ registryId: string, entities: Entity[], onUpdate: () => void }`
 
-Modal for creating **new** expenses only (no editing capability). Rendered as a floating action button (FAB) that opens a modal.
+Modal for managing third-party entities (terceros). Button with users icon.
 
-**State Signals**:
-- `amount`, `description`, `notes` — Form fields
-- `expenseType` — `"unico" | "parcialidad" | "recurrente"`
-- `installmentCurrent`, `installmentTotal` — Installment tracking
-- `splitMode` — `"auto" | "percentage" | "fixed"`
-- `userPaid` — Which user paid (radio selection)
-- `percentages`, `fixedAmounts` — Per-user split values
+**Behavior**:
+- On create: POSTs to `/api/entities` with `{ name, color, registryId }`
+- On edit: PUTs to `/api/entities/[id]` with `{ name, color }`
+- On delete: DELETEs `/api/entities/[id]` (fails with 409 if entity has active transactions)
+- Shows color picker (8 preset colors)
+- Entities display with avatar initials and "Tercero" badge
+- Calls `onUpdate` callback after any change to refresh parent state
 
-**Split Calculation**:
-- **Auto**: Equal division with remainder assigned to first user
-- **Percentage**: User-defined percentages, amounts calculated as `total * pct / 100`
-- **Fixed**: User-defined amounts, percentages derived as `amount / total * 100`
+---
 
-**Auto-complement** (2 users only): Editing one field auto-fills the complement (100% - X or total - $X).
+## `DefaultSplitConfig` — `islands/DefaultSplitConfig.tsx`
 
-**Input Sanitization**: `sanitizeDecimal()` strips non-numeric chars, allows single decimal point, max 2 decimal places.
+**Props**: `{ registryId: string, users: User[], defaultSplit: DefaultSplit | null, onUpdate: () => void }`
 
-**Submit**: Builds `TransactionSplit` JSON, POSTs as FormData to `/api/transactions`, reloads page.
+Owner-only modal for configuring default split percentages.
+
+**Behavior**:
+- Shows all participants with percentage inputs
+- POSTs to `/api/registries/default-split` with `{ splits, registryId }`
+- DELETEs to `/api/registries/default-split` to clear
+- Auto-complement for 2 users (editing one fills the other to 100%)
+- Calls `onUpdate` callback after save/clear
 
 ---
 
@@ -133,9 +136,9 @@ No props. Search input for the exercise history page.
 
 ## `Sidebar` — `islands/Sidebar.tsx`
 
-**Props**: `{ registries: Registry[], activeRegistryId: string, userName: string, userInitials: string, isOwner: boolean }`
+**Props**: `{ registries: Registry[], activeRegistryId: string, userName: string, userInitials: string, isOwner: boolean, entities: Entity[], registryUsers: User[], defaultSplit: DefaultSplit | null, deletableRegistryIds: Set<string> }`
 
-Collapsible sidebar with user info, registry list, invite button, and actions.
+Collapsible sidebar with user info, registry list, entity manager, default split config, invite button, and actions.
 
 **Desktop behavior**:
 - Collapsible via chevron button (full width → icon-only)
@@ -150,7 +153,10 @@ Collapsible sidebar with user info, registry list, invite button, and actions.
 
 **Owner-only features**:
 - "Invitar" button opens inline invite modal
-- Generates invite code via `/api/invitations`, displays with copy-to-clipboard
+- "Terceros" button opens `EntityManager` island
+- "Default Split" button opens `DefaultSplitConfig` island
+- Rename registry (inline edit)
+- Delete empty registries
 
 **Actions**:
 - "Nuevo Registro" — links to `/registries/new`
@@ -160,28 +166,28 @@ Collapsible sidebar with user info, registry list, invite button, and actions.
 
 ## `BalanceBreakdown` — `islands/BalanceBreakdown.tsx`
 
-**Props**: `{ balance: number, entries: BalanceBreakdownEntry[], usersCount: number }`
+**Props**: `{ balance: Signal<number>, entries: Signal<BalanceBreakdownEntry[]>, users: Signal<Participant[]> }`
 
-Replaces the static balance display in the dashboard header with an interactive popover that shows pairwise debt breakdown for multi-user registries.
+Interactive popover in the dashboard header showing pairwise debt breakdown for multi-user registries.
 
 **Behavior**:
 - Always renders the total balance amount (green if positive, red if negative)
-- When `usersCount > 2`: the balance becomes a clickable button with a chevron indicator
+- When more than 2 participants: the balance becomes a clickable button with a chevron indicator
 - On click, opens a popover below the balance showing per-person breakdown:
   - **"Te deben"** section (green): lists users who owe the current user, with amounts
   - **"Debes"** section (red): lists users the current user owes, with amounts
   - Each entry shows the user's avatar initials (colored with `userColor`), name, and signed amount
   - Empty state: checkmark icon + "Todos están balanceados"
 - Click outside the popover to dismiss (fixed backdrop overlay)
-- When `usersCount <= 2`: behaves like the old static display (no popover, `cursor-default`)
+- When 2 or fewer participants: behaves like the old static display (no popover, `cursor-default`)
 
-**Data source**: `calculatePairwiseBreakdown()` from `lib/store.ts`, computed server-side in the dashboard handler.
+**Data source**: `calculatePairwiseBreakdown()` from `lib/calculations.ts`, computed server-side in the dashboard handler.
 
 ---
 
 ## `TransactionList` — `islands/TransactionList.tsx`
 
-**Props**: `{ transactions: EnrichedTransaction[], users: User[], currentUserId: string, registryId: string, balanceBreakdown: BalanceBreakdownEntry[] }`
+**Props**: `{ transactions: Signal<EnrichedTransaction[]>, users: Signal<Participant[]>, currentUserId: Signal<string>, registryId: Signal<string>, balance: Signal<number>, balanceEntries: Signal<BalanceBreakdownEntry[]>, defaultSplit: Signal<DefaultSplit | null>, entityIds: Set<string> }`
 
 The main transaction list on the dashboard. Handles both listing and CRUD for transactions.
 
@@ -189,7 +195,8 @@ The main transaction list on the dashboard. Handles both listing and CRUD for tr
 - Lists all active transactions with per-user balance display
 - FAB button opens modal for **new** transaction
 - Clicking a transaction card opens modal for **editing** that transaction
-- Supports all 4 transaction types: unico, parcialidad, recurrente, **pago**
+- Supports all transaction types: unico, parcialidad, recurrente, **pago**, **ajuste**
+- Entity participants show a "tercero" badge (identified via `entityIds` prop)
 
 **Pago (Payment) Mode**:
 - Different UI: shows "Pagó" and "Recibió" radio columns instead of split table
@@ -204,6 +211,10 @@ The main transaction list on the dashboard. Handles both listing and CRUD for tr
   - Self row shows no indicator (can't owe yourself)
   - Helps users decide who to pay and how much, without leaving the modal
 
+**Default Split**:
+- "Default" button pre-fills percentages from `defaultSplit` prop
+- Falls back to equal split if no default configured
+
 **Edit Mode**:
 - Pre-populates all fields from the transaction
 - Infers `splitMode` from the saved split: auto (equal percentages), percentage (custom %), or fixed (custom amounts that sum to total)
@@ -211,7 +222,7 @@ The main transaction list on the dashboard. Handles both listing and CRUD for tr
 
 **Balance Display per Transaction**:
 - For expenses: shows personal balance (green if positive, red if negative) + "de $total" subtitle
-- For payments: shows indigo-colored amount with contextual label ("Le pagaste a X" / "Te pagó X")
+- For payments/adjustments: shows indigo/amber-colored amount with contextual label ("Le pagaste a X" / "Te pagó X")
 - Installments show the per-installment portion (divided by `installmentTotal`)
 
 **Submit**:
