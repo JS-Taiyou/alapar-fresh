@@ -108,8 +108,12 @@ export default function TransactionCard(props: TransactionCardProps) {
           {paidByUser && (
             <>
               {" "}&bull;{" "}
-              <span class={isPaidByMe ? "text-primary" : "text-slate-400"}>
-                {isPaidByMe ? "T\u00fa pagaste" : paidByUser.name}
+              <span class={`text-xs px-1.5 py-0.5 rounded ${
+                isPaidByMe
+                  ? "bg-emerald-500/20 text-emerald-400"
+                  : "bg-slate-300 text-slate-800 font-bold"
+              }`}>
+                {isPaidByMe ? "Tú pagaste" : paidByUser.name}
               </span>
             </>
           )}
@@ -117,7 +121,7 @@ export default function TransactionCard(props: TransactionCardProps) {
             tx.installmentTotal && (
             <>
               {" "}&bull;{" "}
-              <span class="text-primary">
+              <span class="text-xs font-semibold px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-400">
                 {tx.installmentCurrent}/{tx.installmentTotal}
               </span>
             </>

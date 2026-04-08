@@ -182,7 +182,11 @@ function TransactionCardClickable(props: {
           {tx.paidByUser && (
             <>
               {" "}&bull;{" "}
-              <span class={isPaidByMe ? "text-primary" : "text-slate-400"}>
+              <span class={`text-xs px-1.5 py-0.5 rounded ${
+                isPaidByMe
+                  ? "bg-emerald-500/20 text-emerald-400"
+                  : "bg-slate-300 text-slate-800 font-bold"
+              }`}>
                 {isPaidByMe ? "Tú pagaste" : tx.paidByUser.name}
               </span>
             </>
@@ -191,7 +195,7 @@ function TransactionCardClickable(props: {
             tx.installmentTotal && (
             <>
               {" "}&bull;{" "}
-              <span class="text-primary">
+              <span class="text-xs font-semibold px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-400">
                 {tx.installmentCurrent}/{tx.installmentTotal}
               </span>
             </>
@@ -280,6 +284,7 @@ export default function TransactionList(props: TransactionListProps) {
         JSON.stringify({
           percentages: percentages.value,
           userPaid: userPaid.value,
+          savedAt: new Date().toISOString(),
         }),
       );
     } catch { /* ignore storage errors */ }
@@ -293,7 +298,18 @@ export default function TransactionList(props: TransactionListProps) {
     try {
       const raw = localStorage.getItem(key);
       if (!raw) return null;
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (!parsed.savedAt) {
+        localStorage.removeItem(key);
+        return null;
+      }
+      const savedDate = new Date(parsed.savedAt);
+      const today = new Date();
+      if (savedDate.toDateString() !== today.toDateString()) {
+        localStorage.removeItem(key);
+        return null;
+      }
+      return parsed;
     } catch {
       return null;
     }
@@ -625,11 +641,11 @@ export default function TransactionList(props: TransactionListProps) {
     return list;
   });
 
-  const splits = getSplits();
-  const totalSplitAmount = splits.reduce((s, sp) => s + sp.amount, 0);
+  const splits = useComputed(() => getSplits());
+  const totalSplitAmount = splits.value.reduce((s, sp) => s + sp.amount, 0);
   const totalPct = splitMode.value === "percentage"
     ? totalPercentage()
-    : splits.reduce((s, sp) => s + sp.percentage, 0);
+    : splits.value.reduce((s, sp) => s + sp.percentage, 0);
 
   const isPago = expenseType.value === "pago";
   const modalTitle = isPago
@@ -1390,7 +1406,7 @@ export default function TransactionList(props: TransactionListProps) {
                         </thead>
                         <tbody class="divide-y divide-border-custom">
                           {users.value.map((user) => {
-                            const split = splits.find((s) =>
+                            const split = splits.value.find((s) =>
                               s.userId === user.id
                             );
                             const initials = user.name.split(" ").map((n) =>
@@ -1533,7 +1549,7 @@ export default function TransactionList(props: TransactionListProps) {
 
                       <div class="md:hidden divide-y divide-border-custom">
                         {users.value.map((user) => {
-                          const split = splits.find((s) =>
+                          const split = splits.value.find((s) =>
                             s.userId === user.id
                           );
                           const initials = user.name.split(" ").map((n) => n[0])
