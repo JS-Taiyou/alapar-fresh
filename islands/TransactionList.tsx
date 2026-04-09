@@ -755,102 +755,113 @@ export default function TransactionList(props: TransactionListProps) {
       <main class="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4 relative">
         <div class="flex justify-between items-center mb-2">
           <h2 class="text-lg font-semibold text-gray-200">
-            Ejercicio actual
+            {filterUserId.value
+              ? `Ejercicio actual (pagados por ${
+                users.value.find((u) => u.id === filterUserId.value)?.name ??
+                  ""
+              })`
+              : "Ejercicio actual"}
           </h2>
         </div>
 
-        <div class="space-y-3">
-          <div class="flex gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={() => filterUserId.value = null}
-              class={`text-xs font-semibold px-3 py-1.5 rounded transition-colors ${
-                filterUserId.value === null
-                  ? "bg-primary text-white shadow-sm"
-                  : "text-slate-400 hover:text-white hover:bg-white/5 border border-white/10"
-              }`}
-            >
-              Todos
-            </button>
-            {users.value.map((user) => {
-              const initials = user.name.split(" ").map((n) => n[0]).join("")
-                .substring(0, 2).toUpperCase();
-              return (
+        {transactions.value.length > 1 && (
+          <div class="space-y-3">
+            {new Set(transactions.value.map((tx) => tx.userPaid)).size > 1 && (
+              <div class="flex gap-2 flex-wrap">
                 <button
-                  key={user.id}
                   type="button"
-                  onClick={() => {
-                    filterUserId.value = filterUserId.value === user.id
-                      ? null
-                      : user.id;
-                  }}
-                  class={`text-xs font-semibold px-3 py-1.5 rounded transition-colors flex items-center gap-1.5 ${
-                    filterUserId.value === user.id
-                      ? "text-white shadow-sm"
+                  onClick={() => filterUserId.value = null}
+                  class={`text-xs font-semibold px-3 py-1.5 rounded transition-colors ${
+                    filterUserId.value === null
+                      ? "bg-primary text-white shadow-sm"
                       : "text-slate-400 hover:text-white hover:bg-white/5 border border-white/10"
                   }`}
-                  style={filterUserId.value === user.id
-                    ? `background-color: ${user.color}`
-                    : ""}
                 >
-                  <div
-                    class="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold"
-                    style={`background-color: ${user.color}30; color: ${user.color}`}
-                  >
-                    {initials}
-                  </div>
-                  {user.name.split(" ")[0]}
+                  Todos
                 </button>
-              );
-            })}
-          </div>
-          <div class="relative">
-            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
-              <svg
-                class="h-5 w-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                />
-              </svg>
-            </span>
-            <input
-              type="text"
-              placeholder="Buscar transacción..."
-              value={searchQuery.value}
-              onInput={(e) =>
-                searchQuery.value = (e.target as HTMLInputElement).value}
-              class="w-full bg-slate-800 border-slate-700 rounded-custom pl-10 text-white placeholder-slate-500 focus:ring-primary focus:border-primary py-2.5"
-            />
-            {searchQuery.value && (
-              <button
-                type="button"
-                onClick={() => searchQuery.value = ""}
-                class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-white"
-              >
+                {users.value.map((user) => {
+                  const initials = user.name.split(" ").map((n) => n[0]).join(
+                    "",
+                  )
+                    .substring(0, 2).toUpperCase();
+                  return (
+                    <button
+                      key={user.id}
+                      type="button"
+                      onClick={() => {
+                        filterUserId.value = filterUserId.value === user.id
+                          ? null
+                          : user.id;
+                      }}
+                      class={`text-xs font-semibold px-3 py-1.5 rounded transition-colors flex items-center gap-1.5 ${
+                        filterUserId.value === user.id
+                          ? "text-white shadow-sm"
+                          : "text-slate-400 hover:text-white hover:bg-white/5 border border-white/10"
+                      }`}
+                      style={filterUserId.value === user.id
+                        ? `background-color: ${user.color}`
+                        : ""}
+                    >
+                      <div
+                        class="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold"
+                        style={`background-color: ${user.color}30; color: ${user.color}`}
+                      >
+                        {initials}
+                      </div>
+                      {user.name.split(" ")[0]}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
                 <svg
-                  class="w-4 h-4"
+                  class="h-5 w-5"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
                 >
                   <path
-                    d="M6 18L18 6M6 6l12 12"
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
                     stroke-linecap="round"
                     stroke-linejoin="round"
                     stroke-width="2"
                   />
                 </svg>
-              </button>
-            )}
+              </span>
+              <input
+                type="text"
+                placeholder="Buscar transacción..."
+                value={searchQuery.value}
+                onInput={(e) =>
+                  searchQuery.value = (e.target as HTMLInputElement).value}
+                class="w-full bg-slate-800 border-slate-700 rounded-custom pl-10 text-white placeholder-slate-500 focus:ring-primary focus:border-primary py-2.5"
+              />
+              {searchQuery.value && (
+                <button
+                  type="button"
+                  onClick={() => searchQuery.value = ""}
+                  class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-white"
+                >
+                  <svg
+                    class="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      d="M6 18L18 6M6 6l12 12"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                    />
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {transactions.value.length === 0
           ? (
@@ -874,7 +885,7 @@ export default function TransactionList(props: TransactionListProps) {
                 Sin transacciones
               </h3>
               <p class="text-slate-500 mt-2">
-                Agrega un gasto usando el botón +
+                Agrega un gasto o un pago
               </p>
             </div>
           )
