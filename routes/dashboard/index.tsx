@@ -115,42 +115,45 @@ export default define.page(function DashboardIndex(ctx) {
   );
 
   const entityIds = new Set(ctx.state.entities.map((e) => e.id));
+  const hasMultipleUsers = ctx.state.participants.length > 1;
 
   return (
     <>
       <Head>
         <title>A la par - Dashboard</title>
       </Head>
-      <header class="p-4 sm:p-6 bg-[#0a0a0a] border-b border-white/10 flex justify-between items-center gap-2">
-        <BalanceBreakdown
-          balance={$balance}
-          entries={$balanceEntries}
-          users={$users}
-        />
-        <div class="flex items-center gap-2 sm:gap-4 shrink-0">
-          <RecurringSpawn candidates={data.spawnCandidates} />
-          <a
-            href="/dashboard/history"
-            class="p-3 bg-card hover:bg-white/5 transition-colors rounded-custom text-gray-300"
-            title="Histórico"
-          >
-            <svg
-              class="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+      {hasMultipleUsers && (
+        <header class="p-4 sm:p-6 bg-[#0a0a0a] border-b border-white/10 flex justify-between items-center gap-2">
+          <BalanceBreakdown
+            balance={$balance}
+            entries={$balanceEntries}
+            users={$users}
+          />
+          <div class="flex items-center gap-2 sm:gap-4 shrink-0">
+            <RecurringSpawn candidates={data.spawnCandidates} />
+            <a
+              href="/dashboard/history"
+              class="p-3 bg-card hover:bg-white/5 transition-colors rounded-custom text-gray-300"
+              title="Histórico"
             >
-              <path
-                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-              />
-            </svg>
-          </a>
-          <CortarButton hasTransactions={hasTransactions} />
-        </div>
-      </header>
+              <svg
+                class="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                />
+              </svg>
+            </a>
+            <CortarButton hasTransactions={hasTransactions} />
+          </div>
+        </header>
+      )}
       <TransactionList
         transactions={$transactions}
         users={$users}

@@ -234,6 +234,52 @@ export default function TransactionList(props: TransactionListProps) {
   const defaultSplit = props.defaultSplit;
   const balance = props.balance;
   const balanceEntries = props.balanceEntries;
+  const showTerceroPopover = useSignal(false);
+
+  if (users.value.length <= 1) {
+    return (
+      <main class="flex-1 overflow-y-auto custom-scrollbar p-6 flex items-center justify-center">
+        <div class="text-center max-w-sm space-y-6">
+          <div class="bg-slate-800 p-6 rounded-full mx-auto w-fit">
+            <svg
+              class="h-16 w-16 text-slate-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="1.5"
+              />
+            </svg>
+          </div>
+          <h3 class="text-2xl font-bold text-white">
+            Está muy solo aquí
+          </h3>
+          <p class="text-slate-400 text-base leading-relaxed">
+            Asegúrate de invitar otros usuarios o crear un{" "}
+            <span
+              class="font-bold underline cursor-pointer text-orange-400 relative"
+              onClick={() =>
+                showTerceroPopover.value = !showTerceroPopover.value}
+              onMouseEnter={() => showTerceroPopover.value = true}
+              onMouseLeave={() => showTerceroPopover.value = false}
+            >
+              tercero
+              {showTerceroPopover.value && (
+                <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-slate-800 border border-white/10 text-white text-xs font-normal no-underline rounded-custom px-3 py-2 shadow-xl z-50">
+                  Un tercero es una entidad diferente de ti pero que no se va a
+                  registrar como usuario, por ejemplo: un banco!
+                </span>
+              )}
+            </span>
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   function recalculate() {
     balance.value = calculateBalance(transactions.value, currentUserId.value);
