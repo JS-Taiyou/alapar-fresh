@@ -404,6 +404,12 @@ export default function TransactionList(props: TransactionListProps) {
     isOpen.value = true;
   }
 
+  function openNewPago() {
+    resetForm();
+    expenseType.value = "pago";
+    isOpen.value = true;
+  }
+
   function openEdit(tx: EnrichedTransaction) {
     editingId.value = tx.id;
     amount.value = tx.originalAmount;
@@ -899,24 +905,54 @@ export default function TransactionList(props: TransactionListProps) {
         <div class="h-24" />
       </main>
 
-      <button
-        onClick={openNew}
-        class="fixed bottom-8 right-8 w-16 h-16 bg-primary text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all z-50"
-      >
-        <svg
-          class="w-8 h-8"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            d="M12 4v16m8-8H4"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2.5"
-          />
-        </svg>
-      </button>
+      <div class="fixed bottom-8 right-8 z-50 flex flex-col gap-3">
+        <div class="group relative">
+          <span class="absolute right-full top-1/2 -translate-y-1/2 mr-3 whitespace-nowrap bg-slate-800 text-white text-sm px-3 py-1.5 rounded-custom shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+            Agregar pago
+          </span>
+          <button
+            onClick={openNewPago}
+            class="w-16 h-16 bg-green-700 text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all"
+          >
+            <svg
+              class="w-8 h-8"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+              />
+            </svg>
+          </button>
+        </div>
+        <div class="group relative">
+          <span class="absolute right-full top-1/2 -translate-y-1/2 mr-3 whitespace-nowrap bg-slate-800 text-white text-sm px-3 py-1.5 rounded-custom shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+            Agregar gasto
+          </span>
+          <button
+            onClick={openNew}
+            class="w-16 h-16 bg-yellow-500 text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all"
+          >
+            <svg
+              class="w-8 h-8"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+              />
+            </svg>
+          </button>
+        </div>
+      </div>
 
       {isOpen.value && (
         <div
