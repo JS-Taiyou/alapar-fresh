@@ -27,6 +27,55 @@ app.use(define.middleware(async (ctx) => {
 
   ctx.state.supabaseAuthId = authUser.id;
 
+  const path = new URL(ctx.req.url).pathname;
+  const needsFullState = path.startsWith("/dashboard") ||
+    path.startsWith("/api/registries") ||
+    path.startsWith("/api/transactions") ||
+    path.startsWith("/api/entities") ||
+    path.startsWith("/api/invitations") ||
+    path.startsWith("/api/exercises") ||
+    path.startsWith("/api/default-split");
+
+  if (!needsFullState) {
+    const userResult = await query(
+      `SELECT u.*, ae.id IS NOT NULL as is_email_allowed
+       FROM users u
+       LEFT JOIN allowed_emails ae ON ae.email = u.email
+       WHERE u.supabase_auth_id = $1`,
+      [authUser.id],
+    );
+    if (userResult.rows.length === 0) {
+      const user = await createUserFromSupabase(
+        authUser.id,
+        authUser.email,
+        authUser.name ?? authUser.email.split("@")[0],
+      );
+      await ensureUserPreferences(user.id);
+      ctx.state.user = user;
+      return await ctx.next();
+    }
+    const row = userResult.rows[0];
+    if (!row.is_email_allowed) {
+      return ctx.redirect("/login?error=unauthorized");
+    }
+    if (authUser.name && row.name !== authUser.name) {
+      await query(
+        "UPDATE users SET name = $1 WHERE supabase_auth_id = $2",
+        [authUser.name, authUser.id],
+      );
+      row.name = authUser.name;
+    }
+    ctx.state.user = {
+      id: row.id as string,
+      email: row.email as string,
+      name: row.name as string,
+      color: row.color as string,
+      supabaseAuthId: row.supabase_auth_id as string,
+      createdAt: row.created_at as Date,
+    };
+    return await ctx.next();
+  }
+
   const state = await resolveUserState(authUser.id);
 
   if (!state.user) {
