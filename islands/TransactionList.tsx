@@ -295,6 +295,7 @@ export default function TransactionList(props: TransactionListProps) {
   const submitting = useSignal(false);
   const searchQuery = useSignal("");
   const filterUserId = useSignal<string | null>(null);
+  const modalMode = useSignal<"expense" | "payment">("expense");
   const amount = useSignal(0);
   const description = useSignal("");
   const notes = useSignal("");
@@ -322,7 +323,7 @@ export default function TransactionList(props: TransactionListProps) {
   }
 
   function saveLastSplitConfig() {
-    if (expenseType.value === "pago" || splitMode.value !== "percentage") {
+    if (modalMode.value === "payment" || splitMode.value !== "percentage") {
       return;
     }
     const key = `lastSplit_${registryId.value}`;
@@ -401,12 +402,13 @@ export default function TransactionList(props: TransactionListProps) {
 
   function openNew() {
     resetForm();
+    modalMode.value = "expense";
     isOpen.value = true;
   }
 
   function openNewPago() {
     resetForm();
-    expenseType.value = "pago";
+    modalMode.value = "payment";
     isOpen.value = true;
   }
 
@@ -415,7 +417,8 @@ export default function TransactionList(props: TransactionListProps) {
     amount.value = tx.originalAmount;
     description.value = tx.description;
     notes.value = tx.notes || "";
-    expenseType.value = tx.type;
+    modalMode.value = tx.type === "pago" ? "payment" : "expense";
+    if (tx.type !== "pago") expenseType.value = tx.type;
     installmentCurrent.value = tx.installmentCurrent ?? 1;
     installmentTotal.value = tx.installmentTotal ?? 12;
     installmentInputMode.value = "total";
@@ -491,7 +494,7 @@ export default function TransactionList(props: TransactionListProps) {
 
     if (
       editingId.value &&
-      expenseType.value !== "pago" &&
+      modalMode.value !== "payment" &&
       Math.abs(newVal - amount.value) > 0.001
     ) {
       const currentSplits = getSplits();
@@ -599,7 +602,7 @@ export default function TransactionList(props: TransactionListProps) {
 
     let splitJson: TransactionSplit;
 
-    if (expenseType.value === "pago") {
+    if (modalMode.value === "payment") {
       splitJson = {
         splits: [{
           userId: paymentRecipient.value,
@@ -622,7 +625,7 @@ export default function TransactionList(props: TransactionListProps) {
       description: description.value || "Pago",
       amount: amount.value,
       originalAmount: Math.abs(amount.value),
-      type: expenseType.value,
+      type: modalMode.value === "payment" ? "pago" : expenseType.value,
       exerciseId: null,
       installmentCurrent: expenseType.value === "parcialidad"
         ? installmentCurrent.value
@@ -735,7 +738,7 @@ export default function TransactionList(props: TransactionListProps) {
     ? totalPercentage()
     : splits.value.reduce((s, sp) => s + sp.percentage, 0);
 
-  const isPago = expenseType.value === "pago";
+  const isPago = modalMode.value === "payment";
   const modalTitle = isPago
     ? (isEditing.value ? "Editar Pago" : "Nuevo Pago")
     : (isEditing.value ? "Editar Gasto" : "Nuevo Gasto");
@@ -1071,40 +1074,37 @@ export default function TransactionList(props: TransactionListProps) {
                     </p>
                   )}
                 </div>
-                <div class="space-y-2">
-                  <label class="block text-sm font-medium text-slate-300">
-                    Tipo
-                  </label>
-                  <div class="flex gap-1 p-1 bg-background border border-border-custom rounded-custom">
-                    {([
-                      "unico",
-                      "parcialidad",
-                      "recurrente",
-                      "pago",
-                    ] as TransactionType[]).map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => expenseType.value = t}
-                        class={`flex-1 py-2 text-sm font-medium rounded-custom transition-colors ${
-                          expenseType.value === t
-                            ? t === "pago"
-                              ? "bg-indigo-500 text-white shadow-sm"
-                              : "bg-primary text-white shadow-sm"
-                            : "text-slate-400 hover:text-white"
-                        }`}
-                      >
-                        {t === "unico"
-                          ? "Único"
-                          : t === "parcialidad"
-                          ? "Parcialidad"
-                          : t === "recurrente"
-                          ? "Recurrente"
-                          : "Pago"}
-                      </button>
-                    ))}
+                {!isPago && (
+                  <div class="space-y-2">
+                    <label class="block text-sm font-medium text-slate-300">
+                      Tipo
+                    </label>
+                    <div class="flex gap-1 p-1 bg-background border border-border-custom rounded-custom">
+                      {([
+                        "unico",
+                        "parcialidad",
+                        "recurrente",
+                      ] as TransactionType[]).map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => expenseType.value = t}
+                          class={`flex-1 py-2 text-sm font-medium rounded-custom transition-colors ${
+                            expenseType.value === t
+                              ? "bg-primary text-white shadow-sm"
+                              : "text-slate-400 hover:text-white"
+                          }`}
+                        >
+                          {t === "unico"
+                            ? "Único"
+                            : t === "parcialidad"
+                            ? "Parcialidad"
+                            : "Recurrente"}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
               {expenseType.value === "parcialidad" && (
