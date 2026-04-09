@@ -182,11 +182,13 @@ function TransactionCardClickable(props: {
           {tx.paidByUser && (
             <>
               {" "}&bull;{" "}
-              <span class={`text-xs px-1.5 py-0.5 rounded ${
-                isPaidByMe
-                  ? "bg-emerald-500/20 text-emerald-400"
-                  : "bg-slate-300 text-slate-800 font-bold"
-              }`}>
+              <span
+                class={`text-xs px-1.5 py-0.5 rounded ${
+                  isPaidByMe
+                    ? "bg-emerald-500/20 text-emerald-400"
+                    : "bg-slate-300 text-slate-800 font-bold"
+                }`}
+              >
                 {isPaidByMe ? "Tú pagaste" : tx.paidByUser.name}
               </span>
             </>
@@ -626,9 +628,7 @@ export default function TransactionList(props: TransactionListProps) {
             u.id === updated.userPaid
           ) ?? null;
           transactions.value = transactions.value.map((t) =>
-            t.id === wasEditing
-              ? { ...updated, paidByUser: serverPaidBy }
-              : t
+            t.id === wasEditing ? { ...updated, paidByUser: serverPaidBy } : t
           );
           recalculate();
         }
@@ -643,9 +643,7 @@ export default function TransactionList(props: TransactionListProps) {
             u.id === created.userPaid
           ) ?? null;
           transactions.value = transactions.value.map((t) =>
-            t.id === optimisticId
-              ? { ...created, paidByUser: serverPaidBy }
-              : t
+            t.id === optimisticId ? { ...created, paidByUser: serverPaidBy } : t
           );
           recalculate();
         }
@@ -752,32 +750,34 @@ export default function TransactionList(props: TransactionListProps) {
             })}
           </div>
           <div class="relative">
-            <svg
-              class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-              />
-            </svg>
+            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
+              <svg
+                class="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                />
+              </svg>
+            </span>
             <input
               type="text"
               placeholder="Buscar transacción..."
               value={searchQuery.value}
               onInput={(e) =>
                 searchQuery.value = (e.target as HTMLInputElement).value}
-              class="w-full pl-9 pr-4 py-2 bg-background border border-border-custom rounded-custom text-sm text-white placeholder-slate-500 focus:ring-primary focus:border-primary"
+              class="w-full bg-slate-800 border-slate-700 rounded-custom pl-10 text-white placeholder-slate-500 focus:ring-primary focus:border-primary py-2.5"
             />
             {searchQuery.value && (
               <button
                 type="button"
                 onClick={() => searchQuery.value = ""}
-                class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+                class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-white"
               >
                 <svg
                   class="w-4 h-4"
@@ -943,8 +943,8 @@ export default function TransactionList(props: TransactionListProps) {
                       ? "Monto del Pago"
                       : expenseType.value === "parcialidad" &&
                           installmentInputMode.value === "installment"
-                        ? "Monto por Parcialidad"
-                        : "Monto Total"}
+                      ? "Monto por Parcialidad"
+                      : "Monto Total"}
                   </label>
                   <div class="relative">
                     <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
@@ -964,10 +964,9 @@ export default function TransactionList(props: TransactionListProps) {
                           expenseType.value === "parcialidad" &&
                           installmentInputMode.value === "installment"
                         ) {
-                          const sanitized =
-                            handleInstallmentAmountChange(
-                              (e.target as HTMLInputElement).value,
-                            );
+                          const sanitized = handleInstallmentAmountChange(
+                            (e.target as HTMLInputElement).value,
+                          );
                           (e.target as HTMLInputElement).value = sanitized;
                         } else {
                           const sanitized = handleAmountChange(
@@ -1047,8 +1046,9 @@ export default function TransactionList(props: TransactionListProps) {
                       onClick={() => {
                         installmentInputMode.value = "installment";
                         if (installmentAmount.value === 0 && amount.value > 0) {
-                          installmentAmount.value =
-                            Math.round((amount.value / installmentTotal.value) * 100) /
+                          installmentAmount.value = Math.round(
+                            (amount.value / installmentTotal.value) * 100,
+                          ) /
                             100;
                         }
                       }}
