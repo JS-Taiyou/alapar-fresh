@@ -5,7 +5,7 @@ import {
   ensureUserPreferences,
   resolveUserState,
 } from "./lib/store.ts";
-import { getUserFromRequest } from "./lib/supabase.ts";
+import { getUserFromRequest, setAuthCookies } from "./lib/supabase.ts";
 import { query } from "./lib/db.ts";
 
 export const app = new App<State>();
@@ -23,9 +23,10 @@ app.use(define.middleware(async (ctx) => {
   ctx.state.isOwner = false;
   ctx.state.ownerRegistryIds = new Set<string>();
 
-  const authUser = await getUserFromRequest(ctx.req);
-  if (!authUser) return await ctx.next();
+  const authResult = await getUserFromRequest(ctx.req);
+  if (!authResult) return await ctx.next();
 
+  const authUser = authResult.user;
   ctx.state.supabaseAuthId = authUser.id;
 
   const path = new URL(ctx.req.url).pathname;
@@ -54,28 +55,32 @@ app.use(define.middleware(async (ctx) => {
       );
       await ensureUserPreferences(user.id);
       ctx.state.user = user;
-      return await ctx.next();
+    } else {
+      const row = userResult.rows[0];
+      if (!row.is_email_allowed) {
+        return ctx.redirect("/login?error=unauthorized");
+      }
+      if (authUser.name && row.name !== authUser.name) {
+        await query(
+          "UPDATE users SET name = $1 WHERE supabase_auth_id = $2",
+          [authUser.name, authUser.id],
+        );
+        row.name = authUser.name;
+      }
+      ctx.state.user = {
+        id: row.id as string,
+        email: row.email as string,
+        name: row.name as string,
+        color: row.color as string,
+        supabaseAuthId: row.supabase_auth_id as string,
+        createdAt: row.created_at as Date,
+      };
     }
-    const row = userResult.rows[0];
-    if (!row.is_email_allowed) {
-      return ctx.redirect("/login?error=unauthorized");
+    const response = await ctx.next();
+    if (authResult.refreshedTokens && response) {
+      setAuthCookies(response.headers, authResult.refreshedTokens.accessToken, authResult.refreshedTokens.refreshToken);
     }
-    if (authUser.name && row.name !== authUser.name) {
-      await query(
-        "UPDATE users SET name = $1 WHERE supabase_auth_id = $2",
-        [authUser.name, authUser.id],
-      );
-      row.name = authUser.name;
-    }
-    ctx.state.user = {
-      id: row.id as string,
-      email: row.email as string,
-      name: row.name as string,
-      color: row.color as string,
-      supabaseAuthId: row.supabase_auth_id as string,
-      createdAt: row.created_at as Date,
-    };
-    return await ctx.next();
+    return response;
   }
 
   const state = await resolveUserState(authUser.id);
@@ -88,7 +93,11 @@ app.use(define.middleware(async (ctx) => {
     );
     await ensureUserPreferences(user.id);
     ctx.state.user = user;
-    return await ctx.next();
+    const response = await ctx.next();
+    if (authResult.refreshedTokens && response) {
+      setAuthCookies(response.headers, authResult.refreshedTokens.accessToken, authResult.refreshedTokens.refreshToken);
+    }
+    return response;
   }
 
   if (!state.isEmailAllowed) {
@@ -112,7 +121,11 @@ app.use(define.middleware(async (ctx) => {
   ctx.state.isOwner = state.isOwner;
   ctx.state.ownerRegistryIds = state.ownerRegistryIds;
 
-  return await ctx.next();
+  const response = await ctx.next();
+  if (authResult.refreshedTokens && response) {
+    setAuthCookies(response.headers, authResult.refreshedTokens.accessToken, authResult.refreshedTokens.refreshToken);
+  }
+  return response;
 }));
 
 app.use(define.middleware(async (ctx) => {

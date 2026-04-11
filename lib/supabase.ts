@@ -24,21 +24,48 @@ export interface AuthUser {
   name?: string;
 }
 
+export interface AuthResult {
+  user: AuthUser;
+  refreshedTokens?: { accessToken: string; refreshToken: string };
+}
+
 export async function getUserFromRequest(
   req: Request,
-): Promise<AuthUser | null> {
+): Promise<AuthResult | null> {
   const cookieHeader = req.headers.get("cookie") ?? "";
   const accessToken = getCookie(cookieHeader, "sb-access-token");
+  const refreshToken = getCookie(cookieHeader, "sb-refresh-token");
   if (!accessToken) return null;
 
   const client = createServerClient();
+
   const { data, error } = await client.auth.getUser(accessToken);
-  if (error || !data.user) return null;
+  if (!error && data.user) {
+    return {
+      user: {
+        id: data.user.id,
+        email: data.user.email ?? "",
+        name: data.user.user_metadata?.name as string | undefined,
+      },
+    };
+  }
+
+  if (!refreshToken) return null;
+
+  const { data: refreshData, error: refreshError } = await client.auth
+    .refreshSession({ refresh_token: refreshToken });
+  if (refreshError || !refreshData.session || !refreshData.user) return null;
 
   return {
-    id: data.user.id,
-    email: data.user.email ?? "",
-    name: data.user.user_metadata?.name as string | undefined,
+    user: {
+      id: refreshData.user.id,
+      email: refreshData.user.email ?? "",
+      name: refreshData.user.user_metadata?.name as string | undefined,
+    },
+    refreshedTokens: {
+      accessToken: refreshData.session.access_token,
+      refreshToken: refreshData.session.refresh_token,
+    },
   };
 }
 
