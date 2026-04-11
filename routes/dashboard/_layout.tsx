@@ -20,6 +20,10 @@ export default define.layout(async function DashboardLayout(ctx) {
     }
   }
 
+  const sidebarCollapsed = ctx.req.headers.get("cookie")
+    ?.split(";")
+    .some((c) => c.trim() === "sidebar-collapsed=true") ?? false;
+
   return (
     <div class="flex h-screen overflow-hidden">
       <Sidebar
@@ -33,6 +37,7 @@ export default define.layout(async function DashboardLayout(ctx) {
         registryUsers={ctx.state.registryUsers}
         defaultSplit={ctx.state.activeRegistry?.defaultSplit ?? null}
         deletableRegistryIds={deletableRegistryIds}
+        initialCollapsed={sidebarCollapsed}
       />
       <div class="flex-1 flex flex-col min-w-0">
         <ctx.Component />

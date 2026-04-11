@@ -14,6 +14,7 @@ interface SidebarProps {
   registryUsers: User[];
   defaultSplit: DefaultSplit | null;
   deletableRegistryIds: Set<string>;
+  initialCollapsed?: boolean;
 }
 
 const REGISTRY_COLORS = [
@@ -26,11 +27,7 @@ const REGISTRY_COLORS = [
 ];
 
 export default function Sidebar(props: SidebarProps) {
-  const collapsed = useSignal(
-    typeof localStorage !== "undefined"
-      ? localStorage.getItem("sidebar-collapsed") === "true"
-      : false,
-  );
+  const collapsed = useSignal(props.initialCollapsed ?? false);
   const mobileOpen = useSignal(false);
   const showInvite = useSignal(false);
   const inviteLoading = useSignal(false);
@@ -149,10 +146,10 @@ export default function Sidebar(props: SidebarProps) {
               mobileOpen.value = false;
             } else {
               collapsed.value = !collapsed.value;
-              localStorage.setItem(
-                "sidebar-collapsed",
-                String(collapsed.value),
-              );
+              document.cookie =
+                `sidebar-collapsed=${collapsed.value};path=/;max-age=${
+                  60 * 60 * 24 * 365
+                };samesite=lax`;
             }
           }}
           class="p-2 hover:bg-white/5 rounded-custom text-gray-400 hover:text-white transition-colors shrink-0 hidden md:flex"
