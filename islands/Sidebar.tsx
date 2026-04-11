@@ -219,23 +219,23 @@ export default function Sidebar(props: SidebarProps) {
                       ? "justify-center p-2.5"
                       : "gap-3 px-3 py-2.5"
                   } ${
-                    r.id === props.activeRegistryId
-                      ? "bg-white/5 border border-white/10 text-white"
-                      : "hover:bg-white/5 text-gray-400 hover:text-white"
+                    collapsed.value && !mobileOpen.value
+                      ? ""
+                      : r.id === props.activeRegistryId
+                        ? "bg-white/5 border border-white/10 text-white"
+                        : "hover:bg-white/5 text-gray-400 hover:text-white"
                   }`}
+                  style={collapsed.value && !mobileOpen.value ? `background-color: ${REGISTRY_COLORS[i % REGISTRY_COLORS.length]}20; border: 1px solid ${REGISTRY_COLORS[i % REGISTRY_COLORS.length]}40` : undefined}
                   title={r.name}
                 >
                   <div
-                    class="w-2 h-2 rounded-full flex-shrink-0"
-                    style={`background-color: ${
-                      REGISTRY_COLORS[i % REGISTRY_COLORS.length]
-                    }`}
+                    class={`rounded-full flex-shrink-0 transition-all duration-300 ${collapsed.value && !mobileOpen.value ? "w-2 h-2" : "w-2 h-2"}`}
+                    style={collapsed.value && !mobileOpen.value ? undefined : `background-color: ${REGISTRY_COLORS[i % REGISTRY_COLORS.length]}`}
                   />
-                  <span class={`text-sm font-medium truncate flex-1 min-w-0 whitespace-nowrap transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 w-0 overflow-hidden" : "opacity-100"}`}>
+                  <span class={`text-sm font-medium truncate min-w-0 whitespace-nowrap transition-all duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 w-0 overflow-hidden" : "opacity-100 flex-1"}`}>
                     {r.name}
                   </span>
-                  {(!collapsed.value || mobileOpen.value) && (
-                  <span style="display:none" class="registry-item-actions items-center gap-0.5 flex-shrink-0">
+                  <span class={`items-center gap-0.5 flex-shrink-0 transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 w-0 overflow-hidden hidden" : "opacity-0 flex group-hover:opacity-100"}`}>
                     {props.ownerRegistryIds.has(r.id) && (
                       <button
                         type="button"
@@ -288,7 +288,6 @@ export default function Sidebar(props: SidebarProps) {
                       </button>
                     )}
                   </span>
-                  )}
                 </button>
               )}
           </div>

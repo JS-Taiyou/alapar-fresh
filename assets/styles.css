@@ -34,10 +34,6 @@ html, body {
   );
 }
 
-.group:hover .registry-item-actions {
-  display: flex !important;
-}
-
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;
 }
