@@ -21,6 +21,7 @@ app.use(define.middleware(async (ctx) => {
   ctx.state.participants = [];
   ctx.state.supabaseAuthId = null;
   ctx.state.isOwner = false;
+  ctx.state.ownerRegistryIds = new Set<string>();
 
   const authUser = await getUserFromRequest(ctx.req);
   if (!authUser) return await ctx.next();
@@ -108,6 +109,7 @@ app.use(define.middleware(async (ctx) => {
   ctx.state.entities = state.entities;
   ctx.state.participants = state.participants;
   ctx.state.isOwner = state.isOwner;
+  ctx.state.ownerRegistryIds = state.ownerRegistryIds;
 
   return await ctx.next();
 }));

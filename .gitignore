@@ -16,3 +16,4 @@ mockups/*
 .vscode
 .playwright-mcp
 db/backups
+AGENTS.md

@@ -52,7 +52,6 @@ export interface DefaultSplit {
 export interface Registry {
   id: string;
   name: string;
-  dbName: string;
   isDefault: boolean;
   latestAccessed: Date;
   defaultSplit: DefaultSplit | null;

@@ -4,6 +4,11 @@ import type { TransactionSplit } from "../../../lib/types.ts";
 
 export const handlers = define.handlers({
   async POST(ctx) {
+    const userId = ctx.state.user?.id;
+    if (!userId) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+
     const form = await ctx.req.formData();
     const description = form.get("description") as string;
     const amount = parseFloat(form.get("amount") as string);
@@ -37,7 +42,11 @@ export const handlers = define.handlers({
       splitJson,
       creatorId: userPaid,
       userPaid,
-    });
+    }, userId);
+
+    if (!tx) {
+      return new Response("Forbidden", { status: 403 });
+    }
 
     return Response.json(tx);
   },

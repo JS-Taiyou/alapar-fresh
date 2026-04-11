@@ -8,11 +8,17 @@ import type { TransactionSplit } from "../../../lib/types.ts";
 
 export const handlers = define.handlers({
   async PUT(ctx) {
+    const userId = ctx.state.user?.id;
+    if (!userId) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+
     const id = ctx.params.id;
     const tx = await getTransactionById(id);
     if (!tx) {
       return new Response("Not found", { status: 404 });
     }
+
     const form = await ctx.req.formData();
     const description = form.get("description") as string;
     const amount = parseFloat(form.get("amount") as string);
@@ -39,14 +45,22 @@ export const handlers = define.handlers({
       userPaid,
       installmentCurrent,
       installmentTotal,
-    });
+    }, userId);
+    if (!updated) {
+      return new Response("Forbidden", { status: 403 });
+    }
     return Response.json(updated);
   },
   async DELETE(ctx) {
+    const userId = ctx.state.user?.id;
+    if (!userId) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+
     const id = ctx.params.id;
-    const deleted = await deleteTransaction(id);
+    const deleted = await deleteTransaction(id, userId);
     if (!deleted) {
-      return new Response("Not found", { status: 404 });
+      return new Response("Not found or forbidden", { status: 404 });
     }
     return new Response(null, { status: 204 });
   },

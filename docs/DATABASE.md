@@ -31,7 +31,6 @@ Single PostgreSQL database (Supabase-hosted) with UUID primary keys. All per-reg
 |--------|------|-------------|-------------|
 | id | UUID | PK, auto | Unique identifier |
 | name | TEXT | NOT NULL | Display name (e.g., "Viaje a la playa") |
-| db_name | TEXT | NOT NULL, UNIQUE | Slug: lowercase, underscores (e.g., "viaje_a_la_playa") |
 | is_default | BOOLEAN | NOT NULL, default false | Legacy field |
 | latest_accessed | TIMESTAMPTZ | NOT NULL, default now() | Last access time |
 | default_split_json | JSONB | nullable | Custom default split percentages |
@@ -39,7 +38,7 @@ Single PostgreSQL database (Supabase-hosted) with UUID primary keys. All per-reg
 | entities_json | JSONB | default '[]' | Third-party entities stored as JSON array |
 | created_at | TIMESTAMPTZ | NOT NULL, default now() | Creation timestamp |
 
-**Purpose**: Central hub for each expense group. `db_name` is derived from the name during creation.
+**Purpose**: Central hub for each expense group.
 
 **Entities JSON format**:
 ```json

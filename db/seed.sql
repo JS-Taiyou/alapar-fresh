@@ -5,10 +5,10 @@ INSERT INTO users (id, email, name, supabase_auth_id, color) VALUES
   ('a0000002-0000-0000-0000-000000000002', 'jane@example.com', 'Jane Smith', NULL, '#ec4899'),
   ('a0000003-0000-0000-0000-000000000003', 'bob@example.com', 'Bob Wilson', NULL, '#22c55e');
 
-INSERT INTO registries (id, name, db_name, is_default, latest_accessed) VALUES
-  ('b0000001-0000-0000-0000-000000000001', 'Housemates', 'housemates', true, '2023-10-24'),
-  ('b0000002-0000-0000-0000-000000000002', 'Trip to Europe', 'trip_to_europe', false, '2023-10-20'),
-  ('b0000003-0000-0000-0000-000000000003', 'Family Expenses', 'family_expenses', false, '2023-10-15');
+INSERT INTO registries (id, name, is_default, latest_accessed) VALUES
+  ('b0000001-0000-0000-0000-000000000001', 'Housemates', true, '2023-10-24'),
+  ('b0000002-0000-0000-0000-000000000002', 'Trip to Europe', false, '2023-10-20'),
+  ('b0000003-0000-0000-0000-000000000003', 'Family Expenses', false, '2023-10-15');
 
 INSERT INTO registry_members (registry_id, user_id) VALUES
   ('b0000001-0000-0000-0000-000000000001', 'a0000001-0000-0000-0000-000000000001'),

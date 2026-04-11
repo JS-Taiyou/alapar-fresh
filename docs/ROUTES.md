@@ -141,7 +141,6 @@ Clears auth cookies and redirects to `/login`.
 **File**: `routes/api/registries/index.ts`
 
 Receives form data with `name`. Creates registry via `createRegistry(name, userId)` which:
-- Generates `db_name` from the name (lowercase, spaces→underscores)
 - Creates registry record
 - Adds current user as `owner` in `registry_members`
 - Sets as active registry

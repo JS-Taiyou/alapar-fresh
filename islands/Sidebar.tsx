@@ -9,6 +9,7 @@ interface SidebarProps {
   userName: string;
   userInitials: string;
   isOwner: boolean;
+  ownerRegistryIds: Set<string>;
   entities: Entity[];
   registryUsers: User[];
   defaultSplit: DefaultSplit | null;
@@ -36,6 +37,7 @@ export default function Sidebar(props: SidebarProps) {
   const renameValue = useSignal("");
 
   async function switchRegistry(id: string) {
+    if (id === props.activeRegistryId) return;
     try {
       const res = await fetch("/api/registries/switch", {
         method: "POST",
@@ -227,10 +229,8 @@ export default function Sidebar(props: SidebarProps) {
                   <span class="text-sm font-medium truncate flex-1 min-w-0">
                     {r.name}
                   </span>
-                  {props.isOwner &&
-                    r.id === props.activeRegistryId &&
-                    props.deletableRegistryIds.has(r.id) && (
-                    <span class="hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
+                  <span class="hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
+                    {props.ownerRegistryIds.has(r.id) && (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -254,6 +254,9 @@ export default function Sidebar(props: SidebarProps) {
                           />
                         </svg>
                       </button>
+                    )}
+                    {props.ownerRegistryIds.has(r.id) &&
+                      props.deletableRegistryIds.has(r.id) && (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -277,8 +280,8 @@ export default function Sidebar(props: SidebarProps) {
                           />
                         </svg>
                       </button>
-                    </span>
-                  )}
+                    )}
+                  </span>
                 </button>
               )}
           </div>

@@ -91,7 +91,6 @@ function rowToRegistry(row: Record<string, unknown>): Registry {
   return {
     id: row.id as string,
     name: row.name as string,
-    dbName: row.db_name as string,
     isDefault: row.is_default as boolean,
     latestAccessed: new Date(row.latest_accessed as string),
     defaultSplit: row.default_split_json
@@ -165,6 +164,7 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
   isEmailAllowed: boolean;
   activeRegistry: Registry | null;
   isOwner: boolean;
+  ownerRegistryIds: Set<string>;
   registries: Registry[];
   registryUsers: User[];
   entities: Entity[];
@@ -183,6 +183,7 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
       isEmailAllowed: false,
       activeRegistry: null,
       isOwner: false,
+      ownerRegistryIds: new Set<string>(),
       registries: [],
       registryUsers: [],
       entities: [],
@@ -200,6 +201,7 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
       isEmailAllowed: false,
       activeRegistry: null,
       isOwner: false,
+      ownerRegistryIds: new Set<string>(),
       registries: [],
       registryUsers: [],
       entities: [],
@@ -209,7 +211,7 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
 
   const [registries, activeRegResult] = await Promise.all([
     query(
-      `SELECT r.* FROM registries r
+      `SELECT r.*, rm.role as membership_role FROM registries r
        JOIN registry_members rm ON r.id = rm.registry_id
        WHERE rm.user_id = $1
        ORDER BY r.latest_accessed DESC`,
@@ -226,6 +228,9 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
   ]);
 
   const registriesList = registries.rows.map(rowToRegistry);
+  const ownerRegistryIds = new Set<string>(
+    registries.rows.filter((r) => r.membership_role === "owner").map((r) => r.id as string),
+  );
   let activeRegistry: Registry | null = null;
   let isOwner = false;
   let registryUsers: User[] = [];
@@ -258,6 +263,7 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
     isEmailAllowed: true,
     activeRegistry,
     isOwner,
+    ownerRegistryIds,
     registries: registriesList,
     registryUsers,
     entities,
@@ -311,7 +317,10 @@ export async function getTransactionById(
 
 export async function createTransaction(
   data: Omit<Transaction, "id" | "createdAt">,
-): Promise<Transaction> {
+  userId: string,
+): Promise<Transaction | null> {
+  const member = await isMemberOfRegistry(userId, data.registry_id);
+  if (!member) return null;
   const recurringGroupId = data.recurringGroupId ?? crypto.randomUUID();
   const result = await query(
     `INSERT INTO transactions (registry_id, description, amount, original_amount, type, exercise_id, installment_current, installment_total, recurring_disabled, recurring_group_id, notes, split_json, creator_id, user_paid)
@@ -339,6 +348,7 @@ export async function createTransaction(
 export async function updateTransaction(
   id: string,
   data: Partial<Transaction>,
+  userId: string,
 ): Promise<Transaction | undefined> {
   const sets: string[] = [];
   const values: unknown[] = [];
@@ -385,16 +395,23 @@ export async function updateTransaction(
   }
   if (sets.length === 0) return getTransactionById(id);
   values.push(id);
+  values.push(userId);
   const result = await query(
-    `UPDATE transactions SET ${sets.join(", ")} WHERE id = $${idx} RETURNING *`,
+    `UPDATE transactions SET ${sets.join(", ")} WHERE id = $${idx} AND registry_id IN (SELECT rm.registry_id FROM registry_members rm WHERE rm.user_id = $${idx + 1} AND rm.registry_id = transactions.registry_id) RETURNING *`,
     values,
   );
   if (result.rows.length === 0) return undefined;
   return rowToTransaction(result.rows[0]);
 }
 
-export async function deleteTransaction(id: string): Promise<boolean> {
-  const result = await query("DELETE FROM transactions WHERE id = $1", [id]);
+export async function deleteTransaction(
+  id: string,
+  userId: string,
+): Promise<boolean> {
+  const result = await query(
+    `DELETE FROM transactions WHERE id = $1 AND registry_id IN (SELECT rm.registry_id FROM registry_members rm WHERE rm.user_id = $2 AND rm.registry_id = transactions.registry_id)`,
+    [id, userId],
+  );
   return (result.rowCount ?? 0) > 0;
 }
 
@@ -455,22 +472,10 @@ export async function createRegistry(
   name: string,
   userId: string,
 ): Promise<Registry> {
-  const dbName = name.toLowerCase().replace(/\s+/g, "_").replace(
-    /[^a-z0-9_]/g,
-    "",
+  const result = await query(
+    "INSERT INTO registries (name, is_default) VALUES ($1, false) RETURNING *",
+    [name],
   );
-  let result;
-  try {
-    result = await query(
-      "INSERT INTO registries (name, db_name, is_default) VALUES ($1, $2, false) RETURNING *",
-      [name, dbName],
-    );
-  } catch {
-    result = await query(
-      "UPDATE registries SET name = $1 WHERE db_name = $2 RETURNING *",
-      [name, dbName],
-    );
-  }
   const registry = rowToRegistry(result.rows[0]);
 
   const existingMember = await query(
@@ -492,7 +497,10 @@ export async function createRegistry(
 export async function renameRegistry(
   registryId: string,
   name: string,
+  userId: string,
 ): Promise<Registry | undefined> {
+  const member = await isMemberOfRegistry(userId, registryId);
+  if (!member) return undefined;
   const result = await query(
     "UPDATE registries SET name = $1 WHERE id = $2 RETURNING *",
     [name, registryId],
@@ -526,7 +534,12 @@ export async function getTransactionCounts(
   return map;
 }
 
-export async function deleteRegistry(registryId: string): Promise<boolean> {
+export async function deleteRegistry(
+  registryId: string,
+  userId: string,
+): Promise<boolean> {
+  const member = await isMemberOfRegistry(userId, registryId);
+  if (!member) return false;
   const count = await getTransactionCount(registryId);
   if (count > 0) return false;
   const result = await query("DELETE FROM registries WHERE id = $1", [
@@ -545,6 +558,17 @@ export async function getUserRole(
   );
   if (result.rows.length === 0) return null;
   return result.rows[0].role as string;
+}
+
+export async function isMemberOfRegistry(
+  userId: string,
+  registryId: string,
+): Promise<boolean> {
+  const result = await query(
+    "SELECT 1 FROM registry_members WHERE registry_id = $1 AND user_id = $2",
+    [registryId, userId],
+  );
+  return result.rows.length > 0;
 }
 
 export async function calculateBalance(
@@ -610,27 +634,32 @@ export async function cloneTransactionForNextPeriod(
 ): Promise<Transaction> {
   const source = await getTransactionById(sourceId);
   if (!source) throw new Error(`Transaction ${sourceId} not found`);
-  return createTransaction({
-    registry_id: source.registry_id,
-    description: source.description,
-    amount: source.amount,
-    originalAmount: source.originalAmount,
-    type: source.type,
-    exerciseId: null,
-    installmentCurrent:
+  const recurringGroupId = source.recurringGroupId ?? crypto.randomUUID();
+  const result = await query(
+    `INSERT INTO transactions (registry_id, description, amount, original_amount, type, exercise_id, installment_current, installment_total, recurring_disabled, recurring_group_id, notes, split_json, creator_id, user_paid)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *`,
+    [
+      source.registry_id,
+      source.description,
+      source.amount,
+      source.originalAmount,
+      source.type,
+      null,
       source.type === "parcialidad" && source.installmentCurrent !== null
         ? source.installmentCurrent + installmentOffset
         : null,
-    installmentTotal: source.type === "parcialidad"
-      ? source.installmentTotal
-      : null,
-    recurringDisabled: false,
-    recurringGroupId: source.recurringGroupId,
-    notes: source.notes,
-    splitJson: source.splitJson,
-    creatorId: source.creatorId,
-    userPaid: source.userPaid,
-  });
+      source.type === "parcialidad"
+        ? source.installmentTotal
+        : null,
+      false,
+      recurringGroupId,
+      source.notes,
+      JSON.stringify(source.splitJson),
+      source.creatorId,
+      source.userPaid,
+    ],
+  );
+  return rowToTransaction(result.rows[0]);
 }
 
 export async function batchCloneTransactions(

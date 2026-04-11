@@ -28,6 +28,7 @@ export default define.layout(async function DashboardLayout(ctx) {
         userName={userName}
         userInitials={userInitials}
         isOwner={ctx.state.isOwner}
+        ownerRegistryIds={ctx.state.ownerRegistryIds}
         entities={ctx.state.entities}
         registryUsers={ctx.state.registryUsers}
         defaultSplit={ctx.state.activeRegistry?.defaultSplit ?? null}

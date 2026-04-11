@@ -9,7 +9,8 @@ import {
 export const handlers = define.handlers({
   async POST(ctx) {
     const registryId = ctx.state.activeRegistry?.id;
-    if (!registryId) return ctx.redirect("/dashboard");
+    const userId = ctx.state.user?.id;
+    if (!registryId || !userId) return ctx.redirect("/dashboard");
 
     const active = await getActiveTransactions(registryId);
     if (active.length === 0) return ctx.redirect("/dashboard");
@@ -41,7 +42,7 @@ export const handlers = define.handlers({
         },
         creatorId: debt.toUserId,
         userPaid: debt.toUserId,
-      });
+      }, userId);
     }
 
     return ctx.redirect("/dashboard");

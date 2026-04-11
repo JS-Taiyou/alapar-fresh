@@ -10,6 +10,7 @@ export interface State {
   registries: Registry[];
   supabaseAuthId: string | null;
   isOwner: boolean;
+  ownerRegistryIds: Set<string>;
 }
 
 export const define = createDefine<State>();

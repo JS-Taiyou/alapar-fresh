@@ -19,7 +19,6 @@ CREATE INDEX idx_users_supabase_auth_id ON users(supabase_auth_id);
 CREATE TABLE registries (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
-  db_name TEXT NOT NULL UNIQUE,
   is_default BOOLEAN NOT NULL DEFAULT false,
   latest_accessed TIMESTAMPTZ NOT NULL DEFAULT now(),
   default_split_json JSONB DEFAULT NULL,

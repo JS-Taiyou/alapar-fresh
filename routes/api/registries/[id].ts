@@ -35,7 +35,7 @@ export const handlers = define.handlers({
       });
     }
 
-    const updated = await renameRegistry(id, name);
+    const updated = await renameRegistry(id, name, systemUserId);
     if (!updated) {
       return new Response(JSON.stringify({ error: "Not found" }), {
         status: 404,
@@ -72,7 +72,7 @@ export const handlers = define.handlers({
       );
     }
 
-    const deleted = await deleteRegistry(id);
+    const deleted = await deleteRegistry(id, systemUserId);
     if (!deleted) {
       return new Response(JSON.stringify({ error: "Delete failed" }), {
         status: 500,
