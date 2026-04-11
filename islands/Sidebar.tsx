@@ -36,6 +36,7 @@ export default function Sidebar(props: SidebarProps) {
   const copied = useSignal(false);
   const renamingId = useSignal<string | null>(null);
   const renameValue = useSignal("");
+  const showSplitConfig = useSignal<string | null>(null);
 
   async function switchRegistry(id: string) {
     if (id === props.activeRegistryId) return;
@@ -235,7 +236,7 @@ export default function Sidebar(props: SidebarProps) {
                   <span class={`text-sm font-medium truncate min-w-0 whitespace-nowrap transition-all duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 w-0 overflow-hidden" : "opacity-100 flex-1"}`}>
                     {r.name}
                   </span>
-                  <span class={`items-center gap-0.5 flex-shrink-0 transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 w-0 overflow-hidden hidden" : "opacity-0 flex group-hover:opacity-100"}`}>
+                  <span class={`items-center gap-1.5 flex-shrink-0 transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 w-0 overflow-hidden hidden" : "opacity-0 flex group-hover:opacity-100"}`}>
                     {props.ownerRegistryIds.has(r.id) && (
                       <button
                         type="button"
@@ -243,11 +244,11 @@ export default function Sidebar(props: SidebarProps) {
                           e.stopPropagation();
                           startRename(r.id, r.name);
                         }}
-                        class="p-1 hover:bg-white/10 rounded text-slate-500 hover:text-white transition-colors"
+                        class="p-2 hover:bg-white/10 rounded text-slate-500 hover:text-white transition-colors"
                         title="Renombrar"
                       >
                         <svg
-                          class="w-3.5 h-3.5"
+                          class="w-4.5 h-4.5"
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -261,6 +262,19 @@ export default function Sidebar(props: SidebarProps) {
                         </svg>
                       </button>
                     )}
+                    {props.ownerRegistryIds.has(r.id) && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          showSplitConfig.value = r.id;
+                        }}
+                        class="p-2 hover:bg-white/10 rounded text-slate-500 hover:text-white transition-colors text-sm font-bold"
+                        title="División Default"
+                      >
+                        %
+                      </button>
+                    )}
                     {props.ownerRegistryIds.has(r.id) &&
                       props.deletableRegistryIds.has(r.id) && (
                       <button
@@ -269,11 +283,11 @@ export default function Sidebar(props: SidebarProps) {
                           e.stopPropagation();
                           handleDeleteRegistry(r.id);
                         }}
-                        class="p-1 hover:bg-red-500/20 rounded text-slate-500 hover:text-red-400 transition-colors"
+                        class="p-2 hover:bg-red-500/20 rounded text-slate-500 hover:text-red-400 transition-colors"
                         title="Eliminar"
                       >
                         <svg
-                          class="w-3.5 h-3.5"
+                          class="w-4.5 h-4.5"
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -358,17 +372,6 @@ export default function Sidebar(props: SidebarProps) {
               </svg>
             </button>
           )}
-        </div>
-      )}
-
-      {props.activeRegistryId && (!collapsed.value || mobileOpen.value) && (
-        <div class="px-4 pb-2">
-          <DefaultSplitConfig
-            registryId={props.activeRegistryId}
-            users={props.registryUsers}
-            defaultSplit={props.defaultSplit}
-            isOwner={props.isOwner}
-          />
         </div>
       )}
 
@@ -569,6 +572,17 @@ export default function Sidebar(props: SidebarProps) {
             </footer>
           </div>
         </div>
+      )}
+
+      {showSplitConfig.value && (
+        <DefaultSplitConfig
+          registryId={showSplitConfig.value}
+          users={props.registryUsers}
+          defaultSplit={props.registries.find((r) => r.id === showSplitConfig.value)?.defaultSplit ?? null}
+          isOwner={props.ownerRegistryIds.has(showSplitConfig.value)}
+          autoOpen
+          onClose={() => showSplitConfig.value = null}
+        />
       )}
     </>
   );

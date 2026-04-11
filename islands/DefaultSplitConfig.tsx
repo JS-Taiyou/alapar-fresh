@@ -6,6 +6,8 @@ interface DefaultSplitConfigProps {
   users: User[];
   defaultSplit: DefaultSplit | null;
   isOwner: boolean;
+  autoOpen?: boolean;
+  onClose?: () => void;
 }
 
 function sanitizeDecimal(raw: string): string {
@@ -18,7 +20,7 @@ function sanitizeDecimal(raw: string): string {
 }
 
 export default function DefaultSplitConfig(props: DefaultSplitConfigProps) {
-  const isOpen = useSignal(false);
+  const isOpen = useSignal(props.autoOpen ?? false);
   const loading = useSignal(false);
   const error = useSignal("");
   const success = useSignal(false);
@@ -103,9 +105,7 @@ export default function DefaultSplitConfig(props: DefaultSplitConfigProps) {
       if (res.ok) {
         success.value = true;
         setTimeout(() => {
-          isOpen.value = false;
-          success.value = false;
-          globalThis.location.reload();
+          closeModal();
         }, 800);
       } else {
         const data = await res.json();
@@ -138,38 +138,45 @@ export default function DefaultSplitConfig(props: DefaultSplitConfigProps) {
 
   if (!props.isOwner) return null;
 
+  function closeModal() {
+    isOpen.value = false;
+    props.onClose?.();
+  }
+
   const total = totalPercentage();
   const isValid = Math.abs(total - 100) < 0.01;
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => isOpen.value = true}
-        class="w-full flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-custom text-sm font-semibold text-white justify-center py-2.5 px-3"
-      >
-        <svg
-          class="w-5 h-5 shrink-0"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
+      {!props.autoOpen && (
+        <button
+          type="button"
+          onClick={() => isOpen.value = true}
+          class="w-full flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-custom text-sm font-semibold text-white justify-center py-2.5 px-3"
         >
-          <path
-            d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-          />
-        </svg>
-        <span>División Default</span>
-      </button>
+          <svg
+            class="w-5 h-5 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+            />
+          </svg>
+          <span>División Default</span>
+        </button>
+      )}
 
       {isOpen.value && (
         <div
           class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
-              isOpen.value = false;
+              closeModal();
             }
           }}
         >
@@ -183,7 +190,7 @@ export default function DefaultSplitConfig(props: DefaultSplitConfigProps) {
               </div>
               <button
                 type="button"
-                onClick={() => isOpen.value = false}
+                onClick={closeModal}
                 class="text-slate-400 hover:text-white transition-colors"
               >
                 <svg
@@ -309,7 +316,7 @@ export default function DefaultSplitConfig(props: DefaultSplitConfigProps) {
               <div class="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => isOpen.value = false}
+                  onClick={closeModal}
                   class="px-6 py-2 text-sm font-semibold text-slate-300 hover:text-white transition-colors"
                 >
                   Cancelar
