@@ -1573,7 +1573,7 @@ export default function TransactionList(props: TransactionListProps) {
                                     {splitMode.value === "percentage"
                                       ? (
                                         <input
-                                          class="w-16 bg-transparent border-0 text-right text-sm font-medium text-white focus:ring-0 p-0"
+                                          class="w-20 px-2 py-1 bg-background border border-border-custom rounded text-right text-sm font-medium text-white focus:ring-primary focus:border-primary"
                                           type="text"
                                           inputmode="decimal"
                                           value={percentages.value[user.id] ??
@@ -1605,7 +1605,7 @@ export default function TransactionList(props: TransactionListProps) {
                                     {splitMode.value === "fixed"
                                       ? (
                                         <input
-                                          class="w-24 bg-transparent border-0 text-right text-sm font-medium text-white focus:ring-0 p-0"
+                                          class="w-28 px-2 py-1 bg-background border border-border-custom rounded text-right text-sm font-medium text-white focus:ring-primary focus:border-primary"
                                           type="text"
                                           inputmode="decimal"
                                           value={fixedAmounts.value[user.id] ??
@@ -1727,7 +1727,7 @@ export default function TransactionList(props: TransactionListProps) {
                                     {splitMode.value === "percentage"
                                       ? (
                                         <input
-                                          class="w-14 bg-transparent border-0 text-right text-sm font-medium text-white focus:ring-0 p-0"
+                                          class="w-16 px-2 py-1 bg-background border border-border-custom rounded text-right text-sm font-medium text-white focus:ring-primary focus:border-primary"
                                           type="text"
                                           inputmode="decimal"
                                           value={percentages.value[user.id] ??
@@ -1759,7 +1759,7 @@ export default function TransactionList(props: TransactionListProps) {
                                     {splitMode.value === "fixed"
                                       ? (
                                         <input
-                                          class="w-20 bg-transparent border-0 text-right text-sm font-medium text-white focus:ring-0 p-0"
+                                          class="w-24 px-2 py-1 bg-background border border-border-custom rounded text-right text-sm font-medium text-white focus:ring-primary focus:border-primary"
                                           type="text"
                                           inputmode="decimal"
                                           value={fixedAmounts.value[user.id] ??
