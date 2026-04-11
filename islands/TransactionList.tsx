@@ -500,15 +500,14 @@ export default function TransactionList(props: TransactionListProps) {
   }
 
   function saveLastSplitConfig() {
-    if (modalMode.value === "payment" || splitMode.value !== "percentage") {
-      return;
-    }
+    if (modalMode.value === "payment") return;
     const key = `lastSplit_${registryId.value}`;
     try {
       localStorage.setItem(
         key,
         JSON.stringify({
           percentages: percentages.value,
+          splitMode: splitMode.value,
           userPaid: userPaid.value,
           savedAt: new Date().toISOString(),
         }),
@@ -518,6 +517,7 @@ export default function TransactionList(props: TransactionListProps) {
 
   function loadLastSplitConfig(): {
     percentages: Record<string, number>;
+    splitMode?: string;
     userPaid: string;
   } | null {
     const key = `lastSplit_${registryId.value}`;
@@ -558,7 +558,8 @@ export default function TransactionList(props: TransactionListProps) {
 
     const lastConfig = loadLastSplitConfig();
     if (lastConfig) {
-      splitMode.value = "percentage";
+      if (lastConfig.splitMode) splitMode.value = lastConfig.splitMode as SplitMode;
+      else splitMode.value = "percentage";
       percentages.value = lastConfig.percentages;
       userPaid.value = lastConfig.userPaid;
     } else {
@@ -1414,6 +1415,30 @@ export default function TransactionList(props: TransactionListProps) {
                 </div>
               )}
 
+              {!isPago && (
+                <div class="space-y-2">
+                  <label
+                    class="block text-sm font-medium text-slate-300"
+                    for="payer-select"
+                  >
+                    Pagó
+                  </label>
+                  <select
+                    id="payer-select"
+                    class="block w-full px-4 py-2.5 bg-background border border-border-custom rounded-custom text-white focus:ring-primary focus:border-primary"
+                    value={userPaid.value}
+                    onChange={(e) =>
+                      userPaid.value = (e.target as HTMLSelectElement).value}
+                  >
+                    {users.value.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name}{user.id === currentUserId.value ? " (Tú)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div class="space-y-2">
                 <label
                   class="block text-sm font-medium text-slate-300"
@@ -1871,10 +1896,7 @@ export default function TransactionList(props: TransactionListProps) {
                               %
                             </th>
                             <th class="px-4 py-3 text-xs font-semibold text-slate-400 w-40 text-right">
-                              MONTO
-                            </th>
-                            <th class="px-4 py-3 text-xs font-semibold text-slate-400 w-16 text-center">
-                              PAGÓ
+                               MONTO
                             </th>
                           </tr>
                         </thead>
@@ -1977,16 +1999,6 @@ export default function TransactionList(props: TransactionListProps) {
                                     )}
                                   </div>
                                 </td>
-                                <td class="px-4 py-3 text-center">
-                                  <input
-                                    type="radio"
-                                    name="userPaid"
-                                    value={user.id}
-                                    checked={userPaid.value === user.id}
-                                    onChange={() => userPaid.value = user.id}
-                                    class="accent-primary"
-                                  />
-                                </td>
                               </tr>
                             );
                           })}
@@ -2016,7 +2028,6 @@ export default function TransactionList(props: TransactionListProps) {
                             >
                               ${totalSplitAmount.toFixed(2)}
                             </td>
-                            <td class="px-4 py-2" />
                           </tr>
                         </tfoot>
                       </table>
@@ -2033,16 +2044,6 @@ export default function TransactionList(props: TransactionListProps) {
                               key={user.id}
                               class="flex items-start gap-3 px-3 py-3"
                             >
-                              <div class="flex flex-col items-center gap-2 pt-0.5">
-                                <input
-                                  type="radio"
-                                  name="userPaidMobile"
-                                  value={user.id}
-                                  checked={userPaid.value === user.id}
-                                  onChange={() => userPaid.value = user.id}
-                                  class="accent-primary"
-                                />
-                              </div>
                               <div class="flex-1 min-w-0 space-y-1.5">
                                 <div class="flex items-center gap-2">
                                   <div
