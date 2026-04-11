@@ -665,9 +665,29 @@ export default function TransactionList(props: TransactionListProps) {
     }));
   }
 
+  function getLinkedDebtCap(): number | null {
+    if (!linkToTransaction.value || !selectedRelatedTxId.value) return null;
+    const stx = eligibleTransactions.value.find((e) =>
+      e.id === selectedRelatedTxId.value
+    );
+    return stx ? stx.remainingDebt : null;
+  }
+
+  function clampAmountToLinkedDebt() {
+    const cap = getLinkedDebtCap();
+    if (cap !== null && amount.value > cap) {
+      amount.value = cap;
+    }
+  }
+
   function handleAmountChange(raw: string) {
     const sanitized = sanitizeDecimal(raw);
-    const newVal = parseFloat(sanitized) || 0;
+    let newVal = parseFloat(sanitized) || 0;
+
+    const cap = getLinkedDebtCap();
+    if (cap !== null && newVal > cap) {
+      newVal = cap;
+    }
 
     if (
       editingId.value &&
@@ -688,7 +708,7 @@ export default function TransactionList(props: TransactionListProps) {
     }
 
     amount.value = newVal;
-    return sanitized;
+    return newVal === 0 ? "" : newVal.toString();
   }
 
   function handleInstallmentAmountChange(raw: string) {
@@ -1670,6 +1690,8 @@ export default function TransactionList(props: TransactionListProps) {
                           linkToTransaction.value = !linkToTransaction.value;
                           if (!linkToTransaction.value) {
                             selectedRelatedTxId.value = null;
+                          } else {
+                            clampAmountToLinkedDebt();
                           }
                         }}
                         class="accent-primary w-4 h-4"
@@ -1739,6 +1761,7 @@ export default function TransactionList(props: TransactionListProps) {
                                     } else {
                                       selectedRelatedTxId.value = etx.id;
                                       paymentRecipient.value = etx.userPaid;
+                                      clampAmountToLinkedDebt();
                                     }
                                   }}
                                   class={`w-full text-left p-3 rounded-custom transition-all ${
