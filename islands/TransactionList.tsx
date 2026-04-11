@@ -113,54 +113,82 @@ function TransactionCardClickable(props: {
       label = `Te pagó ${payerUser.name}`;
     }
 
+    const relatedTx = tx.relatedTransactionId
+      ? props.allTxs?.find((t) => t.id === tx.relatedTransactionId)
+      : undefined;
+
     return (
-      <button
-        type="button"
-        onClick={props.onClick}
-        class="w-full text-left bg-card p-5 rounded-custom border-l-4 border-l-indigo-500 border border-white/5 flex justify-between items-center transition-transform active:scale-[0.98] hover:bg-white/[0.02]"
-      >
-        <div class="flex flex-col">
-          <span class="text-lg font-semibold text-white flex items-center gap-2">
-            {tx.description}
-            <span class="text-xs font-medium px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300">
-              Pago
+      <div class="w-full">
+        <button
+          type="button"
+          onClick={props.onClick}
+          class={`w-full text-left bg-card p-5 border-l-4 border-l-indigo-500 border border-white/5 flex justify-between items-center transition-transform active:scale-[0.98] hover:bg-white/[0.02] ${
+            !relatedTx ? "rounded-custom" : "rounded-t-custom"
+          }`}
+        >
+          <div class="flex flex-col">
+            <span class="text-lg font-semibold text-white flex items-center gap-2">
+              {tx.description}
+              <span class="text-xs font-medium px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300">
+                Pago
+              </span>
             </span>
-          </span>
-          <span class="text-sm text-gray-500">
-            {new Date(tx.createdAt).toLocaleDateString("es-MX", {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-            })} &bull; {new Date(tx.createdAt).toLocaleTimeString("es-MX", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-            {label && (
-              <>
-                {" "}&bull; <span class="text-indigo-400">{label}</span>
-              </>
-            )}
-            {tx.relatedTransactionId && (() => {
-              const related = props.allTxs?.find((t) => t.id === tx.relatedTransactionId);
-              return related
-                ? (
-                  <>
-                    {" "}&bull;{" "}
-                    <span class="text-slate-400">
-                      Vinculado: {related.description}
-                    </span>
-                  </>
-                )
-                : null;
-            })()}
-          </span>
-        </div>
-        <div class="text-right flex flex-col items-end">
-          <span class="text-xl font-bold text-indigo-400">
-            ${formattedAmount}
-          </span>
-        </div>
-      </button>
+            <span class="text-sm text-gray-500">
+              {new Date(tx.createdAt).toLocaleDateString("es-MX", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })} &bull; {new Date(tx.createdAt).toLocaleTimeString("es-MX", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+              {label && (
+                <>
+                  {" "}&bull; <span class="text-indigo-400">{label}</span>
+                </>
+              )}
+            </span>
+          </div>
+          <div class="text-right flex flex-col items-end">
+            <span class="text-xl font-bold text-indigo-400">
+              ${formattedAmount}
+            </span>
+          </div>
+        </button>
+        {relatedTx && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              const el = document.getElementById(`tx-${relatedTx.id}`);
+              if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "center" });
+              }
+            }}
+            class="w-full text-left bg-slate-800/60 px-5 py-2.5 border-l-4 border-l-indigo-500/40 border border-t-0 border-white/5 flex items-center gap-3 hover:bg-slate-700/60 transition-colors rounded-b-custom"
+          >
+            <svg class="w-3.5 h-3.5 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
+              <path d="M10.172 13.828a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.102 1.101" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
+            </svg>
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-medium text-slate-300 truncate">
+                {relatedTx.description}
+              </p>
+              <p class="text-[10px] text-slate-500">
+                {new Date(relatedTx.createdAt).toLocaleDateString("es-MX", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </p>
+            </div>
+            <svg class="w-3 h-3 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
+            </svg>
+          </button>
+        )}
+      </div>
     );
   }
 
@@ -1062,14 +1090,15 @@ export default function TransactionList(props: TransactionListProps) {
             </div>
           )
           : filteredTransactions.value.map((tx) => (
-            <TransactionCardClickable
-              key={tx.id}
-              tx={tx}
-              users={users.value}
-              currentUserId={currentUserId.value}
-              onClick={() => tx.type !== "ajuste" && openEdit(tx)}
-              allTxs={transactions.value}
-            />
+            <div key={tx.id} id={`tx-${tx.id}`}>
+              <TransactionCardClickable
+                tx={tx}
+                users={users.value}
+                currentUserId={currentUserId.value}
+                onClick={() => tx.type !== "ajuste" && openEdit(tx)}
+                allTxs={transactions.value}
+              />
+            </div>
           ))}
         <div class="h-24" />
       </main>
