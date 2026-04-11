@@ -55,6 +55,7 @@ function TransactionCardClickable(props: {
   users: Participant[];
   currentUserId: string;
   onClick: () => void;
+  allTxs?: EnrichedTransaction[];
 }) {
   const { tx, users, currentUserId } = props;
 
@@ -112,41 +113,90 @@ function TransactionCardClickable(props: {
       label = `Te pagó ${payerUser.name}`;
     }
 
+    const relatedTx = tx.relatedTransactionId
+      ? props.allTxs?.find((t) => t.id === tx.relatedTransactionId)
+      : undefined;
+
     return (
-      <button
-        type="button"
-        onClick={props.onClick}
-        class="w-full text-left bg-card p-5 rounded-custom border-l-4 border-l-indigo-500 border border-white/5 flex justify-between items-center transition-transform active:scale-[0.98] hover:bg-white/[0.02]"
-      >
-        <div class="flex flex-col">
-          <span class="text-lg font-semibold text-white flex items-center gap-2">
-            {tx.description}
-            <span class="text-xs font-medium px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300">
-              Pago
+      <div class="w-full">
+        <button
+          type="button"
+          onClick={props.onClick}
+          class={`w-full text-left bg-card p-5 border-l-4 border-l-indigo-500 border border-white/5 flex justify-between items-center transition-transform active:scale-[0.98] hover:bg-white/[0.02] ${
+            !relatedTx ? "rounded-custom" : "rounded-t-custom"
+          }`}
+        >
+          <div class="flex flex-col">
+            <span class="text-lg font-semibold text-white flex items-center gap-2">
+              {tx.description}
+              <span class="text-xs font-medium px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300">
+                Pago
+              </span>
             </span>
-          </span>
-          <span class="text-sm text-gray-500">
-            {new Date(tx.createdAt).toLocaleDateString("es-MX", {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-            })} &bull; {new Date(tx.createdAt).toLocaleTimeString("es-MX", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-            {label && (
-              <>
-                {" "}&bull; <span class="text-indigo-400">{label}</span>
-              </>
-            )}
-          </span>
-        </div>
-        <div class="text-right flex flex-col items-end">
-          <span class="text-xl font-bold text-indigo-400">
-            ${formattedAmount}
-          </span>
-        </div>
-      </button>
+            <span class="text-sm text-gray-500">
+              {new Date(tx.createdAt).toLocaleDateString("es-MX", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })} &bull; {new Date(tx.createdAt).toLocaleTimeString("es-MX", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+              {label && (
+                <>
+                  {" "}&bull; <span class="text-indigo-400">{label}</span>
+                </>
+              )}
+            </span>
+          </div>
+          <div class="text-right flex flex-col items-end">
+            <span class="text-xl font-bold text-indigo-400">
+              ${formattedAmount}
+            </span>
+          </div>
+        </button>
+        {relatedTx && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              const el = document.getElementById(`tx-${relatedTx.id}`);
+              if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "center" });
+                setTimeout(() => {
+                  el.classList.remove("highlight-pulse");
+                  void el.offsetWidth;
+                  el.classList.add("highlight-pulse");
+                  el.addEventListener("animationend", () => {
+                    el.classList.remove("highlight-pulse");
+                  }, { once: true });
+                }, 450);
+              }
+            }}
+            class="w-full text-left bg-slate-800/60 px-5 py-2.5 border-l-4 border-l-indigo-500/40 border border-t-0 border-white/5 flex items-center gap-3 hover:bg-slate-700/60 transition-colors rounded-b-custom"
+          >
+            <svg class="w-3.5 h-3.5 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
+              <path d="M10.172 13.828a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.102 1.101" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
+            </svg>
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-medium text-slate-300 truncate">
+                {relatedTx.description}
+              </p>
+              <p class="text-[10px] text-slate-500">
+                {new Date(relatedTx.createdAt).toLocaleDateString("es-MX", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </p>
+            </div>
+            <svg class="w-3 h-3 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
+            </svg>
+          </button>
+        )}
+      </div>
     );
   }
 
@@ -160,7 +210,28 @@ function TransactionCardClickable(props: {
   const personalBalance = isPaidByMe
     ? perInstallmentTotal - perInstallmentSplit
     : -perInstallmentSplit;
-  const isPositive = personalBalance >= 0;
+
+  const linkedPayments = (props.allTxs ?? []).filter(
+    (t) => t.type === "pago" && t.relatedTransactionId === tx.id,
+  );
+
+  let paymentsAffectingMe = 0;
+  if (!isPaidByMe && personalBalance < 0) {
+    paymentsAffectingMe = linkedPayments
+      .filter((p) => p.userPaid === currentUserId)
+      .reduce((sum, p) => sum + p.originalAmount, 0);
+  } else if (isPaidByMe && personalBalance > 0) {
+    paymentsAffectingMe = linkedPayments
+      .filter((p) => p.splitJson.splits[0]?.userId === currentUserId)
+      .reduce((sum, p) => sum + p.originalAmount, 0);
+  }
+
+  const remainingBalance = isPaidByMe
+    ? Math.max(0, personalBalance - paymentsAffectingMe)
+    : -Math.max(0, Math.abs(personalBalance) - paymentsAffectingMe);
+
+  const isZero = Math.abs(remainingBalance) < 0.005;
+  const isPositive = remainingBalance >= 0;
 
   return (
     <button
@@ -207,10 +278,10 @@ function TransactionCardClickable(props: {
       <div class="text-right flex flex-col items-end">
         <span
           class={`text-xl font-bold ${
-            isPositive ? "text-green-500" : "text-red-500"
+            isZero ? "text-green-500" : isPositive ? "text-green-500" : "text-red-500"
           }`}
         >
-          {isPositive ? "+" : "-"}${Math.abs(personalBalance).toLocaleString(
+          {isZero ? "" : isPositive ? "+" : "-"}${Math.abs(remainingBalance).toLocaleString(
             "en-US",
             { minimumFractionDigits: 2, maximumFractionDigits: 2 },
           )}
@@ -315,8 +386,104 @@ export default function TransactionList(props: TransactionListProps) {
   const fixedAmounts = useSignal<Record<string, number>>(
     Object.fromEntries(users.value.map((u) => [u.id, 0])),
   );
+  const linkToTransaction = useSignal(false);
+  const selectedRelatedTxId = useSignal<string | null>(null);
+  const relatedTxSearch = useSignal("");
 
   const isEditing = useComputed(() => editingId.value !== null);
+
+  interface EligibleTransaction {
+    id: string;
+    description: string;
+    userPaid: string;
+    paidByUser: string;
+    originalDebt: number;
+    remainingDebt: number;
+    createdAt: Date;
+  }
+
+  function computeEligibleTransactions(excludePaymentId?: string): EligibleTransaction[] {
+    const uid = userPaid.value;
+    const debtMap = new Map<string, { tx: EnrichedTransaction; debt: number }>();
+
+    for (const tx of transactions.value) {
+      if (tx.type === "pago" || tx.type === "ajuste") continue;
+      if (tx.userPaid === uid) continue;
+
+      const userSplit = tx.splitJson.splits.find((s) => s.userId === uid);
+      if (!userSplit) continue;
+
+      const divisor = tx.type === "parcialidad" && tx.installmentTotal
+        ? tx.installmentTotal
+        : 1;
+      const debt = userSplit.amount / divisor;
+
+      if (debt > 0.005) {
+        debtMap.set(tx.id, { tx, debt });
+      }
+    }
+
+    for (const tx of transactions.value) {
+      if (tx.type !== "pago") continue;
+      if (!tx.relatedTransactionId) continue;
+      if (tx.userPaid !== uid) continue;
+      if (tx.id === excludePaymentId) continue;
+
+      const entry = debtMap.get(tx.relatedTransactionId);
+      if (entry) {
+        entry.debt -= tx.originalAmount;
+      }
+    }
+
+    const result: EligibleTransaction[] = [];
+    for (const [id, { tx, debt }] of debtMap) {
+      if (debt > 0.005) {
+        const paidByName = tx.paidByUser?.name ?? "Desconocido";
+        result.push({
+          id,
+          description: tx.description,
+          userPaid: tx.userPaid,
+          paidByUser: paidByName,
+          originalDebt: (() => {
+            const us = tx.splitJson.splits.find((s) => s.userId === uid);
+            if (!us) return 0;
+            const d = tx.type === "parcialidad" && tx.installmentTotal ? tx.installmentTotal : 1;
+            return us.amount / d;
+          })(),
+          remainingDebt: Math.round(debt * 100) / 100,
+          createdAt: tx.createdAt,
+        });
+      }
+    }
+
+    result.sort((a, b) => a.remainingDebt - b.remainingDebt);
+    return result;
+  }
+
+  const eligibleTransactions = useComputed(() =>
+    computeEligibleTransactions(editingId.value ?? undefined)
+  );
+
+  const hasEligibleTransactions = useComputed(() =>
+    eligibleTransactions.value.length > 0
+  );
+
+  const filteredEligible = useComputed(() => {
+    const list = eligibleTransactions.value;
+    if (!relatedTxSearch.value.trim()) return list;
+    const q = relatedTxSearch.value.trim().toLowerCase();
+    return list.filter((e) =>
+      e.description.toLowerCase().includes(q) ||
+      e.paidByUser.toLowerCase().includes(q)
+    );
+  });
+
+  const selectedRelatedTx = useComputed(() => {
+    if (!selectedRelatedTxId.value) return null;
+    return eligibleTransactions.value.find((e) =>
+      e.id === selectedRelatedTxId.value
+    ) ?? null;
+  });
 
   function buildDefaultPercentages(): Record<string, number> {
     return computeDefaultPercentages(users.value, defaultSplit.value);
@@ -375,6 +542,9 @@ export default function TransactionList(props: TransactionListProps) {
     installmentAmount.value = 0;
     paymentRecipient.value =
       users.value.find((u) => u.id !== currentUserId.value)?.id ?? "";
+    linkToTransaction.value = false;
+    selectedRelatedTxId.value = null;
+    relatedTxSearch.value = "";
 
     const lastConfig = loadLastSplitConfig();
     if (lastConfig) {
@@ -431,6 +601,13 @@ export default function TransactionList(props: TransactionListProps) {
       const recipientSplit = tx.splitJson.splits[0];
       if (recipientSplit) {
         paymentRecipient.value = recipientSplit.userId;
+      }
+      if (tx.relatedTransactionId) {
+        linkToTransaction.value = true;
+        selectedRelatedTxId.value = tx.relatedTransactionId;
+      } else {
+        linkToTransaction.value = false;
+        selectedRelatedTxId.value = null;
       }
     } else {
       const splits = tx.splitJson.splits;
@@ -600,6 +777,13 @@ export default function TransactionList(props: TransactionListProps) {
     e.preventDefault();
     if (submitting.value) return;
 
+    if (
+      linkToTransaction.value && selectedRelatedTx.value &&
+      Math.abs(amount.value) > selectedRelatedTx.value.remainingDebt + 0.005
+    ) {
+      return;
+    }
+
     let splitJson: TransactionSplit;
 
     if (modalMode.value === "payment") {
@@ -639,6 +823,9 @@ export default function TransactionList(props: TransactionListProps) {
       splitJson,
       creatorId: currentUserId.value,
       userPaid: userPaid.value,
+      relatedTransactionId: linkToTransaction.value && selectedRelatedTxId.value
+        ? selectedRelatedTxId.value
+        : null,
       createdAt: new Date(),
       paidByUser,
     };
@@ -669,6 +856,9 @@ export default function TransactionList(props: TransactionListProps) {
     if (optimistic.type === "parcialidad") {
       form.append("installmentCurrent", installmentCurrent.value.toString());
       form.append("installmentTotal", installmentTotal.value.toString());
+    }
+    if (optimistic.relatedTransactionId) {
+      form.append("relatedTransactionId", optimistic.relatedTransactionId);
     }
 
     try {
@@ -908,13 +1098,15 @@ export default function TransactionList(props: TransactionListProps) {
             </div>
           )
           : filteredTransactions.value.map((tx) => (
-            <TransactionCardClickable
-              key={tx.id}
-              tx={tx}
-              users={users.value}
-              currentUserId={currentUserId.value}
-              onClick={() => tx.type !== "ajuste" && openEdit(tx)}
-            />
+            <div key={tx.id} id={`tx-${tx.id}`}>
+              <TransactionCardClickable
+                tx={tx}
+                users={users.value}
+                currentUserId={currentUserId.value}
+                onClick={() => tx.type !== "ajuste" && openEdit(tx)}
+                allTxs={transactions.value}
+              />
+            </div>
           ))}
         <div class="h-24" />
       </main>
@@ -1222,6 +1414,7 @@ export default function TransactionList(props: TransactionListProps) {
 
               {isPago
                 ? (
+                  <>
                   <section class="space-y-4">
                     <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">
                       Transferencia
@@ -1466,6 +1659,133 @@ export default function TransactionList(props: TransactionListProps) {
                       </div>
                     </div>
                   </section>
+
+                  <section class="space-y-3">
+                    <label class="flex items-center gap-3 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={linkToTransaction.value}
+                        disabled={!hasEligibleTransactions.value}
+                        onChange={() => {
+                          linkToTransaction.value = !linkToTransaction.value;
+                          if (!linkToTransaction.value) {
+                            selectedRelatedTxId.value = null;
+                          }
+                        }}
+                        class="accent-primary w-4 h-4"
+                      />
+                      <span class="text-sm font-medium text-slate-300">
+                        Relacionar este pago a una transacción existente
+                      </span>
+                      {!hasEligibleTransactions.value && (
+                        <span class="relative group">
+                          <span class="inline-flex items-center justify-center w-4 h-4 text-xs font-bold rounded-full bg-slate-700 text-slate-400 cursor-help">
+                            ?
+                          </span>
+                          <span class="absolute left-5 top-1/2 -translate-y-1/2 w-64 bg-slate-800 border border-white/10 text-white text-xs font-normal no-underline rounded-custom px-3 py-2 shadow-xl z-50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                            Sólo puedes relacionar pagos cuando tienes saldo por pagar!
+                          </span>
+                        </span>
+                      )}
+                    </label>
+
+                    {linkToTransaction.value && hasEligibleTransactions.value && (
+                      <div class="space-y-2">
+                        <div class="relative">
+                          <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
+                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
+                            </svg>
+                          </span>
+                          <input
+                            type="text"
+                            placeholder="Buscar gasto..."
+                            value={relatedTxSearch.value}
+                            onInput={(e) =>
+                              relatedTxSearch.value = (e.target as HTMLInputElement).value}
+                            class="w-full bg-slate-800 border-slate-700 rounded-custom pl-9 pr-8 text-white text-sm placeholder-slate-500 focus:ring-primary focus:border-primary py-2"
+                          />
+                          {relatedTxSearch.value && (
+                            <button
+                              type="button"
+                              onClick={() => relatedTxSearch.value = ""}
+                              class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-white"
+                            >
+                              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+
+                        <div class="max-h-60 overflow-y-auto custom-scrollbar space-y-1.5 border border-white/5 rounded-custom p-2 bg-slate-900/50">
+                          {filteredEligible.value.length === 0
+                            ? (
+                              <p class="text-xs text-slate-500 text-center py-4">
+                                No se encontraron gastos.
+                              </p>
+                            )
+                            : filteredEligible.value.map((etx) => {
+                              const isSelected = selectedRelatedTxId.value === etx.id;
+                              const paidByName = etx.paidByUser;
+                              const maxAmount = etx.remainingDebt;
+                              return (
+                                <button
+                                  key={etx.id}
+                                  type="button"
+                                  onClick={() => {
+                                    if (isSelected) {
+                                      selectedRelatedTxId.value = null;
+                                    } else {
+                                      selectedRelatedTxId.value = etx.id;
+                                      paymentRecipient.value = etx.userPaid;
+                                    }
+                                  }}
+                                  class={`w-full text-left p-3 rounded-custom transition-all ${
+                                    isSelected
+                                      ? "bg-indigo-500/20 border border-indigo-500/50"
+                                      : "bg-slate-800/50 border border-white/5 hover:bg-white/5"
+                                  }`}
+                                >
+                                  <div class="flex justify-between items-start gap-2">
+                                    <div class="min-w-0 flex-1">
+                                      <p class={`text-sm font-medium truncate ${isSelected ? "text-indigo-300" : "text-white"}`}>
+                                        {etx.description}
+                                      </p>
+                                      <p class="text-xs text-slate-500 mt-0.5">
+                                        Pagó {paidByName} &bull; {new Date(etx.createdAt).toLocaleDateString("es-MX", { month: "short", day: "numeric" })}
+                                      </p>
+                                    </div>
+                                    <div class="text-right shrink-0">
+                                      <p class="text-sm font-bold text-red-400">
+                                        -${maxAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      </p>
+                                      {Math.abs(etx.remainingDebt - etx.originalDebt) > 0.01 && (
+                                        <p class="text-[10px] text-slate-500">
+                                          de ${etx.originalDebt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                        </div>
+
+                        {selectedRelatedTx.value && (
+                          <p class="text-xs text-slate-400">
+                            Pago máximo: <span class="text-white font-semibold">${selectedRelatedTx.value.remainingDebt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            {amount.value > selectedRelatedTx.value.remainingDebt && (
+                              <span class="text-red-400 ml-2">
+                                El monto excede la deuda pendiente
+                              </span>
+                            )}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </section>
+                  </>
                 )
                 : (
                   <section class="space-y-4">
@@ -1853,7 +2173,12 @@ export default function TransactionList(props: TransactionListProps) {
                 </button>
                 <button
                   type="button"
-                  disabled={submitting.value}
+                  disabled={submitting.value ||
+                    (linkToTransaction.value && selectedRelatedTxId.value !== null &&
+                      (() => {
+                        const stx = selectedRelatedTx.value;
+                        return stx !== null && Math.abs(amount.value) > stx.remainingDebt + 0.005;
+                      })())}
                   onClick={(e) => handleSubmit(e)}
                   class={`px-8 py-2 text-sm font-semibold rounded-custom transition-all shadow-lg active:scale-95 disabled:opacity-50 ${
                     isPago

@@ -76,6 +76,7 @@ CREATE TABLE transactions (
   split_json JSONB NOT NULL DEFAULT '{"splits":[]}',
   creator_id UUID REFERENCES users(id) ON DELETE SET NULL,
   user_paid UUID NOT NULL,
+  related_transaction_id UUID REFERENCES transactions(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

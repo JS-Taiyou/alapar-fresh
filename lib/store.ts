@@ -70,6 +70,7 @@ function rowToTransaction(row: Record<string, unknown>): Transaction {
     splitJson: typeof row.split_json === "string"
       ? JSON.parse(row.split_json)
       : row.split_json as TransactionSplit,
+    relatedTransactionId: (row.related_transaction_id as string) ?? null,
     creatorId: row.creator_id as string,
     userPaid: row.user_paid as string,
     createdAt: new Date(row.created_at as string),
@@ -323,8 +324,8 @@ export async function createTransaction(
   if (!member) return null;
   const recurringGroupId = data.recurringGroupId ?? crypto.randomUUID();
   const result = await query(
-    `INSERT INTO transactions (registry_id, description, amount, original_amount, type, exercise_id, installment_current, installment_total, recurring_disabled, recurring_group_id, notes, split_json, creator_id, user_paid)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *`,
+    `INSERT INTO transactions (registry_id, description, amount, original_amount, type, exercise_id, installment_current, installment_total, recurring_disabled, recurring_group_id, notes, split_json, creator_id, user_paid, related_transaction_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING *`,
     [
       data.registry_id,
       data.description,
@@ -340,6 +341,7 @@ export async function createTransaction(
       JSON.stringify(data.splitJson),
       data.creatorId,
       data.userPaid,
+      data.relatedTransactionId ?? null,
     ],
   );
   return rowToTransaction(result.rows[0]);
@@ -392,6 +394,10 @@ export async function updateTransaction(
   if (data.recurringDisabled !== undefined) {
     sets.push(`recurring_disabled = $${idx++}`);
     values.push(data.recurringDisabled);
+  }
+  if (data.relatedTransactionId !== undefined) {
+    sets.push(`related_transaction_id = $${idx++}`);
+    values.push(data.relatedTransactionId);
   }
   if (sets.length === 0) return getTransactionById(id);
   values.push(id);

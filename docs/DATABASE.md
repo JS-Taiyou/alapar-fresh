@@ -116,6 +116,7 @@ Entity IDs are auto-incrementing integers (starting from 1). They are scoped to 
 | split_json | JSONB | NOT NULL, default '{"splits":[]}' | Split data (see below) |
 | creator_id | UUID | FK → users, SET NULL | Who created it (nullable to preserve transactions if user deleted) |
 | user_paid | UUID | NOT NULL | Who paid (no FK — can be a user ID or entity ID from registries.entities_json) |
+| related_transaction_id | UUID | FK → transactions, SET NULL, nullable | For 'pago' type: links to the expense transaction this payment settles |
 | created_at | TIMESTAMPTZ | NOT NULL, default now() | Creation timestamp |
 
 **Key design decisions**:

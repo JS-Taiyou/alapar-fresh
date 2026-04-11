@@ -5,10 +5,11 @@ interface TransactionCardProps {
   paidByUser: Participant | null;
   currentUserId: string;
   allUsers?: Participant[];
+  relatedDescription?: string;
 }
 
 export default function TransactionCard(props: TransactionCardProps) {
-  const { transaction: tx, paidByUser, currentUserId, allUsers } = props;
+  const { transaction: tx, paidByUser, currentUserId, allUsers, relatedDescription } = props;
 
   if (tx.type === "pago" || tx.type === "ajuste") {
     const isPayer = tx.userPaid === currentUserId;
@@ -64,6 +65,14 @@ export default function TransactionCard(props: TransactionCardProps) {
               <>
                 {" "}&bull;{" "}
                 <span class={amountColor}>{label}</span>
+              </>
+            )}
+            {relatedDescription && (
+              <>
+                {" "}&bull;{" "}
+                <span class="text-slate-400">
+                  Vinculado: {relatedDescription}
+                </span>
               </>
             )}
           </span>

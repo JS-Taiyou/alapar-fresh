@@ -33,6 +33,8 @@ export const handlers = define.handlers({
     const installmentTotal = form.get("installmentTotal")
       ? parseInt(form.get("installmentTotal") as string)
       : null;
+    const relatedTransactionId = (form.get("relatedTransactionId") as string) ||
+      null;
     const splitJson: TransactionSplit = JSON.parse(splitJsonStr);
 
     const updated = await updateTransaction(id, {
@@ -45,6 +47,7 @@ export const handlers = define.handlers({
       userPaid,
       installmentCurrent,
       installmentTotal,
+      relatedTransactionId,
     }, userId);
     if (!updated) {
       return new Response("Forbidden", { status: 403 });

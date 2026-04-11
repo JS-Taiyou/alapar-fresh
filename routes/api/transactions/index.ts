@@ -24,6 +24,8 @@ export const handlers = define.handlers({
     const installmentTotal = form.get("installmentTotal")
       ? parseInt(form.get("installmentTotal") as string)
       : null;
+    const relatedTransactionId = (form.get("relatedTransactionId") as string) ||
+      null;
 
     const splitJson: TransactionSplit = JSON.parse(splitJsonStr);
 
@@ -42,6 +44,7 @@ export const handlers = define.handlers({
       splitJson,
       creatorId: userPaid,
       userPaid,
+      relatedTransactionId,
     }, userId);
 
     if (!tx) {

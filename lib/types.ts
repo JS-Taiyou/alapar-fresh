@@ -26,6 +26,7 @@ export interface Transaction {
   recurringGroupId: string;
   notes: string;
   splitJson: TransactionSplit;
+  relatedTransactionId: string | null;
   creatorId: string | null;
   userPaid: string;
   createdAt: Date;

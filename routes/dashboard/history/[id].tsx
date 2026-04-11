@@ -155,15 +155,21 @@ export default define.page(function ExerciseDetail(ctx) {
           </header>
 
           <div class="space-y-4">
-            {data.transactions.map((tx) => (
-              <TransactionCard
-                key={tx.id}
-                transaction={tx}
-                paidByUser={tx.paidByUser ?? null}
-                currentUserId={currentRegistryUserId}
-                allUsers={ctx.state.participants}
-              />
-            ))}
+            {data.transactions.map((tx) => {
+              const relatedDesc = tx.relatedTransactionId
+                ? data.transactions.find((t) => t.id === tx.relatedTransactionId)?.description
+                : undefined;
+              return (
+                <TransactionCard
+                  key={tx.id}
+                  transaction={tx}
+                  paidByUser={tx.paidByUser ?? null}
+                  currentUserId={currentRegistryUserId}
+                  allUsers={ctx.state.participants}
+                  relatedDescription={relatedDesc}
+                />
+              );
+            })}
           </div>
         </div>
       </main>
