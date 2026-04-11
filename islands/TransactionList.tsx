@@ -665,9 +665,29 @@ export default function TransactionList(props: TransactionListProps) {
     }));
   }
 
+  function getLinkedDebtCap(): number | null {
+    if (!linkToTransaction.value || !selectedRelatedTxId.value) return null;
+    const stx = eligibleTransactions.value.find((e) =>
+      e.id === selectedRelatedTxId.value
+    );
+    return stx ? stx.remainingDebt : null;
+  }
+
+  function clampAmountToLinkedDebt() {
+    const cap = getLinkedDebtCap();
+    if (cap !== null && amount.value > cap) {
+      amount.value = cap;
+    }
+  }
+
   function handleAmountChange(raw: string) {
     const sanitized = sanitizeDecimal(raw);
-    const newVal = parseFloat(sanitized) || 0;
+    let newVal = parseFloat(sanitized) || 0;
+
+    const cap = getLinkedDebtCap();
+    if (cap !== null && newVal > cap) {
+      newVal = cap;
+    }
 
     if (
       editingId.value &&
@@ -688,7 +708,7 @@ export default function TransactionList(props: TransactionListProps) {
     }
 
     amount.value = newVal;
-    return sanitized;
+    return newVal === 0 ? "" : newVal.toString();
   }
 
   function handleInstallmentAmountChange(raw: string) {
@@ -1670,6 +1690,8 @@ export default function TransactionList(props: TransactionListProps) {
                           linkToTransaction.value = !linkToTransaction.value;
                           if (!linkToTransaction.value) {
                             selectedRelatedTxId.value = null;
+                          } else {
+                            clampAmountToLinkedDebt();
                           }
                         }}
                         class="accent-primary w-4 h-4"
@@ -1739,17 +1761,18 @@ export default function TransactionList(props: TransactionListProps) {
                                     } else {
                                       selectedRelatedTxId.value = etx.id;
                                       paymentRecipient.value = etx.userPaid;
+                                      clampAmountToLinkedDebt();
                                     }
                                   }}
                                   class={`w-full text-left p-3 rounded-custom transition-all ${
                                     isSelected
-                                      ? "bg-indigo-500/20 border border-indigo-500/50"
+                                      ? "bg-emerald-900/30 border border-emerald-700/40"
                                       : "bg-slate-800/50 border border-white/5 hover:bg-white/5"
                                   }`}
                                 >
                                   <div class="flex justify-between items-start gap-2">
                                     <div class="min-w-0 flex-1">
-                                      <p class={`text-sm font-medium truncate ${isSelected ? "text-indigo-300" : "text-white"}`}>
+                                      <p class={`text-sm font-medium truncate ${isSelected ? "text-emerald-300" : "text-white"}`}>
                                         {etx.description}
                                       </p>
                                       <p class="text-xs text-slate-500 mt-0.5">
