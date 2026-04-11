@@ -29,7 +29,8 @@ app.use(define.middleware(async (ctx) => {
   ctx.state.supabaseAuthId = authUser.id;
 
   const path = new URL(ctx.req.url).pathname;
-  const needsFullState = path.startsWith("/dashboard") ||
+  const needsFullState = path === "/" ||
+    path.startsWith("/dashboard") ||
     path.startsWith("/api/registries") ||
     path.startsWith("/api/transactions") ||
     path.startsWith("/api/entities") ||
