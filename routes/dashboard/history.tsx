@@ -15,7 +15,7 @@ interface HistoryData {
   personalTotals: Map<string, number>;
 }
 
-export const handlers = define.handlers({
+export const handler = define.handlers({
   async GET(ctx) {
     const registryId = ctx.state.activeRegistry?.id;
     if (!registryId) {

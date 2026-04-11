@@ -1,6 +1,5 @@
 import { query } from "./db.ts";
 import type {
-  BalanceBreakdownEntry,
   DefaultSplit,
   Entity,
   Exercise,

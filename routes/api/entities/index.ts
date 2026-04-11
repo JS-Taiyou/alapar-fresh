@@ -1,7 +1,7 @@
 import { define } from "../../../utils.ts";
 import { createEntity, getEntities } from "../../../lib/store.ts";
 
-export const handlers = define.handlers({
+export const handler = define.handlers({
   async GET(ctx) {
     const url = new URL(ctx.req.url);
     const registryId = url.searchParams.get("registryId") ||

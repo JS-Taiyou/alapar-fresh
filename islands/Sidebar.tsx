@@ -234,7 +234,8 @@ export default function Sidebar(props: SidebarProps) {
                   <span class="text-sm font-medium truncate flex-1 min-w-0">
                     {r.name}
                   </span>
-                  <span class="hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
+                  {(!collapsed.value || mobileOpen.value) && (
+                  <span style="display:none" class="registry-item-actions items-center gap-0.5 flex-shrink-0">
                     {props.ownerRegistryIds.has(r.id) && (
                       <button
                         type="button"
@@ -287,6 +288,7 @@ export default function Sidebar(props: SidebarProps) {
                       </button>
                     )}
                   </span>
+                  )}
                 </button>
               )}
           </div>

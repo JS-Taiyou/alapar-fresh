@@ -1,7 +1,7 @@
 import { define } from "../../../utils.ts";
-import { useInvitation } from "../../../lib/store.ts";
+import { useInvitation as acceptInvitation } from "../../../lib/store.ts";
 
-export const handlers = define.handlers({
+export const handler = define.handlers({
   async POST(ctx) {
     const body = await ctx.req.json();
     const code = body.code as string;
@@ -15,7 +15,7 @@ export const handlers = define.handlers({
     }
 
     try {
-      const registryId = await useInvitation(code, systemUserId);
+      const registryId = await acceptInvitation(code, systemUserId);
       return new Response(JSON.stringify({ registryId }), {
         headers: { "Content-Type": "application/json" },
       });

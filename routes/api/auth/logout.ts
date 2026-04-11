@@ -1,7 +1,7 @@
 import { define } from "../../../utils.ts";
 import { clearAuthCookies } from "../../../lib/supabase.ts";
 
-export const handlers = define.handlers({
+export const handler = define.handlers({
   POST(_ctx) {
     const headers = new Headers();
     clearAuthCookies(headers);

@@ -122,7 +122,7 @@ function TransactionCardClickable(props: {
         <button
           type="button"
           onClick={props.onClick}
-          class={`w-full text-left bg-card p-5 border-l-4 border-l-indigo-500 border border-white/5 flex justify-between items-center transition-transform active:scale-[0.98] hover:bg-white/[0.02] ${
+          class={`w-full text-left bg-card p-5 border-l-4 border-l-indigo-500 border border-white/5 flex justify-between items-center transition-transform active:scale-[0.98] hover:bg-white/2 ${
             !relatedTx ? "rounded-custom" : "rounded-t-custom"
           }`}
         >
@@ -237,7 +237,7 @@ function TransactionCardClickable(props: {
     <button
       type="button"
       onClick={props.onClick}
-      class="w-full text-left bg-card p-5 rounded-custom border border-white/5 flex justify-between items-center transition-transform active:scale-[0.98] hover:bg-white/[0.02]"
+      class="w-full text-left bg-card p-5 rounded-custom border border-white/5 flex justify-between items-center transition-transform active:scale-[0.98] hover:bg-white/2"
     >
       <div class="flex flex-col">
         <span class="text-lg font-semibold text-white">{tx.description}</span>
@@ -307,6 +307,140 @@ export default function TransactionList(props: TransactionListProps) {
   const balanceEntries = props.balanceEntries;
   const showTerceroPopover = useSignal(false);
 
+  const isOpen = useSignal(false);
+  const editingId = useSignal<string | null>(null);
+  const submitting = useSignal(false);
+  const searchQuery = useSignal("");
+  const filterUserId = useSignal<string | null>(null);
+  const modalMode = useSignal<"expense" | "payment">("expense");
+  const amount = useSignal(0);
+  const description = useSignal("");
+  const notes = useSignal("");
+  const expenseType = useSignal<TransactionType>("unico");
+  const installmentCurrent = useSignal(1);
+  const installmentTotal = useSignal(12);
+  const installmentInputMode = useSignal<"total" | "installment">("total");
+  const installmentAmount = useSignal(0);
+  const splitMode = useSignal<SplitMode>("auto");
+  const userPaid = useSignal(currentUserId.value);
+  const paymentRecipient = useSignal<string>(
+    users.value.find((u) => u.id !== currentUserId.value)?.id ?? "",
+  );
+  const percentages = useSignal<Record<string, number>>(
+    computeDefaultPercentages(users.value, defaultSplit.value),
+  );
+  const fixedAmounts = useSignal<Record<string, number>>(
+    Object.fromEntries(users.value.map((u) => [u.id, 0])),
+  );
+  const linkToTransaction = useSignal(false);
+  const selectedRelatedTxId = useSignal<string | null>(null);
+  const relatedTxSearch = useSignal("");
+
+  const isEditing = useComputed(() => editingId.value !== null);
+
+  interface EligibleTransaction {
+    id: string;
+    description: string;
+    userPaid: string;
+    paidByUser: string;
+    originalDebt: number;
+    remainingDebt: number;
+    createdAt: Date;
+  }
+
+  const eligibleTransactions = useComputed(() => {
+    const uid = userPaid.value;
+    const debtMap = new Map<string, { tx: EnrichedTransaction; debt: number }>();
+
+    for (const tx of transactions.value) {
+      if (tx.type === "pago" || tx.type === "ajuste") continue;
+      if (tx.userPaid === uid) continue;
+
+      const userSplit = tx.splitJson.splits.find((s) => s.userId === uid);
+      if (!userSplit) continue;
+
+      const divisor = tx.type === "parcialidad" && tx.installmentTotal
+        ? tx.installmentTotal
+        : 1;
+      const debt = userSplit.amount / divisor;
+
+      if (debt > 0.005) {
+        debtMap.set(tx.id, { tx, debt });
+      }
+    }
+
+    for (const tx of transactions.value) {
+      if (tx.type !== "pago") continue;
+      if (!tx.relatedTransactionId) continue;
+      if (tx.userPaid !== uid) continue;
+      if (tx.id === (editingId.value ?? undefined)) continue;
+
+      const entry = debtMap.get(tx.relatedTransactionId);
+      if (entry) {
+        entry.debt -= tx.originalAmount;
+      }
+    }
+
+    const result: EligibleTransaction[] = [];
+    for (const [id, { tx, debt }] of debtMap) {
+      if (debt > 0.005) {
+        const paidByName = tx.paidByUser?.name ?? "Desconocido";
+        result.push({
+          id,
+          description: tx.description,
+          userPaid: tx.userPaid,
+          paidByUser: paidByName,
+          originalDebt: (() => {
+            const us = tx.splitJson.splits.find((s) => s.userId === uid);
+            if (!us) return 0;
+            const d = tx.type === "parcialidad" && tx.installmentTotal ? tx.installmentTotal : 1;
+            return us.amount / d;
+          })(),
+          remainingDebt: Math.round(debt * 100) / 100,
+          createdAt: tx.createdAt,
+        });
+      }
+    }
+
+    result.sort((a, b) => a.remainingDebt - b.remainingDebt);
+    return result;
+  });
+
+  const hasEligibleTransactions = useComputed(() =>
+    eligibleTransactions.value.length > 0
+  );
+
+  const filteredEligible = useComputed(() => {
+    const list = eligibleTransactions.value;
+    if (!relatedTxSearch.value.trim()) return list;
+    const q = relatedTxSearch.value.trim().toLowerCase();
+    return list.filter((e) =>
+      e.description.toLowerCase().includes(q) ||
+      e.paidByUser.toLowerCase().includes(q)
+    );
+  });
+
+  const selectedRelatedTx = useComputed(() => {
+    if (!selectedRelatedTxId.value) return null;
+    return eligibleTransactions.value.find((e) =>
+      e.id === selectedRelatedTxId.value
+    ) ?? null;
+  });
+
+  const filteredTransactions = useComputed(() => {
+    let list = transactions.value;
+    if (filterUserId.value) {
+      list = list.filter((tx) => tx.userPaid === filterUserId.value);
+    }
+    if (searchQuery.value.trim()) {
+      const q = searchQuery.value.trim().toLowerCase();
+      list = list.filter((tx) => tx.description.toLowerCase().includes(q));
+    }
+    return list;
+  });
+
+  const splits = useComputed(() => getSplits());
+
   if (users.value.length <= 1) {
     return (
       <main class="flex-1 overflow-y-auto custom-scrollbar p-6 flex items-center justify-center">
@@ -360,130 +494,6 @@ export default function TransactionList(props: TransactionListProps) {
       users.value,
     );
   }
-
-  const isOpen = useSignal(false);
-  const editingId = useSignal<string | null>(null);
-  const submitting = useSignal(false);
-  const searchQuery = useSignal("");
-  const filterUserId = useSignal<string | null>(null);
-  const modalMode = useSignal<"expense" | "payment">("expense");
-  const amount = useSignal(0);
-  const description = useSignal("");
-  const notes = useSignal("");
-  const expenseType = useSignal<TransactionType>("unico");
-  const installmentCurrent = useSignal(1);
-  const installmentTotal = useSignal(12);
-  const installmentInputMode = useSignal<"total" | "installment">("total");
-  const installmentAmount = useSignal(0);
-  const splitMode = useSignal<SplitMode>("auto");
-  const userPaid = useSignal(currentUserId.value);
-  const paymentRecipient = useSignal<string>(
-    users.value.find((u) => u.id !== currentUserId.value)?.id ?? "",
-  );
-  const percentages = useSignal<Record<string, number>>(
-    computeDefaultPercentages(users.value, defaultSplit.value),
-  );
-  const fixedAmounts = useSignal<Record<string, number>>(
-    Object.fromEntries(users.value.map((u) => [u.id, 0])),
-  );
-  const linkToTransaction = useSignal(false);
-  const selectedRelatedTxId = useSignal<string | null>(null);
-  const relatedTxSearch = useSignal("");
-
-  const isEditing = useComputed(() => editingId.value !== null);
-
-  interface EligibleTransaction {
-    id: string;
-    description: string;
-    userPaid: string;
-    paidByUser: string;
-    originalDebt: number;
-    remainingDebt: number;
-    createdAt: Date;
-  }
-
-  function computeEligibleTransactions(excludePaymentId?: string): EligibleTransaction[] {
-    const uid = userPaid.value;
-    const debtMap = new Map<string, { tx: EnrichedTransaction; debt: number }>();
-
-    for (const tx of transactions.value) {
-      if (tx.type === "pago" || tx.type === "ajuste") continue;
-      if (tx.userPaid === uid) continue;
-
-      const userSplit = tx.splitJson.splits.find((s) => s.userId === uid);
-      if (!userSplit) continue;
-
-      const divisor = tx.type === "parcialidad" && tx.installmentTotal
-        ? tx.installmentTotal
-        : 1;
-      const debt = userSplit.amount / divisor;
-
-      if (debt > 0.005) {
-        debtMap.set(tx.id, { tx, debt });
-      }
-    }
-
-    for (const tx of transactions.value) {
-      if (tx.type !== "pago") continue;
-      if (!tx.relatedTransactionId) continue;
-      if (tx.userPaid !== uid) continue;
-      if (tx.id === excludePaymentId) continue;
-
-      const entry = debtMap.get(tx.relatedTransactionId);
-      if (entry) {
-        entry.debt -= tx.originalAmount;
-      }
-    }
-
-    const result: EligibleTransaction[] = [];
-    for (const [id, { tx, debt }] of debtMap) {
-      if (debt > 0.005) {
-        const paidByName = tx.paidByUser?.name ?? "Desconocido";
-        result.push({
-          id,
-          description: tx.description,
-          userPaid: tx.userPaid,
-          paidByUser: paidByName,
-          originalDebt: (() => {
-            const us = tx.splitJson.splits.find((s) => s.userId === uid);
-            if (!us) return 0;
-            const d = tx.type === "parcialidad" && tx.installmentTotal ? tx.installmentTotal : 1;
-            return us.amount / d;
-          })(),
-          remainingDebt: Math.round(debt * 100) / 100,
-          createdAt: tx.createdAt,
-        });
-      }
-    }
-
-    result.sort((a, b) => a.remainingDebt - b.remainingDebt);
-    return result;
-  }
-
-  const eligibleTransactions = useComputed(() =>
-    computeEligibleTransactions(editingId.value ?? undefined)
-  );
-
-  const hasEligibleTransactions = useComputed(() =>
-    eligibleTransactions.value.length > 0
-  );
-
-  const filteredEligible = useComputed(() => {
-    const list = eligibleTransactions.value;
-    if (!relatedTxSearch.value.trim()) return list;
-    const q = relatedTxSearch.value.trim().toLowerCase();
-    return list.filter((e) =>
-      e.description.toLowerCase().includes(q) ||
-      e.paidByUser.toLowerCase().includes(q)
-    );
-  });
-
-  const selectedRelatedTx = useComputed(() => {
-    if (!selectedRelatedTxId.value) return null;
-    return eligibleTransactions.value.find((e) =>
-      e.id === selectedRelatedTxId.value
-    ) ?? null;
-  });
 
   function buildDefaultPercentages(): Record<string, number> {
     return computeDefaultPercentages(users.value, defaultSplit.value);
@@ -930,19 +940,6 @@ export default function TransactionList(props: TransactionListProps) {
     fetch(`/api/transactions/${id}`, { method: "DELETE" }).catch(() => {});
   }
 
-  const filteredTransactions = useComputed(() => {
-    let list = transactions.value;
-    if (filterUserId.value) {
-      list = list.filter((tx) => tx.userPaid === filterUserId.value);
-    }
-    if (searchQuery.value.trim()) {
-      const q = searchQuery.value.trim().toLowerCase();
-      list = list.filter((tx) => tx.description.toLowerCase().includes(q));
-    }
-    return list;
-  });
-
-  const splits = useComputed(() => getSplits());
   const totalSplitAmount = splits.value.reduce((s, sp) => s + sp.amount, 0);
   const totalPct = splitMode.value === "percentage"
     ? totalPercentage()
@@ -1137,6 +1134,7 @@ export default function TransactionList(props: TransactionListProps) {
             Agregar pago
           </span>
           <button
+            type="button"
             onClick={openNewPago}
             class="w-16 h-16 bg-green-700 text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all"
           >
@@ -1160,6 +1158,7 @@ export default function TransactionList(props: TransactionListProps) {
             Agregar gasto
           </span>
           <button
+            type="button"
             onClick={openNew}
             class="w-16 h-16 bg-yellow-500 text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all"
           >
@@ -1194,6 +1193,7 @@ export default function TransactionList(props: TransactionListProps) {
                 <p class="text-sm text-slate-400">{modalSubtitle}</p>
               </div>
               <button
+                type="button"
                 onClick={() => {
                   isOpen.value = false;
                   editingId.value = null;

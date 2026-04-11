@@ -3,7 +3,7 @@ import { define } from "../../utils.ts";
 import { getInvitationByCode } from "../../lib/store.ts";
 import JoinButton from "../../islands/JoinButton.tsx";
 
-export const handlers = define.handlers({
+export const handler = define.handlers({
   async GET(ctx) {
     const code = ctx.params.code;
     const invitation = await getInvitationByCode(code);

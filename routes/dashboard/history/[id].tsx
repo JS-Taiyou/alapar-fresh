@@ -16,7 +16,7 @@ interface ExerciseDetailData {
   transactions: EnrichedTransaction[];
 }
 
-export const handlers = define.handlers({
+export const handler = define.handlers({
   async GET(ctx) {
     const id = ctx.params.id;
     const exercise = await getExerciseById(id);

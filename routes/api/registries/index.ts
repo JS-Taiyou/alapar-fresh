@@ -1,7 +1,7 @@
 import { define } from "../../../utils.ts";
 import { createRegistry } from "../../../lib/store.ts";
 
-export const handlers = define.handlers({
+export const handler = define.handlers({
   async POST(ctx) {
     const form = await ctx.req.formData();
     const name = form.get("name") as string;

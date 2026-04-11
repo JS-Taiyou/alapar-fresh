@@ -6,7 +6,7 @@ import {
 } from "../../../lib/store.ts";
 import type { TransactionSplit } from "../../../lib/types.ts";
 
-export const handlers = define.handlers({
+export const handler = define.handlers({
   async PUT(ctx) {
     const userId = ctx.state.user?.id;
     if (!userId) {

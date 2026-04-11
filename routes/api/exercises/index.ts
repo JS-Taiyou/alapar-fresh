@@ -6,7 +6,7 @@ import {
   calculateFullPairwiseBalances,
 } from "../../../lib/store.ts";
 
-export const handlers = define.handlers({
+export const handler = define.handlers({
   async POST(ctx) {
     const registryId = ctx.state.activeRegistry?.id;
     const userId = ctx.state.user?.id;
@@ -18,7 +18,7 @@ export const handlers = define.handlers({
     const users = ctx.state.participants;
     const debts = calculateFullPairwiseBalances(active, users);
 
-    const exercise = await createExercise(registryId);
+    await createExercise(registryId);
 
     for (const debt of debts) {
       await createTransaction({

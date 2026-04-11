@@ -1,7 +1,7 @@
 import { define } from "../../../../utils.ts";
 import { getUserRole, revokeInvitation } from "../../../../lib/store.ts";
 
-export const handlers = define.handlers({
+export const handler = define.handlers({
   async POST(ctx) {
     const invitationId = ctx.params.id;
     const systemUserId = ctx.state.user?.id;

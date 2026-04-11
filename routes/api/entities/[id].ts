@@ -1,7 +1,7 @@
 import { define } from "../../../utils.ts";
 import { deleteEntity, updateEntity } from "../../../lib/store.ts";
 
-export const handlers = define.handlers({
+export const handler = define.handlers({
   async PUT(ctx) {
     const id = ctx.params.id;
     const body = await ctx.req.json();

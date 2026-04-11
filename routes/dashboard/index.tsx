@@ -15,7 +15,6 @@ import type {
   BalanceBreakdownEntry,
   DefaultSplit,
   Participant,
-  Transaction,
 } from "../../lib/types.ts";
 import type { EnrichedTransaction } from "../../islands/shared-signals.ts";
 
@@ -37,7 +36,7 @@ interface DashboardData {
   usersCount: number;
 }
 
-export const handlers = define.handlers({
+export const handler = define.handlers({
   async GET(ctx) {
     const registryId = ctx.state.activeRegistry?.id;
     const userId = ctx.state.user?.id;

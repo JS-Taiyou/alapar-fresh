@@ -74,14 +74,8 @@ export default function RecurringSpawn(props: RecurringSpawnProps) {
         body: JSON.stringify({ items }),
       });
     }
-    window.location.reload();
+    globalThis.location.reload();
   }
-
-  const visibleCandidates = props.candidates.filter((c) =>
-    !disabledIds.value.has(c.id)
-  );
-  const hasVisible = visibleCandidates.length > 0 ||
-    props.candidates.length !== visibleCandidates.length;
 
   return (
     <>
@@ -161,7 +155,7 @@ export default function RecurringSpawn(props: RecurringSpawnProps) {
                 return (
                   <div
                     key={item.id}
-                    class="flex items-center gap-4 p-4 bg-background border border-border-custom rounded-custom hover:bg-white/[0.02] transition-colors"
+                    class="flex items-center gap-4 p-4 bg-background border border-border-custom rounded-custom hover:bg-white/2 transition-colors"
                   >
                     <input
                       type="checkbox"

@@ -1,7 +1,7 @@
 import { define } from "../../../utils.ts";
 import { createInvitation, getUserRole } from "../../../lib/store.ts";
 
-export const handlers = define.handlers({
+export const handler = define.handlers({
   async POST(ctx) {
     const body = await ctx.req.json();
     const registryId = body.registryId as string;

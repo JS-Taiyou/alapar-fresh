@@ -1,7 +1,7 @@
 import { define } from "../../../utils.ts";
 import { getTransactionById, updateTransaction } from "../../../lib/store.ts";
 
-export const handlers = define.handlers({
+export const handler = define.handlers({
   async POST(ctx) {
     const userId = ctx.state.user?.id;
     if (!userId) {

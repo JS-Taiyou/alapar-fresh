@@ -1,7 +1,7 @@
 import { define } from "../../../utils.ts";
 import { getInvitationsForRegistry, getUserRole } from "../../../lib/store.ts";
 
-export const handlers = define.handlers({
+export const handler = define.handlers({
   async GET(ctx) {
     const url = new URL(ctx.req.url);
     const registryId = url.searchParams.get("registryId");

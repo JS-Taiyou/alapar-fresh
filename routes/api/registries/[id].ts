@@ -7,7 +7,7 @@ import {
   setUserActiveRegistry,
 } from "../../../lib/store.ts";
 
-export const handlers = define.handlers({
+export const handler = define.handlers({
   async PATCH(ctx) {
     const id = ctx.params.id;
     const systemUserId = ctx.state.user?.id;

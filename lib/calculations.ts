@@ -5,7 +5,6 @@ import type {
   SplitEntry,
   Transaction,
   TransactionSplit,
-  User,
 } from "./types.ts";
 
 export function calculateBalance(
