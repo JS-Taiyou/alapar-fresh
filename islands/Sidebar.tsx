@@ -26,7 +26,11 @@ const REGISTRY_COLORS = [
 ];
 
 export default function Sidebar(props: SidebarProps) {
-  const collapsed = useSignal(false);
+  const collapsed = useSignal(
+    typeof localStorage !== "undefined"
+      ? localStorage.getItem("sidebar-collapsed") === "true"
+      : false,
+  );
   const mobileOpen = useSignal(false);
   const showInvite = useSignal(false);
   const inviteLoading = useSignal(false);
@@ -145,6 +149,10 @@ export default function Sidebar(props: SidebarProps) {
               mobileOpen.value = false;
             } else {
               collapsed.value = !collapsed.value;
+              localStorage.setItem(
+                "sidebar-collapsed",
+                String(collapsed.value),
+              );
             }
           }}
           class="p-2 hover:bg-white/5 rounded-custom text-gray-400 hover:text-white transition-colors shrink-0 hidden md:flex"
