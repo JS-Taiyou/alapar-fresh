@@ -174,7 +174,28 @@ function TransactionCardClickable(props: {
   const personalBalance = isPaidByMe
     ? perInstallmentTotal - perInstallmentSplit
     : -perInstallmentSplit;
-  const isPositive = personalBalance >= 0;
+
+  const linkedPayments = (props.allTxs ?? []).filter(
+    (t) => t.type === "pago" && t.relatedTransactionId === tx.id,
+  );
+
+  let paymentsAffectingMe = 0;
+  if (!isPaidByMe && personalBalance < 0) {
+    paymentsAffectingMe = linkedPayments
+      .filter((p) => p.userPaid === currentUserId)
+      .reduce((sum, p) => sum + p.originalAmount, 0);
+  } else if (isPaidByMe && personalBalance > 0) {
+    paymentsAffectingMe = linkedPayments
+      .filter((p) => p.splitJson.splits[0]?.userId === currentUserId)
+      .reduce((sum, p) => sum + p.originalAmount, 0);
+  }
+
+  const remainingBalance = isPaidByMe
+    ? Math.max(0, personalBalance - paymentsAffectingMe)
+    : -Math.max(0, Math.abs(personalBalance) - paymentsAffectingMe);
+
+  const isZero = Math.abs(remainingBalance) < 0.005;
+  const isPositive = remainingBalance >= 0;
 
   return (
     <button
@@ -221,10 +242,10 @@ function TransactionCardClickable(props: {
       <div class="text-right flex flex-col items-end">
         <span
           class={`text-xl font-bold ${
-            isPositive ? "text-green-500" : "text-red-500"
+            isZero ? "text-green-500" : isPositive ? "text-green-500" : "text-red-500"
           }`}
         >
-          {isPositive ? "+" : "-"}${Math.abs(personalBalance).toLocaleString(
+          {isZero ? "" : isPositive ? "+" : "-"}${Math.abs(remainingBalance).toLocaleString(
             "en-US",
             { minimumFractionDigits: 2, maximumFractionDigits: 2 },
           )}
