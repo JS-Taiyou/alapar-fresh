@@ -1766,13 +1766,13 @@ export default function TransactionList(props: TransactionListProps) {
                                   }}
                                   class={`w-full text-left p-3 rounded-custom transition-all ${
                                     isSelected
-                                      ? "bg-indigo-500/20 border border-indigo-500/50"
+                                      ? "bg-emerald-900/30 border border-emerald-700/40"
                                       : "bg-slate-800/50 border border-white/5 hover:bg-white/5"
                                   }`}
                                 >
                                   <div class="flex justify-between items-start gap-2">
                                     <div class="min-w-0 flex-1">
-                                      <p class={`text-sm font-medium truncate ${isSelected ? "text-indigo-300" : "text-white"}`}>
+                                      <p class={`text-sm font-medium truncate ${isSelected ? "text-emerald-300" : "text-white"}`}>
                                         {etx.description}
                                       </p>
                                       <p class="text-xs text-slate-500 mt-0.5">
