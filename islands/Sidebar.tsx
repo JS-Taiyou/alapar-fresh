@@ -125,7 +125,7 @@ export default function Sidebar(props: SidebarProps) {
 
   const sidebarContent = (
     <>
-      <div class={`p-4 border-b border-white/10 flex items-center transition-all duration-300 ${collapsed.value && !mobileOpen.value ? "justify-center" : "justify-between"}`}>
+      <div class={`border-b border-white/10 flex items-center transition-all duration-300 ${collapsed.value && !mobileOpen.value ? "p-1.5 justify-center" : "p-4 justify-between"}`}>
         <div class={`flex items-center gap-3 min-w-0 transition-opacity duration-200 overflow-hidden ${collapsed.value && !mobileOpen.value ? "opacity-0 w-0" : "opacity-100"}`}>
           <div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center font-bold text-white shrink-0">
             {props.userInitials}
@@ -150,10 +150,10 @@ export default function Sidebar(props: SidebarProps) {
                 };samesite=lax`;
             }
           }}
-          class="p-2 hover:bg-white/5 rounded-custom text-gray-400 hover:text-white transition-colors shrink-0 hidden md:flex"
+          class={`hover:bg-white/10 rounded-custom text-gray-400 hover:text-white transition-all duration-300 shrink-0 hidden md:flex items-center justify-center bg-white/5 border border-white/10 ${collapsed.value && !mobileOpen.value ? "p-2.5 w-full" : "p-2.5"}`}
         >
           <svg
-            class="w-5 h-5"
+            class="w-5 h-5 shrink-0"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -178,8 +178,8 @@ export default function Sidebar(props: SidebarProps) {
           </svg>
         </button>
       </div>
-      <div class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-2">
-        <h3 class={`px-2 text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 whitespace-nowrap transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0" : "opacity-100"}`}>
+      <div class={`flex-1 overflow-hidden space-y-2 transition-all duration-300 ${collapsed.value && !mobileOpen.value ? "p-1.5" : "p-4 overflow-y-auto custom-scrollbar"}`}>
+        <h3 class={`px-2 text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 whitespace-nowrap transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 h-0" : "opacity-100"}`}>
           Registros
         </h3>
         {props.registries.map((r, i) => (
@@ -214,7 +214,11 @@ export default function Sidebar(props: SidebarProps) {
                 <button
                   type="button"
                   onClick={() => switchRegistry(r.id)}
-                  class={`w-full flex items-center gap-3 px-3 py-2.5 rounded-custom transition-colors ${
+                  class={`w-full flex items-center rounded-custom transition-all duration-300 ${
+                    collapsed.value && !mobileOpen.value
+                      ? "justify-center p-2.5"
+                      : "gap-3 px-3 py-2.5"
+                  } ${
                     r.id === props.activeRegistryId
                       ? "bg-white/5 border border-white/10 text-white"
                       : "hover:bg-white/5 text-gray-400 hover:text-white"
@@ -227,7 +231,7 @@ export default function Sidebar(props: SidebarProps) {
                       REGISTRY_COLORS[i % REGISTRY_COLORS.length]
                     }`}
                   />
-                  <span class={`text-sm font-medium truncate flex-1 min-w-0 whitespace-nowrap transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0" : "opacity-100"}`}>
+                  <span class={`text-sm font-medium truncate flex-1 min-w-0 whitespace-nowrap transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 w-0 overflow-hidden" : "opacity-100"}`}>
                     {r.name}
                   </span>
                   {(!collapsed.value || mobileOpen.value) && (
