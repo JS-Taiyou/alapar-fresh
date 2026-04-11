@@ -292,13 +292,13 @@ export default function Sidebar(props: SidebarProps) {
       </div>
 
       {props.isOwner && props.activeRegistryId && (
-        <div class="px-4 pb-2">
+        <div class={`transition-all duration-300 ${collapsed.value && !mobileOpen.value ? "px-1.5 pb-1.5" : "px-4 pb-2"}`}>
           <button
             type="button"
             onClick={() => {
               showInvite.value = true;
             }}
-            class="w-full flex items-center justify-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-custom text-sm font-semibold text-emerald-400 py-2.5 px-3"
+            class={`w-full flex items-center bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-custom text-sm font-semibold text-emerald-400 transition-all duration-300 ${collapsed.value && !mobileOpen.value ? "justify-center p-2.5" : "justify-center gap-2 py-2.5 px-3"}`}
           >
             <svg
               class="w-5 h-5 shrink-0"
@@ -313,13 +313,13 @@ export default function Sidebar(props: SidebarProps) {
                 stroke-width="2"
               />
             </svg>
-            <span class={`whitespace-nowrap transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 w-0" : "opacity-100"}`}>Invitar</span>
+            <span class={`whitespace-nowrap transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 w-0 overflow-hidden" : "opacity-100"}`}>Invitar</span>
           </button>
         </div>
       )}
 
       {props.activeRegistryId && (
-        <div class="px-4 pb-2">
+        <div class={`transition-all duration-300 ${collapsed.value && !mobileOpen.value ? "px-1.5 pb-1.5" : "px-4 pb-2"}`}>
           <div class={`transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 h-0 overflow-hidden" : "opacity-100"}`}>
             <EntityManager
               registryId={props.activeRegistryId}
@@ -341,7 +341,7 @@ export default function Sidebar(props: SidebarProps) {
               title="Terceros"
             >
               <svg
-                class="w-5 h-5"
+                class="w-5 h-5 shrink-0"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -369,10 +369,10 @@ export default function Sidebar(props: SidebarProps) {
         </div>
       )}
 
-      <div class="border-t border-white/10 space-y-2 p-4">
+      <div class={`border-t border-white/10 space-y-2 transition-all duration-300 ${collapsed.value && !mobileOpen.value ? "p-1.5" : "p-4"}`}>
         <a
           href="/registries/new"
-          class="flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-custom text-sm font-semibold text-white py-3 px-4"
+          class={`flex items-center bg-white/5 hover:bg-white/10 border border-white/10 rounded-custom text-sm font-semibold text-white transition-all duration-300 ${collapsed.value && !mobileOpen.value ? "justify-center p-2.5" : "justify-center gap-2 py-3 px-4"}`}
         >
           <svg
             class="w-5 h-5 shrink-0"
@@ -387,17 +387,17 @@ export default function Sidebar(props: SidebarProps) {
               stroke-width="2"
             />
           </svg>
-          <span class={`whitespace-nowrap transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 w-0" : "opacity-100"}`}>
+          <span class={`whitespace-nowrap transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 w-0 overflow-hidden" : "opacity-100"}`}>
             Nuevo Registro
           </span>
         </a>
         <button
           type="button"
           onClick={handleLogout}
-          class="w-full flex items-center justify-center gap-2 text-slate-500 hover:text-red-400 transition-colors text-sm py-2 px-4"
+          class={`w-full flex items-center bg-white/5 hover:bg-white/10 border border-white/10 rounded-custom text-sm font-semibold text-slate-400 hover:text-red-400 transition-all duration-300 ${collapsed.value && !mobileOpen.value ? "justify-center p-2.5" : "justify-center gap-2 py-2.5 px-4"}`}
         >
           <svg
-            class="w-4 h-4"
+            class="w-4 h-4 shrink-0"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -409,7 +409,7 @@ export default function Sidebar(props: SidebarProps) {
               stroke-width="2"
             />
           </svg>
-          <span class={`whitespace-nowrap transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 w-0" : "opacity-100"}`}>Cerrar sesión</span>
+          <span class={`whitespace-nowrap transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 w-0 overflow-hidden" : "opacity-100"}`}>Cerrar sesión</span>
         </button>
       </div>
     </>
