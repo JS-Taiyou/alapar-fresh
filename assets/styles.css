@@ -34,6 +34,10 @@ html, body {
   );
 }
 
+.group:hover .sidebar-action-btns {
+  opacity: 1 !important;
+}
+
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;
 }

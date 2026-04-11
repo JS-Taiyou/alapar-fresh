@@ -27,6 +27,7 @@ const REGISTRY_COLORS = [
 ];
 
 export default function Sidebar(props: SidebarProps) {
+  const registries = useSignal(props.registries);
   const collapsed = useSignal(props.initialCollapsed ?? false);
   const mobileOpen = useSignal(false);
   const showInvite = useSignal(false);
@@ -102,14 +103,29 @@ export default function Sidebar(props: SidebarProps) {
 
   async function confirmRename(id: string) {
     const name = renameValue.value.trim();
-    if (!name) return;
-    await fetch(`/api/registries/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
+    if (!name) {
+      renamingId.value = null;
+      return;
+    }
+    const original = registries.value.find((r) => r.id === id)?.name ?? "";
+    if (name === original) {
+      renamingId.value = null;
+      return;
+    }
+    const oldRegistries = registries.value;
+    registries.value = registries.value.map((r) =>
+      r.id === id ? { ...r, name } : r
+    );
     renamingId.value = null;
-    globalThis.location.reload();
+    try {
+      await fetch(`/api/registries/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+    } catch {
+      registries.value = oldRegistries;
+    }
   }
 
   async function handleDeleteRegistry(id: string) {
@@ -183,7 +199,7 @@ export default function Sidebar(props: SidebarProps) {
         <h3 class={`px-2 text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 whitespace-nowrap transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 h-0" : "opacity-100"}`}>
           Registros
         </h3>
-        {props.registries.map((r, i) => (
+        {registries.value.map((r, i) => (
           <div key={r.id} class="group relative">
             {renamingId.value === r.id
               ? (
@@ -192,7 +208,13 @@ export default function Sidebar(props: SidebarProps) {
                     e.preventDefault();
                     confirmRename(r.id);
                   }}
-                  class="flex items-center gap-1 px-3 py-2.5 bg-white/5 border border-white/10 rounded-custom"
+                  class={`w-full flex items-center rounded-custom ${
+                    collapsed.value && !mobileOpen.value ? "justify-center p-2.5" : "gap-3 px-3 py-2.5"
+                  } ${
+                    r.id === props.activeRegistryId
+                      ? "bg-white/5 border border-white/10 text-white"
+                      : "bg-white/5 border border-white/10 text-white"
+                  }`}
                 >
                   <div
                     class="w-2 h-2 rounded-full flex-shrink-0"
@@ -206,7 +228,7 @@ export default function Sidebar(props: SidebarProps) {
                     onInput={(e) =>
                       renameValue.value = (e.target as HTMLInputElement).value}
                     onBlur={() => confirmRename(r.id)}
-                    class="flex-1 min-w-0 bg-transparent border-0 text-sm font-medium text-white focus:ring-0 p-0"
+                    class={`flex-1 min-w-0 bg-white/5 border border-white/10 rounded text-sm font-medium text-white p-1 px-2 focus:outline-none focus:ring-1 focus:ring-white/20 ${collapsed.value && !mobileOpen.value ? "opacity-0 w-0 p-0" : ""}`}
                     autofocus
                   />
                 </form>
@@ -236,7 +258,7 @@ export default function Sidebar(props: SidebarProps) {
                   <span class={`text-sm font-medium truncate min-w-0 whitespace-nowrap transition-all duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 w-0 overflow-hidden" : "opacity-100 flex-1"}`}>
                     {r.name}
                   </span>
-                  <span class={`items-center gap-1.5 flex-shrink-0 transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 w-0 overflow-hidden hidden" : "opacity-0 flex group-hover:opacity-100"}`}>
+                  <span style="opacity:0" class={`sidebar-action-btns items-center gap-1.5 flex-shrink-0 transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "w-0 overflow-hidden hidden" : "flex"}`}>
                     {props.ownerRegistryIds.has(r.id) && (
                       <button
                         type="button"
@@ -578,7 +600,7 @@ export default function Sidebar(props: SidebarProps) {
         <DefaultSplitConfig
           registryId={showSplitConfig.value}
           users={props.registryUsers}
-          defaultSplit={props.registries.find((r) => r.id === showSplitConfig.value)?.defaultSplit ?? null}
+          defaultSplit={registries.value.find((r) => r.id === showSplitConfig.value)?.defaultSplit ?? null}
           isOwner={props.ownerRegistryIds.has(showSplitConfig.value)}
           autoOpen
           onClose={() => showSplitConfig.value = null}
