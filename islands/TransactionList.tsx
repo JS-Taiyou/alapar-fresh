@@ -163,6 +163,14 @@ function TransactionCardClickable(props: {
               const el = document.getElementById(`tx-${relatedTx.id}`);
               if (el) {
                 el.scrollIntoView({ behavior: "smooth", block: "center" });
+                setTimeout(() => {
+                  el.classList.remove("highlight-pulse");
+                  void el.offsetWidth;
+                  el.classList.add("highlight-pulse");
+                  el.addEventListener("animationend", () => {
+                    el.classList.remove("highlight-pulse");
+                  }, { once: true });
+                }, 450);
               }
             }}
             class="w-full text-left bg-slate-800/60 px-5 py-2.5 border-l-4 border-l-indigo-500/40 border border-t-0 border-white/5 flex items-center gap-3 hover:bg-slate-700/60 transition-colors rounded-b-custom"
