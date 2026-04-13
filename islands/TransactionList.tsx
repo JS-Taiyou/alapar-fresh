@@ -13,6 +13,7 @@ import {
   computeDefaultPercentages,
 } from "../lib/calculations.ts";
 import { subscribeToRegistry, unsubscribeAll, setupRealtimeConfig } from "../lib/realtime.ts";
+import { requestNotificationPermission, subscribeToPush } from "../lib/notifications.ts";
 
 interface TransactionListProps {
   transactions: Signal<EnrichedTransaction[]>;
@@ -402,6 +403,10 @@ export default function TransactionList(props: TransactionListProps) {
       },
       props.accessToken,
     );
+
+    requestNotificationPermission().then((granted) => {
+      if (granted) subscribeToPush(rid);
+    });
 
     return () => unsubscribeAll();
   });
