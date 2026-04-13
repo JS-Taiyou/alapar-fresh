@@ -40,7 +40,8 @@ html,body{background-color:#0a0a0c;color:#f8fafc;margin:0}
         <script
           dangerouslySetInnerHTML={{
             __html: `
-if('serviceWorker'in navigator){
+window.addEventListener('load',function(){
+  if(!('serviceWorker' in navigator))return;
   navigator.serviceWorker.register('/sw.js').then(function(){
     if(caches&&caches.keys){
       caches.keys().then(function(names){
@@ -49,7 +50,7 @@ if('serviceWorker'in navigator){
       });
     }
   });
-}
+});
 `,
           }}
         />
