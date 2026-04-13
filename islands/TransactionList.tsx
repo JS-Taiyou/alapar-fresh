@@ -67,10 +67,10 @@ function TransactionCardClickable(props: {
 
     return (
       <div class="w-full text-left bg-card p-5 rounded-custom border-l-4 border-l-amber-500 border border-white/5 flex justify-between items-center">
-        <div class="flex flex-col">
-          <span class="text-lg font-semibold text-white flex items-center gap-2">
+        <div class="flex flex-col min-w-0">
+          <span class="text-lg font-semibold text-white flex items-center gap-2 truncate">
             {tx.description}
-            <span class="text-xs font-medium px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">
+            <span class="text-xs font-medium px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 shrink-0">
               Saldo pendiente
             </span>
           </span>
@@ -126,10 +126,10 @@ function TransactionCardClickable(props: {
             !relatedTx ? "rounded-custom" : "rounded-t-custom"
           }`}
         >
-          <div class="flex flex-col">
-            <span class="text-lg font-semibold text-white flex items-center gap-2">
+          <div class="flex flex-col min-w-0">
+            <span class="text-lg font-semibold text-white flex items-center gap-2 truncate">
               {tx.description}
-              <span class="text-xs font-medium px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300">
+              <span class="text-xs font-medium px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 shrink-0">
                 Pago
               </span>
             </span>
@@ -239,8 +239,8 @@ function TransactionCardClickable(props: {
       onClick={props.onClick}
       class="w-full text-left bg-card p-5 rounded-custom border border-white/5 flex justify-between items-center transition-transform active:scale-[0.98] hover:bg-white/2"
     >
-      <div class="flex flex-col">
-        <span class="text-lg font-semibold text-white">{tx.description}</span>
+      <div class="flex flex-col min-w-0">
+        <span class="text-lg font-semibold text-white truncate">{tx.description}</span>
         <span class="text-sm text-gray-500">
           {new Date(tx.createdAt).toLocaleDateString("es-MX", {
             month: "short",
@@ -314,13 +314,16 @@ export default function TransactionList(props: TransactionListProps) {
   const filterUserId = useSignal<string | null>(null);
   const modalMode = useSignal<"expense" | "payment">("expense");
   const amount = useSignal(0);
+  const amountDisplay = useSignal("");
   const description = useSignal("");
   const notes = useSignal("");
   const expenseType = useSignal<TransactionType>("unico");
   const installmentCurrent = useSignal(1);
   const installmentTotal = useSignal(12);
+  const installmentTotalDisplay = useSignal("12");
   const installmentInputMode = useSignal<"total" | "installment">("total");
   const installmentAmount = useSignal(0);
+  const installmentAmountDisplay = useSignal("");
   const splitMode = useSignal<SplitMode>("auto");
   const userPaid = useSignal(currentUserId.value);
   const paymentRecipient = useSignal<string>(
@@ -543,13 +546,16 @@ export default function TransactionList(props: TransactionListProps) {
 
   function resetForm() {
     amount.value = 0;
+    amountDisplay.value = "";
     description.value = "";
     notes.value = "";
     expenseType.value = "unico";
     installmentCurrent.value = 1;
     installmentTotal.value = 12;
+    installmentTotalDisplay.value = "12";
     installmentInputMode.value = "total";
     installmentAmount.value = 0;
+    installmentAmountDisplay.value = "";
     paymentRecipient.value =
       users.value.find((u) => u.id !== currentUserId.value)?.id ?? "";
     linkToTransaction.value = false;
@@ -596,16 +602,21 @@ export default function TransactionList(props: TransactionListProps) {
   function openEdit(tx: EnrichedTransaction) {
     editingId.value = tx.id;
     amount.value = tx.originalAmount;
+    amountDisplay.value = tx.originalAmount.toString();
     description.value = tx.description;
     notes.value = tx.notes || "";
     modalMode.value = tx.type === "pago" ? "payment" : "expense";
     if (tx.type !== "pago") expenseType.value = tx.type;
     installmentCurrent.value = tx.installmentCurrent ?? 1;
     installmentTotal.value = tx.installmentTotal ?? 12;
+    installmentTotalDisplay.value = (tx.installmentTotal ?? 12).toString();
     installmentInputMode.value = "total";
     installmentAmount.value = tx.installmentTotal
       ? Math.round((tx.originalAmount / tx.installmentTotal) * 100) / 100
       : 0;
+    installmentAmountDisplay.value = installmentAmount.value
+      ? installmentAmount.value.toString()
+      : "";
     userPaid.value = tx.userPaid;
 
     if (tx.type === "pago") {
@@ -719,13 +730,15 @@ export default function TransactionList(props: TransactionListProps) {
     }
 
     amount.value = newVal;
-    return newVal === 0 ? "" : newVal.toString();
+    amountDisplay.value = sanitized;
+    return sanitized;
   }
 
   function handleInstallmentAmountChange(raw: string) {
     const sanitized = sanitizeDecimal(raw);
     const newVal = parseFloat(sanitized) || 0;
     installmentAmount.value = newVal;
+    installmentAmountDisplay.value = sanitized;
     const total = Math.round(newVal * installmentTotal.value * 100) / 100;
 
     if (
@@ -1266,8 +1279,8 @@ export default function TransactionList(props: TransactionListProps) {
                       inputmode="decimal"
                       value={expenseType.value === "parcialidad" &&
                           installmentInputMode.value === "installment"
-                        ? installmentAmount.value || ""
-                        : amount.value || ""}
+                        ? installmentAmountDisplay.value || installmentAmount.value || ""
+                        : amountDisplay.value || amount.value || ""}
                       onInput={(e) => {
                         if (
                           expenseType.value === "parcialidad" &&
@@ -1282,6 +1295,15 @@ export default function TransactionList(props: TransactionListProps) {
                             (e.target as HTMLInputElement).value,
                           );
                           (e.target as HTMLInputElement).value = sanitized;
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const val = parseFloat((e.target as HTMLInputElement).value) || 0;
+                        (e.target as HTMLInputElement).value = val === 0 ? "" : val.toString();
+                        if (expenseType.value === "parcialidad" && installmentInputMode.value === "installment") {
+                          installmentAmountDisplay.value = val === 0 ? "" : val.toString();
+                        } else {
+                          amountDisplay.value = val === 0 ? "" : val.toString();
                         }
                       }}
                       required
@@ -1393,17 +1415,32 @@ export default function TransactionList(props: TransactionListProps) {
                           class="block w-20 px-4 py-2 bg-background border border-border-custom rounded-custom text-white focus:ring-primary focus:border-primary"
                           type="text"
                           inputmode="numeric"
-                          value={installmentTotal.value}
+                          value={installmentTotalDisplay.value}
                           onInput={(e) => {
                             const sanitized = sanitizeInteger(
                               (e.target as HTMLInputElement).value,
                             );
                             (e.target as HTMLInputElement).value = sanitized;
-                            const newTotal = parseInt(sanitized) || 12;
-                            installmentTotal.value = newTotal;
-                            if (installmentInputMode.value === "installment") {
+                            installmentTotalDisplay.value = sanitized;
+                            const newTotal = parseInt(sanitized) || 0;
+                            if (newTotal > 0) {
+                              installmentTotal.value = newTotal;
+                            }
+                            if (installmentInputMode.value === "installment" && newTotal > 0) {
                               amount.value = Math.round(
                                 installmentAmount.value * newTotal * 100,
+                              ) / 100;
+                            }
+                          }}
+                          onBlur={(e) => {
+                            const val = parseInt((e.target as HTMLInputElement).value) || 0;
+                            const clamped = val < 1 ? 1 : val;
+                            (e.target as HTMLInputElement).value = clamped.toString();
+                            installmentTotalDisplay.value = clamped.toString();
+                            installmentTotal.value = clamped;
+                            if (installmentInputMode.value === "installment") {
+                              amount.value = Math.round(
+                                installmentAmount.value * clamped * 100,
                               ) / 100;
                             }
                           }}
