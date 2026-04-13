@@ -1,5 +1,6 @@
 import { define } from "../../../utils.ts";
 import { createTransaction, getActiveTransactions } from "../../../lib/store.ts";
+import { sendPushToRegistry } from "../../../lib/push.ts";
 import type { TransactionSplit } from "../../../lib/types.ts";
 
 export const handler = define.handlers({
@@ -75,6 +76,13 @@ export const handler = define.handlers({
     if (!tx) {
       return new Response("Forbidden", { status: 403 });
     }
+
+    sendPushToRegistry(registryId, {
+      title: "Nueva transacción",
+      body: `${description} — $${originalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      registryId,
+      url: "/dashboard",
+    }, userId).catch(() => {});
 
     return Response.json(tx);
   },

@@ -4,6 +4,7 @@ import {
   getTransactionById,
   updateTransaction,
 } from "../../../lib/store.ts";
+import { sendPushToRegistry } from "../../../lib/push.ts";
 import type { TransactionSplit } from "../../../lib/types.ts";
 
 export const handler = define.handlers({
@@ -52,6 +53,14 @@ export const handler = define.handlers({
     if (!updated) {
       return new Response("Forbidden", { status: 403 });
     }
+
+    sendPushToRegistry(tx.registry_id, {
+      title: "Transacción actualizada",
+      body: `${description} — $${originalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      registryId: tx.registry_id,
+      url: "/dashboard",
+    }, userId).catch(() => {});
+
     return Response.json(updated);
   },
   async DELETE(ctx) {
@@ -61,10 +70,21 @@ export const handler = define.handlers({
     }
 
     const id = ctx.params.id;
+    const tx = await getTransactionById(id);
     const deleted = await deleteTransaction(id, userId);
     if (!deleted) {
       return new Response("Not found or forbidden", { status: 404 });
     }
+
+    if (tx) {
+      sendPushToRegistry(tx.registry_id, {
+        title: "Transacción eliminada",
+        body: tx.description,
+        registryId: tx.registry_id,
+        url: "/dashboard",
+      }, userId).catch(() => {});
+    }
+
     return new Response(null, { status: 204 });
   },
 });
