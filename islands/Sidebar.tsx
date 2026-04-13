@@ -32,6 +32,8 @@ export default function Sidebar(props: SidebarProps) {
   const mobileOpen = useSignal(false);
   const showInvite = useSignal(false);
   const isStandalone = useSignal(false);
+  const dragOffset = useSignal<number | null>(null);
+  const SIDEBAR_WIDTH = 288;
   const inviteLoading = useSignal(false);
   const inviteCode = useSignal("");
   const inviteError = useSignal("");
@@ -48,65 +50,121 @@ export default function Sidebar(props: SidebarProps) {
     let touchStartY = 0;
     let touchStartTime = 0;
     let twoFingerActive = false;
+    let dragging = false;
+    let startXForDrag = 0;
 
     const SWIPE_THRESHOLD = 80;
     const MAX_VERTICAL_RATIO = 0.5;
+    const SETTLE_RATIO = 0.4;
+
+    function getX(e: TouchEvent): number {
+      if (e.touches.length >= 2) {
+        return (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      }
+      return e.changedTouches.length > 0 ? e.changedTouches[0].clientX : e.touches[0].clientX;
+    }
+
+    function getY(e: TouchEvent): number {
+      if (e.touches.length >= 2) {
+        return (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      }
+      return e.changedTouches.length > 0 ? e.changedTouches[0].clientY : e.touches[0].clientY;
+    }
 
     function onTouchStart(e: TouchEvent) {
+      if (window.innerWidth >= 768) return;
+      dragging = false;
+
       if (e.touches.length === 2) {
         twoFingerActive = true;
-        const avgX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-        const avgY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-        touchStartX = avgX;
-        touchStartY = avgY;
+        touchStartX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        touchStartY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
         touchStartTime = Date.now();
+        dragging = true;
+        startXForDrag = touchStartX;
       } else if (e.touches.length === 1 && isStandalone.value) {
         twoFingerActive = false;
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
         touchStartTime = Date.now();
+        dragging = true;
+        startXForDrag = touchStartX;
+      }
+    }
+
+    function onTouchMove(e: TouchEvent) {
+      if (!dragging) return;
+      if (window.innerWidth >= 768) { dragging = false; dragOffset.value = null; return; }
+      if (twoFingerActive && e.touches.length < 2) { dragging = false; dragOffset.value = null; return; }
+
+      const currentX = getX(e);
+      const currentY = getY(e);
+      const dx = currentX - touchStartX;
+      const dy = Math.abs(currentY - touchStartY);
+      if (dy / (Math.abs(dx) + 1) > MAX_VERTICAL_RATIO) { dragging = false; dragOffset.value = null; return; }
+
+      if (!mobileOpen.value) {
+        if (dx > 0) {
+          dragOffset.value = Math.min(dx, SIDEBAR_WIDTH);
+        }
+      } else {
+        if (dx < 0) {
+          dragOffset.value = SIDEBAR_WIDTH + Math.max(dx, -SIDEBAR_WIDTH);
+        } else {
+          dragOffset.value = SIDEBAR_WIDTH;
+        }
       }
     }
 
     function onTouchEnd(e: TouchEvent) {
+      if (!dragging) return;
+      dragging = false;
       const isMobile = window.innerWidth < 768;
-      if (!isMobile) return;
+      if (!isMobile) { dragOffset.value = null; return; }
 
       const dt = Date.now() - touchStartTime;
-      if (dt > 600) return;
+      const endX = getX(e);
+      const endY = getY(e);
+      const dx = endX - touchStartX;
+      const dy = Math.abs(endY - touchStartY);
 
-      let endX: number;
-      let endY: number;
+      twoFingerActive = false;
 
-      if (twoFingerActive) {
-        if (e.touches.length > 0) return;
-        endX = e.changedTouches[0].clientX;
-        endY = e.changedTouches[0].clientY;
-        twoFingerActive = false;
-      } else if (isStandalone.value && e.changedTouches.length === 1) {
-        endX = e.changedTouches[0].clientX;
-        endY = e.changedTouches[0].clientY;
-      } else {
+      if (dt > 800 || dy / (Math.abs(dx) + 1) > MAX_VERTICAL_RATIO) {
+        dragOffset.value = null;
         return;
       }
 
-      const dx = endX - touchStartX;
-      const dy = Math.abs(endY - touchStartY);
-      if (dy / (Math.abs(dx) + 1) > MAX_VERTICAL_RATIO) return;
-
-      if (dx > SWIPE_THRESHOLD && !mobileOpen.value) {
-        mobileOpen.value = true;
-      } else if (dx < -SWIPE_THRESHOLD && mobileOpen.value) {
-        mobileOpen.value = false;
+      if (!mobileOpen.value) {
+        const offset = dragOffset.value ?? 0;
+        if (dx > SWIPE_THRESHOLD || offset > SIDEBAR_WIDTH * SETTLE_RATIO) {
+          mobileOpen.value = true;
+        }
+      } else {
+        const offset = dragOffset.value ?? SIDEBAR_WIDTH;
+        if (dx < -SWIPE_THRESHOLD || offset < SIDEBAR_WIDTH * (1 - SETTLE_RATIO)) {
+          mobileOpen.value = false;
+        }
       }
+
+      dragOffset.value = null;
+    }
+
+    function onTouchCancel() {
+      dragging = false;
+      dragOffset.value = null;
     }
 
     document.addEventListener("touchstart", onTouchStart, { passive: true });
+    document.addEventListener("touchmove", onTouchMove, { passive: true });
     document.addEventListener("touchend", onTouchEnd, { passive: true });
+    document.addEventListener("touchcancel", onTouchCancel, { passive: true });
 
     return () => {
       document.removeEventListener("touchstart", onTouchStart);
+      document.removeEventListener("touchmove", onTouchMove);
       document.removeEventListener("touchend", onTouchEnd);
+      document.removeEventListener("touchcancel", onTouchCancel);
     };
   });
 
@@ -536,10 +594,11 @@ export default function Sidebar(props: SidebarProps) {
         </svg>
       </button>
 
-      {mobileOpen.value && (
+      {(mobileOpen.value || dragOffset.value !== null) && (
         <div
-          class="md:hidden fixed inset-0 z-40 bg-black/60"
-          onClick={() => mobileOpen.value = false}
+          class="md:hidden fixed inset-0 z-40 bg-black/60 transition-opacity duration-300"
+          style={dragOffset.value !== null ? { opacity: (dragOffset.value / SIDEBAR_WIDTH) * 0.6 } : undefined}
+          onClick={() => { mobileOpen.value = false; dragOffset.value = null; }}
         />
       )}
 
@@ -552,9 +611,12 @@ export default function Sidebar(props: SidebarProps) {
       </aside>
 
       <aside
-        class={`md:hidden fixed top-0 left-0 z-50 w-72 bg-[#0a0a0a] border-r border-white/10 flex flex-col h-full transition-transform duration-300 ${
-          mobileOpen.value ? "translate-x-0" : "-translate-x-full"
+        class={`md:hidden fixed top-0 left-0 z-50 w-72 bg-[#0a0a0a] border-r border-white/10 flex flex-col h-full ${
+          dragOffset.value !== null ? "transition-none" : "transition-transform duration-300"
         }`}
+        style={{
+          transform: `translateX(${dragOffset.value !== null ? `${dragOffset.value - SIDEBAR_WIDTH}px` : mobileOpen.value ? "0" : "-100%"})`,
+        }}
       >
         <div class="flex items-center justify-between p-4 border-b border-white/10">
           <span class="text-lg font-bold text-white">Menu</span>

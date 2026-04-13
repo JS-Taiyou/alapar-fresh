@@ -246,20 +246,33 @@ function TransactionCardClickable(props: {
     >
       <div class="flex flex-col min-w-0">
         <span class="text-lg font-semibold text-white truncate">{tx.description}</span>
-        <span class="text-sm text-gray-500">
-          {new Date(tx.createdAt).toLocaleDateString("es-MX", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          })} &bull; {new Date(tx.createdAt).toLocaleTimeString("es-MX", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
+        <div class="text-sm text-gray-500">
+          <span class="block sm:inline">
+            {new Date(tx.createdAt).toLocaleDateString("es-MX", {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            })} &bull; {new Date(tx.createdAt).toLocaleTimeString("es-MX", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </span>
           {tx.paidByUser && (
             <>
-              {" "}&bull;{" "}
+              <span class="hidden sm:inline">
+                {" "}&bull;{" "}
+                <span
+                  class={`text-xs px-1.5 py-0.5 rounded ${
+                    isPaidByMe
+                      ? "bg-emerald-500/20 text-emerald-400"
+                      : "bg-slate-300 text-slate-800 font-bold"
+                  }`}
+                >
+                  {isPaidByMe ? "Tú pagaste" : tx.paidByUser.name}
+                </span>
+              </span>
               <span
-                class={`text-xs px-1.5 py-0.5 rounded ${
+                class={`block sm:hidden text-xs px-1.5 py-0.5 rounded mt-0.5 w-fit ${
                   isPaidByMe
                     ? "bg-emerald-500/20 text-emerald-400"
                     : "bg-slate-300 text-slate-800 font-bold"
@@ -278,7 +291,7 @@ function TransactionCardClickable(props: {
               </span>
             </>
           )}
-        </span>
+        </div>
       </div>
       <div class="text-right flex flex-col items-end">
         <span
@@ -311,6 +324,7 @@ export default function TransactionList(props: TransactionListProps) {
   const balance = props.balance;
   const balanceEntries = props.balanceEntries;
   const showTerceroPopover = useSignal(false);
+  const mobileAddExpanded = useSignal(false);
 
   const isOpen = useSignal(false);
   const editingId = useSignal<string | null>(null);
@@ -676,12 +690,14 @@ export default function TransactionList(props: TransactionListProps) {
   function openNew() {
     resetForm();
     modalMode.value = "expense";
+    mobileAddExpanded.value = false;
     isOpen.value = true;
   }
 
   function openNewPago() {
     resetForm();
     modalMode.value = "payment";
+    mobileAddExpanded.value = false;
     isOpen.value = true;
   }
 
@@ -1059,7 +1075,7 @@ export default function TransactionList(props: TransactionListProps) {
 
   return (
     <>
-      <main class="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4 relative">
+      <main class="flex-1 overflow-y-auto custom-scrollbar p-2 sm:p-6 space-y-4 relative">
         <div class="flex justify-between items-center mb-2">
           <h2 class="text-lg font-semibold text-gray-200">
             {filterUserId.value
@@ -1170,6 +1186,46 @@ export default function TransactionList(props: TransactionListProps) {
           </div>
         )}
 
+        <div class="sm:hidden">
+          {!mobileAddExpanded.value
+            ? (
+              <button
+                type="button"
+                onClick={() => mobileAddExpanded.value = true}
+                class="w-full py-3 bg-yellow-500 hover:bg-yellow-600 text-white font-bold text-base rounded-custom active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 4v16m8-8H4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
+                </svg>
+                Agregar
+              </button>
+            )
+            : (
+              <div class="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => { mobileAddExpanded.value = false; openNewPago(); }}
+                  class="flex-1 py-3 bg-green-700 hover:bg-green-800 text-white font-bold text-base rounded-custom active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                >
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
+                  </svg>
+                  Pago
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { mobileAddExpanded.value = false; openNew(); }}
+                  class="flex-1 py-3 bg-yellow-500 hover:bg-yellow-600 text-white font-bold text-base rounded-custom active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                >
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
+                  </svg>
+                  Gasto
+                </button>
+              </div>
+            )}
+        </div>
+
         {transactions.value.length === 0
           ? (
             <div class="flex flex-col items-center justify-center py-20 text-center">
@@ -1228,7 +1284,7 @@ export default function TransactionList(props: TransactionListProps) {
         <div class="h-24" />
       </main>
 
-      <div class="fixed bottom-8 right-8 z-50 flex flex-col gap-3">
+      <div class="hidden sm:flex fixed bottom-8 right-8 z-50 flex-col gap-3">
         <div class="group relative">
           <span class="absolute right-full top-1/2 -translate-y-1/2 mr-3 whitespace-nowrap bg-slate-800 text-white text-sm px-3 py-1.5 rounded-custom shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
             Agregar pago
@@ -1287,7 +1343,7 @@ export default function TransactionList(props: TransactionListProps) {
           }}
         >
           <div class="bg-surface border border-border-custom w-full max-w-2xl rounded-custom shadow-2xl flex flex-col overflow-hidden">
-            <header class="px-6 py-4 border-b border-border-custom flex justify-between items-center">
+            <header class="px-4 py-3 sm:px-6 sm:py-4 border-b border-border-custom flex justify-between items-center">
               <div>
                 <h2 class="text-xl font-bold text-white">{modalTitle}</h2>
                 <p class="text-sm text-slate-400">{modalSubtitle}</p>
@@ -1318,7 +1374,7 @@ export default function TransactionList(props: TransactionListProps) {
 
             <form
               onSubmit={handleSubmit}
-              class="p-6 space-y-8 overflow-y-auto max-h-[75vh]"
+              class="p-4 sm:p-6 space-y-4 sm:space-y-8 overflow-y-auto max-h-[75vh]"
             >
               <div class="space-y-2">
                 <label
@@ -1341,7 +1397,7 @@ export default function TransactionList(props: TransactionListProps) {
                 />
               </div>
 
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6">
                 <div class="space-y-2">
                   <label
                     class="block text-sm font-medium text-slate-300"
@@ -1440,7 +1496,7 @@ export default function TransactionList(props: TransactionListProps) {
               </div>
 
               {expenseType.value === "parcialidad" && (
-                <div class="space-y-4">
+                <div class="space-y-3 sm:space-y-4">
                   <div class="flex gap-2">
                     <button
                       type="button"
@@ -1475,7 +1531,7 @@ export default function TransactionList(props: TransactionListProps) {
                       Monto por Parcialidad
                     </button>
                   </div>
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6">
                     <div class="space-y-2">
                       <label class="block text-sm font-medium text-slate-300">
                         Parcialidad Actual
@@ -1583,7 +1639,7 @@ export default function TransactionList(props: TransactionListProps) {
               {isPago
                 ? (
                   <>
-                  <section class="space-y-4">
+                  <section class="space-y-3 sm:space-y-4">
                     <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">
                       Transferencia
                     </h3>
@@ -1959,7 +2015,7 @@ export default function TransactionList(props: TransactionListProps) {
                   </>
                 )
                 : (
-                  <section class="space-y-4">
+                  <section class="space-y-3 sm:space-y-4">
                     <div class="flex justify-between items-center">
                       <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">
                         División
@@ -2294,7 +2350,7 @@ export default function TransactionList(props: TransactionListProps) {
                 )}
             </form>
 
-            <footer class="px-6 py-4 border-t border-border-custom bg-slate-800/20 flex justify-between items-center gap-3">
+            <footer class="px-4 py-3 sm:px-6 sm:py-4 border-t border-border-custom bg-slate-800/20 flex justify-between items-center gap-3">
               <div>
                 {isEditing.value && (
                   <button
