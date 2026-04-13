@@ -785,8 +785,8 @@ export async function deleteEntity(
   const txCheck = await query(
     `SELECT 1 FROM transactions WHERE registry_id = $1
      AND exercise_id IS NULL
-     AND (user_paid = $2 OR split_json @> $3)`,
-    [registryId, entityId, JSON.stringify({ splits: [{ userId: entityId }] })],
+     AND (user_paid = $2 OR split_json::text LIKE $3)`,
+    [registryId, entityId, `%"userId":"${entityId}"%`],
   );
   if (txCheck.rows.length > 0) return false;
 
