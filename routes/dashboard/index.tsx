@@ -6,6 +6,7 @@ import {
   getActiveTransactions,
   getSpawnCandidates,
 } from "../../lib/store.ts";
+import { getSupabaseUrl, getSupabaseAnonKey } from "../../lib/supabase.ts";
 import { Head } from "fresh/runtime";
 import TransactionList from "../../islands/TransactionList.tsx";
 import CortarButton from "../../islands/CortarButton.tsx";
@@ -34,6 +35,9 @@ interface DashboardData {
   spawnCandidates: SpawnCandidate[];
   balanceBreakdown: BalanceBreakdownEntry[];
   usersCount: number;
+  accessToken: string;
+  supabaseUrl: string;
+  supabaseAnonKey: string;
 }
 
 export const handler = define.handlers({
@@ -49,6 +53,9 @@ export const handler = define.handlers({
           spawnCandidates: [],
           balanceBreakdown: [],
           usersCount: ctx.state.participants.length,
+          accessToken: "",
+          supabaseUrl: getSupabaseUrl(),
+          supabaseAnonKey: getSupabaseAnonKey(),
         },
       };
     }
@@ -92,10 +99,23 @@ export const handler = define.handlers({
         spawnCandidates,
         balanceBreakdown,
         usersCount: ctx.state.participants.length,
+        accessToken: getAccessToken(ctx.req.headers.get("cookie") ?? ""),
+        supabaseUrl: getSupabaseUrl(),
+        supabaseAnonKey: getSupabaseAnonKey(),
       },
     };
   },
 });
+
+function getAccessToken(cookieHeader: string): string {
+  const cookies = cookieHeader.split(";").map((c) => c.trim());
+  for (const cookie of cookies) {
+    if (cookie.startsWith("sb-access-token=")) {
+      return cookie.substring("sb-access-token=".length);
+    }
+  }
+  return "";
+}
 
 export default define.page(function DashboardIndex(ctx) {
   const data = ctx.data as DashboardData;
@@ -162,6 +182,9 @@ export default define.page(function DashboardIndex(ctx) {
         balanceEntries={$balanceEntries}
         defaultSplit={$defaultSplit}
         entityIds={entityIds}
+        supabaseUrl={data.supabaseUrl}
+        supabaseAnonKey={data.supabaseAnonKey}
+        accessToken={data.accessToken}
       />
     </>
   );

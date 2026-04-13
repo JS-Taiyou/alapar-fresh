@@ -24,7 +24,7 @@ function getSupabase(): SupabaseClient {
   return supabase;
 }
 
-export function subscribeToRegistry(registryId: string, handler: ChangeHandler): void {
+export async function subscribeToRegistry(registryId: string, handler: ChangeHandler, accessToken?: string): Promise<void> {
   onChange = handler;
 
   if (activeRegistryId === registryId && activeChannel) return;
@@ -34,8 +34,12 @@ export function subscribeToRegistry(registryId: string, handler: ChangeHandler):
   activeRegistryId = registryId;
   const client = getSupabase();
 
+  if (accessToken) {
+    await client.realtime.setAuth(accessToken);
+  }
+
   activeChannel = client
-    .channel(`registry:${registryId}`)
+    .channel(`db-changes-${registryId}`)
     .on(
       "postgres_changes",
       {
@@ -54,7 +58,9 @@ export function subscribeToRegistry(registryId: string, handler: ChangeHandler):
         }
       },
     )
-    .subscribe();
+    .subscribe((status, err) => {
+      console.log("[realtime] status:", status, err ?? "");
+    });
 }
 
 export function unsubscribeAll(): void {

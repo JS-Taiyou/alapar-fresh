@@ -1,4 +1,4 @@
-import { type Signal, useComputed, useSignal } from "@preact/signals";
+import { type Signal, useComputed, useSignal, useSignalEffect } from "@preact/signals";
 import type {
   BalanceBreakdownEntry,
   DefaultSplit,
@@ -12,6 +12,7 @@ import {
   calculatePairwiseBreakdown,
   computeDefaultPercentages,
 } from "../lib/calculations.ts";
+import { subscribeToRegistry, unsubscribeAll, setupRealtimeConfig } from "../lib/realtime.ts";
 
 interface TransactionListProps {
   transactions: Signal<EnrichedTransaction[]>;
@@ -22,6 +23,9 @@ interface TransactionListProps {
   balanceEntries: Signal<BalanceBreakdownEntry[]>;
   defaultSplit: Signal<DefaultSplit | null>;
   entityIds: Set<string>;
+  supabaseUrl?: string;
+  supabaseAnonKey?: string;
+  accessToken?: string;
 }
 
 type SplitMode = "auto" | "percentage" | "fixed";
@@ -340,6 +344,67 @@ export default function TransactionList(props: TransactionListProps) {
   const relatedTxSearch = useSignal("");
 
   const isEditing = useComputed(() => editingId.value !== null);
+
+  useSignalEffect(() => {
+    const rid = registryId.value;
+    if (!rid || !props.supabaseUrl || !props.supabaseAnonKey || !props.accessToken) return;
+
+    setupRealtimeConfig(props.supabaseUrl, props.supabaseAnonKey);
+
+    subscribeToRegistry(
+      rid,
+      async (payload) => {
+        const participantMap = new Map(users.value.map((u) => [u.id, u]));
+
+        const mapRow = (row: Record<string, unknown>): EnrichedTransaction => ({
+          id: row.id as string,
+          registry_id: row.registry_id as string,
+          description: row.description as string,
+          amount: typeof row.amount === "string" ? parseFloat(row.amount) : (row.amount as number),
+          originalAmount: typeof row.original_amount === "string" ? parseFloat(row.original_amount) : (row.original_amount as number),
+          type: row.type as "unico" | "parcialidad" | "recurrente" | "pago" | "ajuste",
+          exerciseId: row.exercise_id as string | null,
+          installmentCurrent: row.installment_current as number | null,
+          installmentTotal: row.installment_total as number | null,
+          recurringDisabled: (row.recurring_disabled as boolean) ?? false,
+          recurringGroupId: (row.recurring_group_id as string) ?? row.id as string,
+          notes: row.notes as string,
+          splitJson: typeof row.split_json === "string"
+            ? JSON.parse(row.split_json)
+            : row.split_json as TransactionSplit,
+          relatedTransactionId: (row.related_transaction_id as string) ?? null,
+          creatorId: row.creator_id as string,
+          userPaid: row.user_paid as string,
+          createdAt: new Date(row.created_at as string),
+          paidByUser: participantMap.get(row.user_paid as string) ?? null,
+        });
+
+        if (payload.eventType === "INSERT" && payload.new?.id) {
+          const existing = transactions.value.find((t) => t.id === payload.new.id);
+          if (!existing) {
+            transactions.value = [mapRow(payload.new), ...transactions.value];
+          }
+        } else if (payload.eventType === "DELETE" && payload.old?.id) {
+          transactions.value = transactions.value.filter((t) => t.id !== payload.old.id);
+        } else if (payload.eventType === "UPDATE" && payload.new?.id) {
+          transactions.value = transactions.value.map((t) =>
+            t.id === payload.new.id ? mapRow(payload.new) : t
+          );
+        }
+        try {
+          const resp = await fetch("/api/dashboard");
+          if (resp.ok) {
+            const data = await resp.json();
+            balance.value = data.balance;
+            balanceEntries.value = data.balanceEntries;
+          }
+        } catch { /* ignore refetch errors */ }
+      },
+      props.accessToken,
+    );
+
+    return () => unsubscribeAll();
+  });
 
   interface EligibleTransaction {
     id: string;
