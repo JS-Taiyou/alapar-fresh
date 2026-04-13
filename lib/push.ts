@@ -16,11 +16,20 @@ interface PushPayload {
   url?: string;
 }
 
+const lastPushAt = new Map<string, number>();
+const PUSH_COOLDOWN = 15_000;
+
 export async function sendPushToRegistry(
   registryId: string,
   payload: PushPayload,
   excludeUserId?: string,
 ): Promise<void> {
+  const key = `${registryId}:${excludeUserId ?? ""}`;
+  const now = Date.now();
+  const last = lastPushAt.get(key) ?? 0;
+  if (now - last < PUSH_COOLDOWN) return;
+  lastPushAt.set(key, now);
+
   const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY");
   const vapidSubject = Deno.env.get("VAPID_SUBJECT");
   const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY");

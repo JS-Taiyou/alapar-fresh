@@ -352,6 +352,9 @@ export default function TransactionList(props: TransactionListProps) {
 
     setupRealtimeConfig(props.supabaseUrl, props.supabaseAnonKey);
 
+    let lastNotificationAt = 0;
+    const NOTIFICATION_COOLDOWN = 15_000;
+
     subscribeToRegistry(
       rid,
       async (payload) => {
@@ -384,6 +387,19 @@ export default function TransactionList(props: TransactionListProps) {
           const existing = transactions.value.find((t) => t.id === payload.new.id);
           if (!existing) {
             transactions.value = [mapRow(payload.new), ...transactions.value];
+            const creator = payload.new.creator_id as string;
+            if (creator !== currentUserId.value) {
+              const now = Date.now();
+              if (now - lastNotificationAt >= NOTIFICATION_COOLDOWN && Notification.permission === "granted") {
+                lastNotificationAt = now;
+                const desc = (payload.new.description as string) ?? "Nueva transacción";
+                const amt = typeof payload.new.amount === "number" ? payload.new.amount : 0;
+                new Notification("Nueva transacción", {
+                  body: `${desc} — $${amt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                  icon: "/logo.svg",
+                });
+              }
+            }
           }
         } else if (payload.eventType === "DELETE" && payload.old?.id) {
           transactions.value = transactions.value.filter((t) => t.id !== payload.old.id);
