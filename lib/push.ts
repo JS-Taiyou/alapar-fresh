@@ -24,17 +24,29 @@ export async function sendPushToRegistry(
   payload: PushPayload,
   excludeUserId?: string,
 ): Promise<void> {
+  console.log("[push] sendPushToRegistry called:", { registryId, excludeUserId, payload: { title: payload.title, body: payload.body } });
+
   const key = `${registryId}:${excludeUserId ?? ""}`;
   const now = Date.now();
   const last = lastPushAt.get(key) ?? 0;
-  if (now - last < PUSH_COOLDOWN) return;
+  if (now - last < PUSH_COOLDOWN) {
+    console.log("[push] Cooldown active, skipping. Last push was", now - last, "ms ago");
+    return;
+  }
   lastPushAt.set(key, now);
 
   const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY");
   const vapidSubject = Deno.env.get("VAPID_SUBJECT");
   const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY");
 
-  if (!vapidPrivateKey || !vapidSubject || !vapidPublicKey) return;
+  if (!vapidPrivateKey || !vapidSubject || !vapidPublicKey) {
+    console.warn("[push] Missing VAPID keys:", {
+      hasPrivate: !!vapidPrivateKey,
+      hasSubject: !!vapidSubject,
+      hasPublic: !!vapidPublicKey,
+    });
+    return;
+  }
 
   const result = await query(
     `SELECT ps.* FROM push_subscriptions ps
@@ -44,15 +56,19 @@ export async function sendPushToRegistry(
   );
 
   const subscriptions: PushSubscription[] = result.rows;
+  console.log("[push] Found", subscriptions.length, "subscriptions to notify");
 
   for (const sub of subscriptions) {
+    console.log("[push] Sending to:", { userId: sub.user_id, endpoint: sub.endpoint.substring(0, 50) + "..." });
     try {
-      await sendPushNotification(sub, payload, {
+      const resp = await sendPushNotification(sub, payload, {
         publicKey: vapidPublicKey,
         privateKey: vapidPrivateKey,
         subject: vapidSubject,
       });
-    } catch {
+      console.log("[push] Response:", { status: resp.status, statusText: resp.statusText });
+    } catch (err) {
+      console.error("[push] Failed to send, removing subscription:", err);
       await query("DELETE FROM push_subscriptions WHERE id = $1", [sub.id]);
     }
   }

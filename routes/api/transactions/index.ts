@@ -82,7 +82,7 @@ export const handler = define.handlers({
       body: `${description} — $${originalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       registryId,
       url: "/dashboard",
-    }, userId).catch(() => {});
+    }, userId).catch((err) => console.error("[push] sendPushToRegistry failed:", err));
 
     return Response.json(tx);
   },

@@ -260,7 +260,7 @@ function TransactionCardClickable(props: {
           {tx.paidByUser && (
             <>
               <span class="hidden sm:inline">
-                {" "}&bull;{" "}
+                {" • "}
                 <span
                   class={`text-xs px-1.5 py-0.5 rounded ${
                     isPaidByMe
@@ -285,7 +285,7 @@ function TransactionCardClickable(props: {
           {tx.type === "parcialidad" && tx.installmentCurrent &&
             tx.installmentTotal && (
             <>
-              {" "}&bull;{" "}
+              {" • "}
               <span class="text-xs font-semibold px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-400">
                 {tx.installmentCurrent}/{tx.installmentTotal}
               </span>
