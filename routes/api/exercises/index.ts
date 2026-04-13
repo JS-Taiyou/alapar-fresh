@@ -27,6 +27,7 @@ export const handler = define.handlers({
         amount: debt.amount,
         originalAmount: debt.amount,
         type: "ajuste" as const,
+        relatedTransactionId: null,
         exerciseId: null,
         installmentCurrent: null,
         installmentTotal: null,
