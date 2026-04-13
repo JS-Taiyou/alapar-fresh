@@ -1,4 +1,4 @@
-import { useSignal } from "@preact/signals";
+import { useSignal, useSignalEffect } from "@preact/signals";
 import type { DefaultSplit, Entity, Registry, User } from "../lib/types.ts";
 import EntityManager from "./EntityManager.tsx";
 import DefaultSplitConfig from "./DefaultSplitConfig.tsx";
@@ -31,6 +31,7 @@ export default function Sidebar(props: SidebarProps) {
   const collapsed = useSignal(props.initialCollapsed ?? false);
   const mobileOpen = useSignal(false);
   const showInvite = useSignal(false);
+  const isStandalone = useSignal(false);
   const inviteLoading = useSignal(false);
   const inviteCode = useSignal("");
   const inviteError = useSignal("");
@@ -38,6 +39,76 @@ export default function Sidebar(props: SidebarProps) {
   const renamingId = useSignal<string | null>(null);
   const renameValue = useSignal("");
   const showSplitConfig = useSignal<string | null>(null);
+
+  useSignalEffect(() => {
+    isStandalone.value = window.matchMedia("(display-mode: standalone)").matches
+      || (navigator as unknown as { standalone?: boolean }).standalone === true;
+
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchStartTime = 0;
+    let twoFingerActive = false;
+
+    const SWIPE_THRESHOLD = 80;
+    const MAX_VERTICAL_RATIO = 0.5;
+
+    function onTouchStart(e: TouchEvent) {
+      if (e.touches.length === 2) {
+        twoFingerActive = true;
+        const avgX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const avgY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        touchStartX = avgX;
+        touchStartY = avgY;
+        touchStartTime = Date.now();
+      } else if (e.touches.length === 1 && isStandalone.value) {
+        twoFingerActive = false;
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        touchStartTime = Date.now();
+      }
+    }
+
+    function onTouchEnd(e: TouchEvent) {
+      const isMobile = window.innerWidth < 768;
+      if (!isMobile) return;
+
+      const dt = Date.now() - touchStartTime;
+      if (dt > 600) return;
+
+      let endX: number;
+      let endY: number;
+
+      if (twoFingerActive) {
+        if (e.touches.length > 0) return;
+        endX = e.changedTouches[0].clientX;
+        endY = e.changedTouches[0].clientY;
+        twoFingerActive = false;
+      } else if (isStandalone.value && e.changedTouches.length === 1) {
+        endX = e.changedTouches[0].clientX;
+        endY = e.changedTouches[0].clientY;
+      } else {
+        return;
+      }
+
+      const dx = endX - touchStartX;
+      const dy = Math.abs(endY - touchStartY);
+      if (dy / (Math.abs(dx) + 1) > MAX_VERTICAL_RATIO) return;
+
+      if (dx > SWIPE_THRESHOLD && !mobileOpen.value) {
+        mobileOpen.value = true;
+      } else if (dx < -SWIPE_THRESHOLD && mobileOpen.value) {
+        mobileOpen.value = false;
+      }
+    }
+
+    document.addEventListener("touchstart", onTouchStart, { passive: true });
+    document.addEventListener("touchend", onTouchEnd, { passive: true });
+
+    return () => {
+      document.removeEventListener("touchstart", onTouchStart);
+      document.removeEventListener("touchend", onTouchEnd);
+    };
+  });
 
   async function switchRegistry(id: string) {
     if (id === props.activeRegistryId) return;
@@ -448,7 +519,7 @@ export default function Sidebar(props: SidebarProps) {
       <button
         type="button"
         onClick={() => mobileOpen.value = true}
-        class="md:hidden fixed bottom-20 left-4 z-40 w-12 h-12 bg-surface border border-border-custom rounded-full text-white shadow-lg flex items-center justify-center hover:bg-white/10 active:scale-95 transition-all"
+        class={`md:hidden fixed bottom-20 left-4 z-40 w-12 h-12 bg-surface border border-border-custom rounded-full text-white shadow-lg flex items-center justify-center hover:bg-white/10 active:scale-95 transition-all ${isStandalone.value ? "hidden" : ""}`}
       >
         <svg
           class="w-5 h-5"
