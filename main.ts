@@ -37,7 +37,9 @@ app.use(define.middleware(async (ctx) => {
     path.startsWith("/api/entities") ||
     path.startsWith("/api/invitations") ||
     path.startsWith("/api/exercises") ||
-    path.startsWith("/api/default-split");
+    path.startsWith("/api/default-split") ||
+    path.startsWith("/api/dashboard") ||
+    path.startsWith("/api/push");
 
   if (!needsFullState) {
     const userResult = await query(

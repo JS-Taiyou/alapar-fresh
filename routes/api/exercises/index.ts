@@ -7,18 +7,39 @@ import {
 } from "../../../lib/store.ts";
 
 export const handler = define.handlers({
+  async GET(ctx) {
+    const registryId = ctx.state.activeRegistry?.id;
+    if (!registryId) {
+      return Response.json({ exercises: [] });
+    }
+    const { getExercises } = await import("../../../lib/store.ts");
+    const exercises = await getExercises(registryId);
+    return Response.json({ exercises });
+  },
   async POST(ctx) {
     const registryId = ctx.state.activeRegistry?.id;
     const userId = ctx.state.user?.id;
-    if (!registryId || !userId) return ctx.redirect("/dashboard");
+    if (!registryId || !userId) {
+      const accept = ctx.req.headers.get("Accept") ?? "";
+      if (accept.includes("application/json")) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      return ctx.redirect("/dashboard");
+    }
 
     const active = await getActiveTransactions(registryId);
-    if (active.length === 0) return ctx.redirect("/dashboard");
+    if (active.length === 0) {
+      const accept = ctx.req.headers.get("Accept") ?? "";
+      if (accept.includes("application/json")) {
+        return Response.json({ exercise: null, transactions: [] });
+      }
+      return ctx.redirect("/dashboard");
+    }
 
     const users = ctx.state.participants;
     const debts = calculateFullPairwiseBalances(active, users);
 
-    await createExercise(registryId);
+    const exercise = await createExercise(registryId);
 
     for (const debt of debts) {
       await createTransaction({
@@ -46,6 +67,10 @@ export const handler = define.handlers({
       }, userId);
     }
 
+    const accept = ctx.req.headers.get("Accept") ?? "";
+    if (accept.includes("application/json")) {
+      return Response.json({ exercise, transactions: debts });
+    }
     return ctx.redirect("/dashboard");
   },
 });

@@ -1,0 +1,238 @@
+import { query } from "./db.ts";
+
+interface PushSubscription {
+  id: string;
+  user_id: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  registry_id: string | null;
+}
+
+interface PushPayload {
+  title: string;
+  body: string;
+  registryId?: string;
+  url?: string;
+}
+
+export async function sendPushToRegistry(
+  registryId: string,
+  payload: PushPayload,
+  excludeUserId?: string,
+): Promise<void> {
+  const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY");
+  const vapidSubject = Deno.env.get("VAPID_SUBJECT");
+  const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY");
+
+  if (!vapidPrivateKey || !vapidSubject || !vapidPublicKey) return;
+
+  const result = await query(
+    `SELECT ps.* FROM push_subscriptions ps
+     JOIN registry_members rm ON rm.user_id = ps.user_id AND rm.registry_id = $1
+     WHERE rm.registry_id = $1 AND ($2::text IS NULL OR ps.user_id != $2)`,
+    [registryId, excludeUserId ?? null],
+  );
+
+  const subscriptions: PushSubscription[] = result.rows;
+
+  for (const sub of subscriptions) {
+    try {
+      await sendPushNotification(sub, payload, {
+        publicKey: vapidPublicKey,
+        privateKey: vapidPrivateKey,
+        subject: vapidSubject,
+      });
+    } catch {
+      await query("DELETE FROM push_subscriptions WHERE id = $1", [sub.id]);
+    }
+  }
+}
+
+async function sendPushNotification(
+  subscription: PushSubscription,
+  payload: PushPayload,
+  vapidKeys: { publicKey: string; privateKey: string; subject: string },
+): Promise<Response> {
+  const body = JSON.stringify(payload);
+  const jwt = await createVapidJWT(vapidKeys);
+  const encrypted = await encryptPayload(body, subscription.p256dh, subscription.auth);
+  const encryptedBytes = new Uint8Array(encrypted);
+
+  const headers: Record<string, string> = {
+    "TTL": "86400",
+    "Content-Type": "application/octet-stream",
+    "Content-Encoding": "aes128gcm",
+    "Authorization": `vapid t=${jwt}, k=${vapidKeys.publicKey}`,
+    "Content-Length": encryptedBytes.length.toString(),
+  };
+
+  return fetch(subscription.endpoint, {
+    method: "POST",
+    headers,
+    body: encrypted,
+  });
+}
+
+async function createVapidJWT(keys: { publicKey: string; privateKey: string; subject: string }): Promise<string> {
+  const header = { typ: "JWT", alg: "ES256" };
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    aud: "https://fcm.googleapis.com",
+    exp: now + 43200,
+    sub: keys.subject,
+  };
+
+  const headerB64 = base64url(JSON.stringify(header));
+  const payloadB64 = base64url(JSON.stringify(payload));
+  const data = `${headerB64}.${payloadB64}`;
+
+  const keyData = base64urlToBytes(keys.privateKey);
+  const key = await crypto.subtle.importKey(
+    "pkcs8",
+    keyData.buffer as ArrayBuffer,
+    { name: "ECDSA", namedCurve: "P-256" },
+    false,
+    ["sign"],
+  );
+
+  const signature = await crypto.subtle.sign(
+    { name: "ECDSA", hash: "SHA-256" },
+    key,
+    new TextEncoder().encode(data),
+  );
+
+  const sigB64 = base64url(new Uint8Array(signature));
+  return `${data}.${sigB64}`;
+}
+
+async function encryptPayload(payload: string, p256dh: string, auth: string): Promise<ArrayBuffer> {
+  const encoder = new TextEncoder();
+  const payloadBytes = encoder.encode(payload);
+
+  const padded = new Uint8Array(2 + payloadBytes.length + 1);
+  padded[0] = 0x02;
+  padded.set(payloadBytes, 2);
+
+  const authBytes = base64urlToBytes(auth);
+  const dhBytes = base64urlToBytes(p256dh);
+
+  const dhKey = await crypto.subtle.importKey(
+    "raw",
+    dhBytes.buffer as ArrayBuffer,
+    { name: "ECDH", namedCurve: "P-256" },
+    false,
+    [],
+  );
+
+  const ecdhKeyPair = await crypto.subtle.generateKey(
+    { name: "ECDH", namedCurve: "P-256" },
+    true,
+    ["deriveBits"],
+  );
+
+  const sharedBits = await crypto.subtle.deriveBits(
+    { name: "ECDH", public: dhKey },
+    ecdhKeyPair.privateKey,
+    256,
+  );
+
+  const ikm = new Uint8Array(sharedBits);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const publicKeyRaw = await crypto.subtle.exportKey("raw", ecdhKeyPair.publicKey);
+
+  const prk = await hkdf(ikm, authBytes, "Content-Encoding: auth\0", 32);
+  const context = concatUint8Arrays(
+    new TextEncoder().encode("P-256\0"),
+    encodeLength(new Uint8Array(dhBytes)),
+    encodeLength(new Uint8Array(publicKeyRaw)),
+  );
+  const cekInfo = concatUint8Arrays(
+    new TextEncoder().encode("Content-Encoding: aes128gcm\0"),
+    context,
+  );
+  const nonceInfo = concatUint8Arrays(
+    new TextEncoder().encode("Content-Encoding: nonce\0"),
+    context,
+  );
+
+  const cek = await hkdf(prk, salt, cekInfo, 16);
+  const nonce = await hkdf(prk, salt, nonceInfo, 12);
+
+  const aesKey = await crypto.subtle.importKey(
+    "raw",
+    cek.buffer as ArrayBuffer,
+    { name: "AES-GCM" },
+    false,
+    ["encrypt"],
+  );
+
+  const encrypted = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: nonce.buffer as ArrayBuffer },
+    aesKey,
+    padded.buffer as ArrayBuffer,
+  );
+
+  const pubKeyBytes = new Uint8Array(publicKeyRaw);
+  const encBytes = new Uint8Array(encrypted);
+  const result = new Uint8Array(salt.length + 4 + 1 + 1 + pubKeyBytes.length + encBytes.length);
+  let offset = 0;
+  result.set(salt, offset); offset += salt.length;
+  const rs = new Uint8Array(4);
+  new DataView(rs.buffer).setUint32(0, 4096);
+  result.set(rs, offset); offset += 4;
+  result[offset++] = 0;
+  result[offset++] = pubKeyBytes.length;
+  result.set(pubKeyBytes, offset); offset += pubKeyBytes.length;
+  result.set(encBytes, offset);
+
+  return result.buffer;
+}
+
+async function hkdf(ikm: Uint8Array, salt: Uint8Array, info: Uint8Array | string, length: number): Promise<Uint8Array> {
+  const infoBytes = typeof info === "string" ? new TextEncoder().encode(info) : info;
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    ikm.buffer as ArrayBuffer,
+    "HKDF",
+    false,
+    ["deriveBits"],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: "HKDF", hash: "SHA-256", salt: salt.buffer as ArrayBuffer, info: infoBytes.buffer as ArrayBuffer },
+    keyMaterial,
+    length * 8,
+  );
+  return new Uint8Array(bits);
+}
+
+function concatUint8Arrays(...arrays: Uint8Array[]): Uint8Array {
+  const total = arrays.reduce((sum, arr) => sum + arr.length, 0);
+  const result = new Uint8Array(total);
+  let offset = 0;
+  for (const arr of arrays) {
+    result.set(arr, offset);
+    offset += arr.length;
+  }
+  return result;
+}
+
+function encodeLength(data: Uint8Array): Uint8Array {
+  const len = new Uint8Array(2 + data.length);
+  len[0] = 0;
+  len[1] = data.length;
+  len.set(data, 2);
+  return len;
+}
+
+function base64url(input: string | Uint8Array): string {
+  const str = typeof input === "string" ? input : String.fromCharCode(...input);
+  return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function base64urlToBytes(base64: string): Uint8Array {
+  const padding = "=".repeat((4 - base64.length % 4) % 4);
+  const b64 = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const binary = atob(b64);
+  return Uint8Array.from(binary.split("").map((c) => c.charCodeAt(0)));
+}

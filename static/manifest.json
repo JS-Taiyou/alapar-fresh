@@ -3,6 +3,7 @@
   "short_name": "A la Par",
   "description": "Comparte gastos con tu pareja, amigos o roomies de forma sencilla",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "theme_color": "#093eaa",
   "background_color": "#0a0a0c",
