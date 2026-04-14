@@ -51,7 +51,7 @@ export async function sendPushToRegistry(
   const result = await query(
     `SELECT ps.* FROM push_subscriptions ps
      JOIN registry_members rm ON rm.user_id = ps.user_id AND rm.registry_id = $1
-     WHERE rm.registry_id = $1 AND ($2::text IS NULL OR ps.user_id != $2)`,
+     WHERE rm.registry_id = $1 AND ($2::uuid IS NULL OR ps.user_id != $2::uuid)`,
     [registryId, excludeUserId ?? null],
   );
 
