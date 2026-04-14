@@ -5,6 +5,10 @@ import {
   getActiveTransactions,
   getSpawnCandidates,
 } from "../../lib/store.ts";
+import {
+  getCachedTransactions,
+  getCachedSpawnCandidates,
+} from "../../lib/server-cache.ts";
 
 export const handler = define.handlers({
   async GET(ctx) {
@@ -25,9 +29,15 @@ export const handler = define.handlers({
       );
     }
 
-    const transactions = await getActiveTransactions(registryId);
+    const { transactions } = await getCachedTransactions(
+      registryId,
+      () => getActiveTransactions(registryId),
+    );
     const balance = await calculateBalance(userId, registryId, transactions);
-    const candidates = await getSpawnCandidates(registryId);
+    const candidates = await getCachedSpawnCandidates(
+      registryId,
+      () => getSpawnCandidates(registryId),
+    );
 
     const participantMap = new Map(
       ctx.state.participants.map((p) => [p.id, p]),

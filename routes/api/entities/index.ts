@@ -1,5 +1,6 @@
 import { define } from "../../../utils.ts";
 import { createEntity, getEntities } from "../../../lib/store.ts";
+import { invalidateRegistry } from "../../../lib/server-cache.ts";
 
 export const handler = define.handlers({
   async GET(ctx) {
@@ -54,6 +55,8 @@ export const handler = define.handlers({
     }
 
     const entity = await createEntity(activeRegistryId, name.trim(), color);
+
+    invalidateRegistry(activeRegistryId);
 
     return new Response(
       JSON.stringify({

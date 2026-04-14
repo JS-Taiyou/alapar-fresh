@@ -1,5 +1,6 @@
 import { define } from "../../../utils.ts";
 import { createTransaction, getActiveTransactions } from "../../../lib/store.ts";
+import { getCachedTransactions, invalidateRegistry } from "../../../lib/server-cache.ts";
 import { sendPushToRegistry } from "../../../lib/push.ts";
 import type { TransactionSplit } from "../../../lib/types.ts";
 
@@ -10,7 +11,10 @@ export const handler = define.handlers({
       return Response.json({ transactions: [] });
     }
 
-    const transactions = await getActiveTransactions(registryId);
+    const { transactions } = await getCachedTransactions(
+      registryId,
+      () => getActiveTransactions(registryId),
+    );
     const participantMap = new Map(
       ctx.state.participants.map((p) => [p.id, p]),
     );
@@ -76,6 +80,8 @@ export const handler = define.handlers({
     if (!tx) {
       return new Response("Forbidden", { status: 403 });
     }
+
+    invalidateRegistry(registryId);
 
     sendPushToRegistry(registryId, {
       title: "Nueva transacción",

@@ -1,5 +1,6 @@
 import { define } from "../../../utils.ts";
 import { deleteEntity, updateEntity } from "../../../lib/store.ts";
+import { invalidateRegistry } from "../../../lib/server-cache.ts";
 
 export const handler = define.handlers({
   async PUT(ctx) {
@@ -29,6 +30,8 @@ export const handler = define.handlers({
         headers: { "Content-Type": "application/json" },
       });
     }
+
+    invalidateRegistry(registryId);
 
     return new Response(
       JSON.stringify({
@@ -64,6 +67,9 @@ export const handler = define.handlers({
         },
       );
     }
+
+    invalidateRegistry(registryId);
+
     return new Response(null, { status: 204 });
   },
 });

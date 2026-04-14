@@ -5,6 +5,7 @@ import {
   getActiveTransactions,
   calculateFullPairwiseBalances,
 } from "../../../lib/store.ts";
+import { invalidateRegistry } from "../../../lib/server-cache.ts";
 
 export const handler = define.handlers({
   async GET(ctx) {
@@ -40,6 +41,8 @@ export const handler = define.handlers({
     const debts = calculateFullPairwiseBalances(active, users);
 
     const exercise = await createExercise(registryId);
+
+    invalidateRegistry(registryId);
 
     for (const debt of debts) {
       await createTransaction({

@@ -4,6 +4,7 @@ import {
   getTransactionById,
   updateTransaction,
 } from "../../../lib/store.ts";
+import { invalidateRegistry } from "../../../lib/server-cache.ts";
 import { sendPushToRegistry } from "../../../lib/push.ts";
 import type { TransactionSplit } from "../../../lib/types.ts";
 
@@ -54,6 +55,8 @@ export const handler = define.handlers({
       return new Response("Forbidden", { status: 403 });
     }
 
+    invalidateRegistry(tx.registry_id);
+
     sendPushToRegistry(tx.registry_id, {
       title: "Transacción actualizada",
       body: `${description} — $${originalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
@@ -77,6 +80,8 @@ export const handler = define.handlers({
     }
 
     if (tx) {
+      invalidateRegistry(tx.registry_id);
+
       sendPushToRegistry(tx.registry_id, {
         title: "Transacción eliminada",
         body: tx.description,
