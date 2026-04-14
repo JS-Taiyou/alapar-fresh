@@ -5,7 +5,7 @@ export default define.page(function App({ Component }) {
     <html>
       <head>
         <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <meta name="theme-color" content="#093eaa" />
         <meta name="description" content="Comparte gastos con tu pareja, amigos o roomies de forma sencilla" />
         <link rel="manifest" href="/manifest.json" />
@@ -22,7 +22,7 @@ export default define.page(function App({ Component }) {
           rel="stylesheet"
         />
         <style>{`
-html,body{background-color:#0a0a0c;color:#f8fafc;margin:0}
+html,body{background-color:#0a0a0c;color:#f8fafc;margin:0;touch-action:manipulation}
 .font-sans{font-family:"Inter",sans-serif}
 .bg-background{background-color:#0a0a0c}
 .min-h-screen{min-height:100vh}
