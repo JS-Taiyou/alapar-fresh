@@ -1,5 +1,6 @@
 import { useSignal, useSignalEffect } from "@preact/signals";
 import type { DefaultSplit, Entity, Registry, User } from "../lib/types.ts";
+import { cache } from "../lib/cache.ts";
 import EntityManager from "./EntityManager.tsx";
 import DefaultSplitConfig from "./DefaultSplitConfig.tsx";
 
@@ -28,6 +29,7 @@ const REGISTRY_COLORS = [
 
 export default function Sidebar(props: SidebarProps) {
   const registries = useSignal(props.registries);
+  const activeRegistryId = useSignal(props.activeRegistryId);
   const collapsed = useSignal(props.initialCollapsed ?? false);
   const mobileOpen = useSignal(false);
   const showInvite = useSignal(false);
@@ -169,19 +171,71 @@ export default function Sidebar(props: SidebarProps) {
   });
 
   async function switchRegistry(id: string) {
-    if (id === props.activeRegistryId) return;
+    if (id === activeRegistryId.value) return;
     try {
       const res = await fetch("/api/registries/switch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ registryId: id }),
       });
-      if (res.ok) {
+      if (!res.ok) {
+        globalThis.location.reload();
+        return;
+      }
+
+      const cached = await cache.getRegistrySnapshot(id);
+      activeRegistryId.value = id;
+      if (cached && cached.transactions) {
+        globalThis.dispatchEvent(new CustomEvent("registry-switch", {
+          detail: {
+            registryId: id,
+            transactions: cached.transactions,
+            balance: cached.balance,
+            balanceEntries: cached.balanceEntries,
+            users: cached.users,
+            currentUserId: cached.currentUserId,
+            defaultSplit: cached.defaultSplit,
+          },
+        }));
+
+        validateCacheInBackground(id, cached.lastModified);
+      } else {
         globalThis.location.href = "/dashboard";
       }
     } catch {
       globalThis.location.reload();
     }
+  }
+
+  async function validateCacheInBackground(registryId: string, cachedLastModified: string | null) {
+    try {
+      const stampRes = await fetch(`/api/stamp/${registryId}`);
+      if (!stampRes.ok) return;
+      const { lastModified } = await stampRes.json() as { lastModified: string | null };
+
+      if (lastModified === cachedLastModified) return;
+
+      const dashRes = await fetch("/api/dashboard");
+      if (!dashRes.ok) return;
+      const data = await dashRes.json() as {
+        transactions: unknown[];
+        balance: number;
+        balanceEntries: unknown[];
+        users: unknown[];
+        defaultSplit: unknown;
+      };
+
+      globalThis.dispatchEvent(new CustomEvent("registry-switch", {
+        detail: {
+          registryId,
+          transactions: data.transactions,
+          balance: data.balance,
+          balanceEntries: data.balanceEntries,
+          users: data.users,
+          defaultSplit: data.defaultSplit,
+        },
+      }));
+    } catch { /* background validation failure is non-critical */ }
   }
 
   async function handleLogout() {
@@ -196,7 +250,7 @@ export default function Sidebar(props: SidebarProps) {
       const res = await fetch("/api/invitations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ registryId: props.activeRegistryId }),
+        body: JSON.stringify({ registryId: activeRegistryId.value }),
       });
       const data = await res.json();
       if (data.code) {
@@ -340,7 +394,7 @@ export default function Sidebar(props: SidebarProps) {
                   class={`w-full flex items-center rounded-custom ${
                     collapsed.value && !mobileOpen.value ? "justify-center p-2.5" : "gap-3 px-3 py-2.5"
                   } ${
-                    r.id === props.activeRegistryId
+                    r.id === activeRegistryId.value
                       ? "bg-white/5 border border-white/10 text-white"
                       : "bg-white/5 border border-white/10 text-white"
                   }`}
@@ -373,7 +427,7 @@ export default function Sidebar(props: SidebarProps) {
                   } ${
                     collapsed.value && !mobileOpen.value
                       ? ""
-                      : r.id === props.activeRegistryId
+                      : r.id === activeRegistryId.value
                         ? "bg-white/5 border border-white/10 text-white"
                         : "hover:bg-white/5 text-gray-400 hover:text-white"
                   }`}
@@ -459,7 +513,7 @@ export default function Sidebar(props: SidebarProps) {
         ))}
       </div>
 
-      {props.isOwner && props.activeRegistryId && (
+      {props.isOwner && activeRegistryId.value && (
         <div class={`transition-all duration-300 ${collapsed.value && !mobileOpen.value ? "px-1.5 pb-1.5" : "px-4 pb-2"}`}>
           <button
             type="button"
@@ -486,11 +540,11 @@ export default function Sidebar(props: SidebarProps) {
         </div>
       )}
 
-      {props.activeRegistryId && (
+      {activeRegistryId.value && (
         <div class={`transition-all duration-300 ${collapsed.value && !mobileOpen.value ? "px-1.5 pb-1.5" : "px-4 pb-2"}`}>
           <div class={`transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 h-0 overflow-hidden" : "opacity-100"}`}>
             <EntityManager
-              registryId={props.activeRegistryId}
+              registryId={activeRegistryId.value}
               entities={props.entities}
               onUpdate={() => globalThis.location.reload()}
             />

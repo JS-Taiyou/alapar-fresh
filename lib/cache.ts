@@ -96,11 +96,13 @@ export interface CachedTransactionEntry {
 
 export interface CachedRegistryData {
   registryId: string;
-  users: unknown[];
-  entities: unknown[];
-  defaultSplit: unknown;
+  transactions: unknown[];
   balance: number;
   balanceEntries: unknown[];
+  users: unknown[];
+  currentUserId: string;
+  defaultSplit: unknown;
+  lastModified: string | null;
   cachedAt: number;
 }
 
@@ -141,6 +143,17 @@ export const cache = {
     await put(STORES.registryData, {
       registryId,
       ...data,
+      cachedAt: Date.now(),
+    } satisfies CachedRegistryData);
+  },
+
+  async getRegistrySnapshot(registryId: string): Promise<CachedRegistryData | undefined> {
+    return get<CachedRegistryData>(STORES.registryData, registryId);
+  },
+
+  async setRegistrySnapshot(snapshot: Omit<CachedRegistryData, "cachedAt">): Promise<void> {
+    await put(STORES.registryData, {
+      ...snapshot,
       cachedAt: Date.now(),
     } satisfies CachedRegistryData);
   },

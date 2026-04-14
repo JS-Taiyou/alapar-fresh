@@ -57,6 +57,7 @@ export interface Registry {
   latestAccessed: Date;
   defaultSplit: DefaultSplit | null;
   defaultSplitMemberCount: number | null;
+  lastModified: Date | null;
 }
 
 export interface SplitEntry {

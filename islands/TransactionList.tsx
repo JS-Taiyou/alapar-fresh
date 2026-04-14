@@ -14,6 +14,7 @@ import {
 } from "../lib/calculations.ts";
 import { subscribeToRegistry, unsubscribeAll, setupRealtimeConfig } from "../lib/realtime.ts";
 import { requestNotificationPermission, subscribeToPush } from "../lib/notifications.ts";
+import { cache } from "../lib/cache.ts";
 
 interface TransactionListProps {
   transactions: Signal<EnrichedTransaction[]>;
@@ -27,6 +28,7 @@ interface TransactionListProps {
   supabaseUrl?: string;
   supabaseAnonKey?: string;
   accessToken?: string;
+  lastModified?: string | null;
 }
 
 type SplitMode = "auto" | "percentage" | "fixed";
@@ -439,6 +441,120 @@ export default function TransactionList(props: TransactionListProps) {
     });
 
     return () => unsubscribeAll();
+  });
+
+  useSignalEffect(() => {
+    const rid = registryId.value;
+    const txs = transactions.value;
+    const bal = balance.value;
+    const be = balanceEntries.value;
+    const usrs = users.value;
+    const uid = currentUserId.value;
+    const ds = defaultSplit.value;
+    const lm = props.lastModified ?? null;
+    if (!rid || txs.length === 0 && lm === null) return;
+    cache.setRegistrySnapshot({
+      registryId: rid,
+      transactions: txs.map((t) => ({
+        ...t,
+        createdAt: t.createdAt.toISOString(),
+      })),
+      balance: bal,
+      balanceEntries: be,
+      users: usrs,
+      currentUserId: uid,
+      defaultSplit: ds,
+      lastModified: lm,
+    });
+  });
+
+  useSignalEffect(() => {
+    function onRegistrySwitch(e: Event) {
+      const detail = (e as CustomEvent).detail as {
+        registryId: string;
+        transactions?: EnrichedTransaction[];
+        balance?: number;
+        balanceEntries?: BalanceBreakdownEntry[];
+        users?: Participant[];
+        currentUserId?: string;
+        defaultSplit?: DefaultSplit | null;
+      };
+      if (!detail) return;
+      registryId.value = detail.registryId;
+      if (detail.transactions) {
+        transactions.value = detail.transactions.map((t) => ({
+          ...t,
+          createdAt: typeof (t as unknown as { createdAt: unknown }).createdAt === "string"
+            ? new Date((t as unknown as { createdAt: string }).createdAt)
+            : t.createdAt,
+        })) as EnrichedTransaction[];
+      }
+      if (detail.balance !== undefined) balance.value = detail.balance;
+      if (detail.balanceEntries) balanceEntries.value = detail.balanceEntries;
+      if (detail.users) users.value = detail.users;
+      if (detail.currentUserId) currentUserId.value = detail.currentUserId;
+      if (detail.defaultSplit !== undefined) defaultSplit.value = detail.defaultSplit;
+    }
+    globalThis.addEventListener("registry-switch", onRegistrySwitch);
+    return () => globalThis.removeEventListener("registry-switch", onRegistrySwitch);
+  });
+
+  useSignalEffect(() => {
+    let lastActive = Date.now();
+    const FRESHNESS_MS = 30_000;
+
+    function wentToSleep() {
+      lastActive = Date.now();
+    }
+
+    async function wokeUp() {
+      const rid = registryId.value;
+      if (!rid) return;
+      const elapsed = Date.now() - lastActive;
+      if (elapsed < FRESHNESS_MS) return;
+
+      try {
+        const stampRes = await fetch(`/api/stamp/${rid}`);
+        if (!stampRes.ok) return;
+        const { lastModified } = await stampRes.json() as { lastModified: string | null };
+        const cached = await cache.getRegistrySnapshot(rid);
+        if (cached?.lastModified === lastModified) return;
+
+        const dashRes = await fetch("/api/dashboard");
+        if (!dashRes.ok) return;
+        const data = await dashRes.json() as {
+          transactions: unknown[];
+          balance: number;
+          balanceEntries: BalanceBreakdownEntry[];
+          defaultSplit: DefaultSplit | null;
+        };
+
+        transactions.value = (data.transactions as EnrichedTransaction[]).map((t) => ({
+          ...t,
+          createdAt: typeof (t as unknown as { createdAt: unknown }).createdAt === "string"
+            ? new Date((t as unknown as { createdAt: string }).createdAt)
+            : t.createdAt,
+        }));
+        balance.value = data.balance;
+        balanceEntries.value = data.balanceEntries;
+        if (data.defaultSplit !== undefined) defaultSplit.value = data.defaultSplit;
+      } catch { /* wake-up refresh failure non-critical */ }
+    }
+
+    function onVisibility() {
+      if (document.visibilityState === "hidden") wentToSleep();
+      else wokeUp();
+    }
+
+    document.addEventListener("visibilitychange", onVisibility);
+    document.addEventListener("resume", wokeUp);
+    globalThis.addEventListener("pageshow", wokeUp);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      document.removeEventListener("resume", wokeUp);
+      globalThis.removeEventListener("pageshow", wokeUp);
+    };
   });
 
   interface EligibleTransaction {

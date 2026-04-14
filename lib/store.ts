@@ -99,6 +99,7 @@ function rowToRegistry(row: Record<string, unknown>): Registry {
         : row.default_split_json as DefaultSplit)
       : null,
     defaultSplitMemberCount: (row.default_split_member_count as number) ?? null,
+    lastModified: row.last_modified ? new Date(row.last_modified as string) : null,
   };
 }
 
@@ -1023,4 +1024,14 @@ export async function isEmailAllowed(email: string): Promise<boolean> {
     [email.toLowerCase()],
   );
   return result.rows.length > 0;
+}
+
+export async function getRegistryStamp(registryId: string): Promise<string | null> {
+  const result = await query(
+    "SELECT last_modified FROM registries WHERE id = $1",
+    [registryId],
+  );
+  if (result.rows.length === 0) return null;
+  const lm = result.rows[0].last_modified;
+  return lm ? new Date(lm as string).toISOString() : null;
 }

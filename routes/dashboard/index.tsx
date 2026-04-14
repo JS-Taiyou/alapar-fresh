@@ -38,6 +38,7 @@ interface DashboardData {
   accessToken: string;
   supabaseUrl: string;
   supabaseAnonKey: string;
+  lastModified: string | null;
 }
 
 export const handler = define.handlers({
@@ -56,6 +57,7 @@ export const handler = define.handlers({
           accessToken: "",
           supabaseUrl: getSupabaseUrl(),
           supabaseAnonKey: getSupabaseAnonKey(),
+          lastModified: null,
         },
       };
     }
@@ -102,6 +104,7 @@ export const handler = define.handlers({
         accessToken: getAccessToken(ctx.req.headers.get("cookie") ?? ""),
         supabaseUrl: getSupabaseUrl(),
         supabaseAnonKey: getSupabaseAnonKey(),
+        lastModified: ctx.state.activeRegistry?.lastModified?.toISOString() ?? null,
       },
     };
   },
@@ -185,6 +188,7 @@ export default define.page(function DashboardIndex(ctx) {
         supabaseUrl={data.supabaseUrl}
         supabaseAnonKey={data.supabaseAnonKey}
         accessToken={data.accessToken}
+        lastModified={data.lastModified}
       />
     </>
   );
