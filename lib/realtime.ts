@@ -72,6 +72,14 @@ export function unsubscribeAll(): void {
   }
 }
 
+export async function resubscribe(): Promise<void> {
+  if (!activeRegistryId || !onChange) return;
+  const rid = activeRegistryId;
+  const handler = onChange;
+  activeRegistryId = null;
+  await subscribeToRegistry(rid, handler);
+}
+
 export function setupRealtimeConfig(supabaseUrl: string, supabaseAnonKey: string): void {
   (globalThis as Record<string, unknown>).__SUPABASE_URL__ = supabaseUrl;
   (globalThis as Record<string, unknown>).__SUPABASE_ANON_KEY__ = supabaseAnonKey;

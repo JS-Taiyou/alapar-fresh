@@ -12,7 +12,7 @@ import {
   calculatePairwiseBreakdown,
   computeDefaultPercentages,
 } from "../lib/calculations.ts";
-import { subscribeToRegistry, unsubscribeAll, setupRealtimeConfig } from "../lib/realtime.ts";
+import { subscribeToRegistry, unsubscribeAll, resubscribe, setupRealtimeConfig } from "../lib/realtime.ts";
 import { requestNotificationPermission, subscribeToPush } from "../lib/notifications.ts";
 import { cache } from "../lib/cache.ts";
 
@@ -512,6 +512,8 @@ export default function TransactionList(props: TransactionListProps) {
       if (!rid) return;
       const elapsed = Date.now() - lastActive;
       if (elapsed < FRESHNESS_MS) return;
+
+      resubscribe().catch(() => {});
 
       try {
         const stampRes = await fetch(`/api/stamp/${rid}`);

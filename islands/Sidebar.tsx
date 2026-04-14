@@ -1,4 +1,4 @@
-import { useSignal, useSignalEffect } from "@preact/signals";
+import { useComputed, useSignal, useSignalEffect } from "@preact/signals";
 import type { DefaultSplit, Entity, Registry, User } from "../lib/types.ts";
 import { cache } from "../lib/cache.ts";
 import EntityManager from "./EntityManager.tsx";
@@ -30,6 +30,13 @@ const REGISTRY_COLORS = [
 export default function Sidebar(props: SidebarProps) {
   const registries = useSignal(props.registries);
   const activeRegistryId = useSignal(props.activeRegistryId);
+  const sortedRegistries = useComputed(() => {
+    const active = activeRegistryId.value;
+    const list = registries.value;
+    const rest = list.filter((r) => r.id !== active).sort((a, b) => a.name.localeCompare(b.name));
+    const activeReg = list.find((r) => r.id === active);
+    return activeReg ? [activeReg, ...rest] : rest;
+  });
   const collapsed = useSignal(props.initialCollapsed ?? false);
   const mobileOpen = useSignal(false);
   const showInvite = useSignal(false);
@@ -382,7 +389,7 @@ export default function Sidebar(props: SidebarProps) {
         <h3 class={`px-2 text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 whitespace-nowrap transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 h-0" : "opacity-100"}`}>
           Registros
         </h3>
-        {registries.value.map((r, i) => (
+        {sortedRegistries.value.map((r, i) => (
           <div key={r.id} class="group relative">
             {renamingId.value === r.id
               ? (
