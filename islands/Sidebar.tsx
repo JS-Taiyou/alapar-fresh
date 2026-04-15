@@ -30,6 +30,48 @@ const REGISTRY_COLORS = [
 export default function Sidebar(props: SidebarProps) {
   const registries = useSignal(props.registries);
   const activeRegistryId = useSignal(props.activeRegistryId);
+
+  if (typeof globalThis.indexedDB !== "undefined") {
+    cache.cleanOrphanedEntries(props.registries.map((r) => r.id)).catch(
+      () => {},
+    );
+    cache.getLastActiveRegistry().then((cachedId) => {
+      if (
+        cachedId && cachedId !== props.activeRegistryId &&
+        props.registries.some((r) => r.id === cachedId)
+      ) {
+        switchRegistry(cachedId);
+      }
+    });
+  }
+
+  useSignalEffect(() => {
+    const onEntitiesChanged = async (e: Event) => {
+      const detail = (e as CustomEvent).detail as {
+        entities?: { id: string; name: string; color: string }[];
+      } | undefined;
+      if (detail?.entities) {
+        $entities.value = detail.entities as Entity[];
+        return;
+      }
+      const rid = activeRegistryId.value;
+      if (!rid) return;
+      try {
+        const res = await fetch(`/api/entities?registryId=${rid}`);
+        if (res.ok) {
+          $entities.value = await res.json();
+        }
+      } catch {
+        // ignore
+      }
+    };
+    globalThis.addEventListener("entities-changed", onEntitiesChanged);
+
+    return () => {
+      globalThis.removeEventListener("entities-changed", onEntitiesChanged);
+    };
+  });
+
   const sortedRegistries = useComputed(() => {
     const active = activeRegistryId.value;
     const list = registries.value;
@@ -45,6 +87,7 @@ export default function Sidebar(props: SidebarProps) {
   const isStandalone = useSignal(false);
   const dragOffset = useSignal<number | null>(null);
   const SIDEBAR_WIDTH = 288;
+  const $entities = useSignal<Entity[]>([...props.entities]);
   const inviteLoading = useSignal(false);
   const inviteCode = useSignal("");
   const inviteError = useSignal("");
@@ -52,6 +95,10 @@ export default function Sidebar(props: SidebarProps) {
   const renamingId = useSignal<string | null>(null);
   const renameValue = useSignal("");
   const showSplitConfig = useSignal<string | null>(null);
+  const showNewRegistry = useSignal(false);
+  const newRegistryName = useSignal("");
+  const newRegistryLoading = useSignal(false);
+  const newRegistryPendingId = useSignal<string | null>(null);
 
   useSignalEffect(() => {
     isStandalone.value =
@@ -201,15 +248,14 @@ export default function Sidebar(props: SidebarProps) {
   async function switchRegistry(id: string) {
     if (id === activeRegistryId.value) return;
 
-    fetch("/api/registries/switch", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ registryId: id }),
-    }).catch(() => {});
+    cache.setLastActiveRegistry(id).catch(() => {});
 
     const cached = await cache.getRegistrySnapshot(id);
     activeRegistryId.value = id;
-    if (cached && cached.transactions) {
+
+    if (cached && cached.transactions && cached.entities) {
+      $entities.value = cached.entities as Entity[];
+
       globalThis.dispatchEvent(
         new CustomEvent("registry-switch", {
           detail: {
@@ -221,13 +267,50 @@ export default function Sidebar(props: SidebarProps) {
             currentUserId: cached.currentUserId,
             defaultSplit: cached.defaultSplit,
             spawnCandidates: cached.spawnCandidates ?? [],
+            entityIds: cached.entityIds ?? [],
+            entities: cached.entities,
             lastModified: cached.lastModified,
           },
         }),
       );
 
       validateCacheInBackground(id, cached.lastModified);
-    } else {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/dashboard?registryId=${id}`);
+      if (!res.ok) throw new Error();
+      const data = await res.json() as {
+        transactions: unknown[];
+        balance: number;
+        balanceEntries: unknown[];
+        users: unknown[];
+        defaultSplit: unknown;
+        spawnCandidates: unknown[];
+        entityIds: string[];
+        entities: { id: string; name: string; color: string }[];
+        lastModified: string | null;
+      };
+      $entities.value = data.entities ?? [];
+
+      globalThis.dispatchEvent(
+        new CustomEvent("registry-switch", {
+          detail: {
+            registryId: id,
+            transactions: data.transactions,
+            balance: data.balance,
+            balanceEntries: data.balanceEntries,
+            users: data.users,
+            defaultSplit: data.defaultSplit,
+            spawnCandidates: data.spawnCandidates ?? [],
+            entityIds: data.entityIds ?? [],
+            entities: data.entities ?? [],
+            lastModified: data.lastModified,
+          },
+        }),
+      );
+    } catch {
       globalThis.location.href = "/dashboard";
     }
   }
@@ -245,7 +328,7 @@ export default function Sidebar(props: SidebarProps) {
 
       if (lastModified === cachedLastModified) return;
 
-      const dashRes = await fetch("/api/dashboard");
+      const dashRes = await fetch(`/api/dashboard?registryId=${registryId}`);
       if (!dashRes.ok) return;
       const data = await dashRes.json() as {
         transactions: unknown[];
@@ -254,8 +337,12 @@ export default function Sidebar(props: SidebarProps) {
         users: unknown[];
         defaultSplit: unknown;
         spawnCandidates: unknown[];
+        entityIds: string[];
+        entities: { id: string; name: string; color: string }[];
         lastModified: string | null;
       };
+
+      $entities.value = data.entities ?? [];
 
       globalThis.dispatchEvent(
         new CustomEvent("registry-switch", {
@@ -267,6 +354,8 @@ export default function Sidebar(props: SidebarProps) {
             users: data.users,
             defaultSplit: data.defaultSplit,
             spawnCandidates: data.spawnCandidates ?? [],
+            entityIds: data.entityIds ?? [],
+            entities: data.entities ?? [],
             lastModified: lastModified,
           },
         }),
@@ -358,7 +447,76 @@ export default function Sidebar(props: SidebarProps) {
       alert("No se puede eliminar un registro con transacciones.");
       return;
     }
-    globalThis.location.reload();
+    if (!res.ok) return;
+
+    registries.value = registries.value.filter((r) => r.id !== id);
+    cache.invalidateRegistry(id).catch(() => {});
+
+    if (activeRegistryId.value === id) {
+      const remaining = registries.value;
+      if (remaining.length > 0) {
+        switchRegistry(remaining[0].id);
+      } else {
+        globalThis.location.href = "/";
+      }
+    }
+  }
+
+  async function handleCreateRegistry() {
+    const name = newRegistryName.value.trim();
+    if (!name || newRegistryLoading.value) return;
+
+    const tempId = crypto.randomUUID();
+    newRegistryLoading.value = true;
+    newRegistryPendingId.value = tempId;
+
+    registries.value = [
+      ...registries.value,
+      {
+        id: tempId,
+        name,
+        isDefault: false,
+        latestAccessed: new Date(),
+        defaultSplit: null,
+        defaultSplitMemberCount: null,
+        lastModified: null,
+      },
+    ];
+
+    showNewRegistry.value = false;
+    newRegistryName.value = "";
+
+    try {
+      const res = await fetch("/api/registries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) throw new Error("create failed");
+      const { registry } = await res.json() as { registry: Registry };
+      registries.value = registries.value.map((r) =>
+        r.id === tempId ? registry : r
+      );
+      newRegistryPendingId.value = null;
+
+      cache.setRegistrySnapshot({
+        registryId: registry.id,
+        transactions: [],
+        balance: 0,
+        balanceEntries: [],
+        users: [],
+        currentUserId: "",
+        defaultSplit: null,
+        spawnCandidates: [],
+        entityIds: [],
+        entities: [],
+        lastModified: null,
+      }).catch(() => {});
+    } catch {
+      registries.value = registries.value.filter((r) => r.id !== tempId);
+    } finally {
+      newRegistryLoading.value = false;
+    }
   }
 
   const sidebarContent = (
@@ -446,168 +604,198 @@ export default function Sidebar(props: SidebarProps) {
         >
           Registros
         </h3>
-        {sortedRegistries.value.map((r, i) => (
-          <div key={r.id} class="group relative">
-            {renamingId.value === r.id
-              ? (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    confirmRename(r.id);
-                  }}
-                  class={`w-full flex items-center rounded-custom ${
-                    collapsed.value && !mobileOpen.value
-                      ? "justify-center p-2.5"
-                      : "gap-3 px-3 py-2.5"
-                  } ${
-                    r.id === activeRegistryId.value
-                      ? "bg-white/5 border border-white/10 text-white"
-                      : "bg-white/5 border border-white/10 text-white"
-                  }`}
-                >
-                  <div
-                    class="w-2 h-2 rounded-full flex-shrink-0"
-                    style={`background-color: ${
-                      REGISTRY_COLORS[i % REGISTRY_COLORS.length]
-                    }`}
-                  />
-                  <input
-                    type="text"
-                    value={renameValue.value}
-                    onInput={(e) =>
-                      renameValue.value = (e.target as HTMLInputElement).value}
-                    onBlur={() => confirmRename(r.id)}
-                    class={`flex-1 min-w-0 bg-white/5 border border-white/10 rounded text-sm font-medium text-white p-1 px-2 focus:outline-none focus:ring-1 focus:ring-white/20 ${
+        {sortedRegistries.value.map((r, i) => {
+          const isPending = r.id === newRegistryPendingId.value;
+          const isOwnedByMe = isPending || props.ownerRegistryIds.has(r.id);
+          const isDeletable = isPending ||
+            props.deletableRegistryIds.has(r.id);
+          return (
+            <div key={r.id} class="group relative">
+              {renamingId.value === r.id
+                ? (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      confirmRename(r.id);
+                    }}
+                    class={`w-full flex items-center rounded-custom ${
                       collapsed.value && !mobileOpen.value
-                        ? "opacity-0 w-0 p-0"
-                        : ""
+                        ? "justify-center p-2.5"
+                        : "gap-3 px-3 py-2.5"
+                    } ${
+                      r.id === activeRegistryId.value
+                        ? "bg-white/5 border border-white/10 text-white"
+                        : "bg-white/5 border border-white/10 text-white"
                     }`}
-                    autofocus
-                  />
-                </form>
-              )
-              : (
-                <button
-                  type="button"
-                  onClick={() => switchRegistry(r.id)}
-                  class={`w-full flex items-center rounded-custom transition-all duration-300 ${
-                    collapsed.value && !mobileOpen.value
-                      ? "justify-center p-2.5"
-                      : "gap-3 px-3 py-2.5"
-                  } ${
-                    collapsed.value && !mobileOpen.value
-                      ? ""
-                      : r.id === activeRegistryId.value
-                      ? "bg-white/5 border border-white/10 text-white"
-                      : "hover:bg-white/5 text-gray-400 hover:text-white"
-                  }`}
-                  style={collapsed.value && !mobileOpen.value
-                    ? `background-color: ${
-                      REGISTRY_COLORS[i % REGISTRY_COLORS.length]
-                    }20; border: 1px solid ${
-                      REGISTRY_COLORS[i % REGISTRY_COLORS.length]
-                    }40`
-                    : undefined}
-                  title={r.name}
-                >
-                  <div
-                    class={`rounded-full flex-shrink-0 transition-all duration-300 ${
-                      collapsed.value && !mobileOpen.value
-                        ? "w-2 h-2"
-                        : "w-2 h-2"
-                    }`}
-                    style={collapsed.value && !mobileOpen.value
-                      ? undefined
-                      : `background-color: ${
+                  >
+                    <div
+                      class="w-2 h-2 rounded-full flex-shrink-0"
+                      style={`background-color: ${
                         REGISTRY_COLORS[i % REGISTRY_COLORS.length]
                       }`}
-                  />
-                  <span
-                    class={`text-sm font-medium truncate min-w-0 whitespace-nowrap transition-all duration-200 ${
+                    />
+                    <input
+                      type="text"
+                      value={renameValue.value}
+                      onInput={(e) =>
+                        renameValue.value =
+                          (e.target as HTMLInputElement).value}
+                      onBlur={() => confirmRename(r.id)}
+                      class={`flex-1 min-w-0 bg-white/5 border border-white/10 rounded text-sm font-medium text-white p-1 px-2 focus:outline-none focus:ring-1 focus:ring-white/20 ${
+                        collapsed.value && !mobileOpen.value
+                          ? "opacity-0 w-0 p-0"
+                          : ""
+                      }`}
+                      autofocus
+                    />
+                  </form>
+                )
+                : (
+                  <button
+                    type="button"
+                    onClick={() => !isPending && switchRegistry(r.id)}
+                    disabled={isPending}
+                    class={`w-full flex items-center rounded-custom transition-all duration-300 ${
                       collapsed.value && !mobileOpen.value
-                        ? "opacity-0 w-0 overflow-hidden"
-                        : "opacity-100 flex-1"
+                        ? "justify-center p-2.5"
+                        : "gap-3 px-3 py-2.5"
+                    } ${
+                      isPending
+                        ? "bg-primary/10 border border-primary/30 text-primary"
+                        : collapsed.value && !mobileOpen.value
+                        ? ""
+                        : r.id === activeRegistryId.value
+                        ? "bg-white/5 border border-white/10 text-white"
+                        : "border border-transparent hover:bg-white/5 hover:border-white/10 text-gray-400 hover:text-white"
                     }`}
+                    style={collapsed.value && !mobileOpen.value && !isPending
+                      ? `background-color: ${
+                        REGISTRY_COLORS[i % REGISTRY_COLORS.length]
+                      }20; border: 1px solid ${
+                        REGISTRY_COLORS[i % REGISTRY_COLORS.length]
+                      }40`
+                      : undefined}
+                    title={r.name}
                   >
-                    {r.name}
-                  </span>
-                  <span
-                    style="opacity:0"
-                    class={`sidebar-action-btns items-center gap-1.5 flex-shrink-0 transition-opacity duration-200 ${
-                      collapsed.value && !mobileOpen.value
-                        ? "w-0 overflow-hidden hidden"
-                        : "flex"
-                    }`}
-                  >
-                    {props.ownerRegistryIds.has(r.id) && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          startRename(r.id, r.name);
-                        }}
-                        class="p-2 hover:bg-white/10 rounded text-slate-500 hover:text-white transition-colors"
-                        title="Renombrar"
-                      >
+                    <div
+                      class={`rounded-full flex-shrink-0 transition-all duration-300 ${
+                        collapsed.value && !mobileOpen.value
+                          ? "w-2 h-2"
+                          : "w-2 h-2"
+                      }`}
+                      style={collapsed.value && !mobileOpen.value
+                        ? undefined
+                        : `background-color: ${
+                          REGISTRY_COLORS[i % REGISTRY_COLORS.length]
+                        }`}
+                    />
+                    <span
+                      class={`text-sm font-medium truncate min-w-0 whitespace-nowrap transition-all duration-200 flex items-center ${
+                        collapsed.value && !mobileOpen.value
+                          ? "opacity-0 w-0 overflow-hidden"
+                          : "opacity-100 flex-1 text-left"
+                      }`}
+                    >
+                      {r.name}
+                      {isPending && (
                         <svg
-                          class="w-4.5 h-4.5"
+                          class="w-3.5 h-3.5 ml-2 animate-spin text-primary shrink-0"
                           fill="none"
-                          stroke="currentColor"
                           viewBox="0 0 24 24"
                         >
+                          <circle
+                            class="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            stroke-width="4"
+                          />
                           <path
-                            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
+                            class="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
                           />
                         </svg>
-                      </button>
-                    )}
-                    {props.ownerRegistryIds.has(r.id) && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          showSplitConfig.value = r.id;
-                        }}
-                        class="p-2 hover:bg-white/10 rounded text-slate-500 hover:text-white transition-colors text-sm font-bold"
-                        title="División Default"
-                      >
-                        %
-                      </button>
-                    )}
-                    {props.ownerRegistryIds.has(r.id) &&
-                      props.deletableRegistryIds.has(r.id) && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteRegistry(r.id);
-                        }}
-                        class="p-2 hover:bg-red-500/20 rounded text-slate-500 hover:text-red-400 transition-colors"
-                        title="Eliminar"
-                      >
-                        <svg
-                          class="w-4.5 h-4.5"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
+                      )}
+                    </span>
+                    <span
+                      style="opacity:0"
+                      class={`sidebar-action-btns items-center gap-1.5 flex-shrink-0 transition-opacity duration-200 ${
+                        collapsed.value && !mobileOpen.value
+                          ? "w-0 overflow-hidden hidden"
+                          : "flex"
+                      }`}
+                    >
+                      {isOwnedByMe && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startRename(r.id, r.name);
+                          }}
+                          class="p-2 hover:bg-white/10 rounded text-slate-500 hover:text-white transition-colors"
+                          title="Renombrar"
                         >
-                          <path
-                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                          />
-                        </svg>
-                      </button>
-                    )}
-                  </span>
-                </button>
-              )}
-          </div>
-        ))}
+                          <svg
+                            class="w-4.5 h-4.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                            />
+                          </svg>
+                        </button>
+                      )}
+                      {isOwnedByMe && !isPending && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            showSplitConfig.value = r.id;
+                          }}
+                          class="p-2 hover:bg-white/10 rounded text-slate-500 hover:text-white transition-colors text-sm font-bold"
+                          title="División Default"
+                        >
+                          %
+                        </button>
+                      )}
+                      {isOwnedByMe && isDeletable && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteRegistry(r.id);
+                          }}
+                          class="p-2 hover:bg-red-500/20 rounded text-slate-500 hover:text-red-400 transition-colors"
+                          title="Eliminar"
+                        >
+                          <svg
+                            class="w-4.5 h-4.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                            />
+                          </svg>
+                        </button>
+                      )}
+                    </span>
+                  </button>
+                )}
+            </div>
+          );
+        })}
       </div>
 
       {props.isOwner && activeRegistryId.value && (
@@ -668,8 +856,7 @@ export default function Sidebar(props: SidebarProps) {
           >
             <EntityManager
               registryId={activeRegistryId.value}
-              entities={props.entities}
-              onUpdate={() => globalThis.location.reload()}
+              entities={$entities}
             />
           </div>
           {collapsed.value && !mobileOpen.value && (
@@ -708,9 +895,10 @@ export default function Sidebar(props: SidebarProps) {
           collapsed.value && !mobileOpen.value ? "p-1.5" : "p-4"
         }`}
       >
-        <a
-          href="/registries/new"
-          class={`flex items-center bg-white/5 hover:bg-white/10 border border-white/10 rounded-custom text-sm font-semibold text-white transition-all duration-300 ${
+        <button
+          type="button"
+          onClick={() => showNewRegistry.value = true}
+          class={`w-full flex items-center bg-white/5 hover:bg-white/10 border border-white/10 rounded-custom text-sm font-semibold text-white transition-all duration-300 ${
             collapsed.value && !mobileOpen.value
               ? "justify-center p-2.5"
               : "justify-center gap-2 py-3 px-4"
@@ -738,7 +926,7 @@ export default function Sidebar(props: SidebarProps) {
           >
             Nuevo Registro
           </span>
-        </a>
+        </button>
         <button
           type="button"
           onClick={handleLogout}
@@ -941,6 +1129,59 @@ export default function Sidebar(props: SidebarProps) {
                 class="px-6 py-2 text-sm font-semibold text-slate-300 hover:text-white transition-colors"
               >
                 Cerrar
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
+
+      {showNewRegistry.value && (
+        <div
+          class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) showNewRegistry.value = false;
+          }}
+        >
+          <div class="bg-surface border border-border-custom w-full max-w-md rounded-custom shadow-2xl flex flex-col overflow-hidden">
+            <header class="px-6 py-4 border-b border-border-custom">
+              <h2 class="text-xl font-bold text-white">Nuevo Registro</h2>
+              <p class="text-sm text-slate-400 mt-1">
+                Crea un grupo para gestionar gastos compartidos
+              </p>
+            </header>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleCreateRegistry();
+              }}
+              class="p-6"
+            >
+              <input
+                type="text"
+                value={newRegistryName.value}
+                onInput={(e) =>
+                  newRegistryName.value = (e.target as HTMLInputElement).value}
+                placeholder="Ej: Compañeros de piso"
+                class="block w-full px-4 py-2.5 bg-background border border-border-custom rounded-custom text-white focus:ring-primary focus:border-primary"
+                autofocus
+              />
+            </form>
+            <footer class="px-6 py-4 border-t border-border-custom bg-slate-800/20 flex justify-end items-center gap-3">
+              <button
+                type="button"
+                onClick={() => showNewRegistry.value = false}
+                class="px-6 py-2 text-sm font-semibold text-slate-300 hover:text-white transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateRegistry}
+                disabled={!newRegistryName.value.trim() ||
+                  newRegistryLoading.value}
+                class="px-8 py-2 text-sm font-semibold bg-primary hover:bg-primary-light text-white rounded-custom transition-all shadow-lg active:scale-95 disabled:opacity-50"
+              >
+                Crear
               </button>
             </footer>
           </div>

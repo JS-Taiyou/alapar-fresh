@@ -1,10 +1,8 @@
 import { define } from "../../../utils.ts";
 import {
   deleteRegistry,
-  getRegistriesForUser,
   getTransactionCount,
   renameRegistry,
-  setUserActiveRegistry,
 } from "../../../lib/store.ts";
 
 export const handler = define.handlers({
@@ -56,11 +54,6 @@ export const handler = define.handlers({
     const deleted = await deleteRegistry(id, systemUserId);
     if (!deleted) {
       return Response.json({ error: "Delete failed" }, { status: 500 });
-    }
-
-    const remaining = await getRegistriesForUser(systemUserId);
-    if (remaining.length > 0) {
-      await setUserActiveRegistry(systemUserId, remaining[0].id);
     }
 
     return new Response(null, { status: 204 });

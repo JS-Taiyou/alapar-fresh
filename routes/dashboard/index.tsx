@@ -1,4 +1,4 @@
-import { useSignal } from "@preact/signals";
+import { useComputed, useSignal } from "@preact/signals";
 import { define } from "../../utils.ts";
 import {
   calculateBalance,
@@ -148,9 +148,14 @@ export default define.page(function DashboardIndex(ctx) {
   );
   const $spawnCandidates = useSignal(data.spawnCandidates);
   const $lastModified = useSignal<string | null>(data.lastModified);
+  const $entities = useSignal<{ id: string; name: string; color: string }[]>(
+    ctx.state.entities.map((e) => ({ id: e.id, name: e.name, color: e.color })),
+  );
+  const $entityIds = useComputed(() =>
+    new Set($entities.value.map((e) => e.id))
+  );
 
-  const entityIds = new Set(ctx.state.entities.map((e) => e.id));
-  const hasMultipleUsers = ctx.state.participants.length > 1;
+  const hasMultipleUsers = $users.value.length > 1;
 
   return (
     <>
@@ -199,7 +204,8 @@ export default define.page(function DashboardIndex(ctx) {
         defaultSplit={$defaultSplit}
         spawnCandidates={$spawnCandidates}
         lastModified={$lastModified}
-        entityIds={entityIds}
+        entityIds={$entityIds}
+        entities={$entities}
         supabaseUrl={data.supabaseUrl}
         supabaseAnonKey={data.supabaseAnonKey}
         accessToken={data.accessToken}

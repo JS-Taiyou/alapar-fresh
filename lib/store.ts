@@ -133,40 +133,6 @@ export async function createUserFromSupabase(
   return rowToUser(result.rows[0]);
 }
 
-export async function getUserActiveRegistry(
-  userId: string,
-): Promise<Registry | null> {
-  const result = await query(
-    `SELECT r.* FROM registries r
-     JOIN user_preferences up ON up.active_registry_id = r.id
-     WHERE up.user_id = $1`,
-    [userId],
-  );
-  if (result.rows.length === 0) return null;
-  return rowToRegistry(result.rows[0]);
-}
-
-export async function setUserActiveRegistry(
-  userId: string,
-  registryId: string,
-): Promise<void> {
-  await query(
-    `INSERT INTO user_preferences (user_id, active_registry_id, updated_at) VALUES ($1, $2, now())
-     ON CONFLICT (user_id) DO UPDATE SET active_registry_id = $2, updated_at = now()`,
-    [userId, registryId],
-  );
-}
-
-export async function ensureUserPreferences(
-  userId: string,
-): Promise<void> {
-  await query(
-    `INSERT INTO user_preferences (user_id, active_registry_id) VALUES ($1, NULL)
-     ON CONFLICT (user_id) DO NOTHING`,
-    [userId],
-  );
-}
-
 export async function resolveUserState(supabaseAuthId: string): Promise<{
   user: User | null;
   isEmailAllowed: boolean;
@@ -217,28 +183,18 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
     };
   }
 
-  const [registries, activeRegResult] = await Promise.all([
-    query(
-      `SELECT r.*, rm.role as membership_role FROM registries r
-       JOIN registry_members rm ON r.id = rm.registry_id
-       WHERE rm.user_id = $1
-       ORDER BY r.latest_accessed DESC`,
-      [user.id],
-    ),
-    query(
-      `SELECT r.*, rm.role as active_registry_role
-       FROM registries r
-       JOIN user_preferences up ON up.active_registry_id = r.id
-       JOIN registry_members rm ON rm.registry_id = r.id AND rm.user_id = $1
-       WHERE up.user_id = $1`,
-      [user.id],
-    ),
-  ]);
+  const registriesResult = await query(
+    `SELECT r.*, rm.role as membership_role FROM registries r
+     JOIN registry_members rm ON r.id = rm.registry_id
+     WHERE rm.user_id = $1
+     ORDER BY r.name`,
+    [user.id],
+  );
 
-  const registriesList = registries.rows.map(rowToRegistry);
+  const registriesList = registriesResult.rows.map(rowToRegistry);
   const ownerRegistryIds = new Set<string>(
-    registries.rows.filter((r) => r.membership_role === "owner").map((r) =>
-      r.id as string
+    registriesResult.rows.filter((r) => r.membership_role === "owner").map(
+      (r) => r.id as string,
     ),
   );
   let activeRegistry: Registry | null = null;
@@ -247,10 +203,10 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
   let entities: Entity[] = [];
   let participants: Participant[] = [];
 
-  if (activeRegResult.rows.length > 0) {
-    const activeRegRow = activeRegResult.rows[0];
-    activeRegistry = rowToRegistry(activeRegRow);
-    isOwner = activeRegRow.active_registry_role === "owner";
+  if (registriesList.length > 0) {
+    activeRegistry = registriesList[0];
+    const activeRow = registriesResult.rows[0];
+    isOwner = activeRow.membership_role === "owner";
 
     const usersResult = await query(
       `SELECT u.* FROM users u
@@ -507,8 +463,6 @@ export async function createRegistry(
       [registry.id, userId],
     );
   }
-
-  await setUserActiveRegistry(userId, registry.id);
 
   return registry;
 }
@@ -963,7 +917,6 @@ export async function useInvitation(
     [invitation.registryId, userId],
   );
   if (existing.rows.length > 0) {
-    await setUserActiveRegistry(userId, invitation.registryId);
     return invitation.registryId;
   }
 
@@ -976,8 +929,6 @@ export async function useInvitation(
     "UPDATE invitations SET current_uses = current_uses + 1 WHERE id = $1",
     [invitation.id],
   );
-
-  await setUserActiveRegistry(userId, invitation.registryId);
 
   await invalidateDefaultSplitIfNeeded(invitation.registryId);
 

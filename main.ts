@@ -1,10 +1,6 @@
 import { App, csrf, staticFiles } from "fresh";
 import { define, type State } from "./utils.ts";
-import {
-  createUserFromSupabase,
-  ensureUserPreferences,
-  resolveUserState,
-} from "./lib/store.ts";
+import { createUserFromSupabase, resolveUserState } from "./lib/store.ts";
 import { getUserFromRequest, setAuthCookies } from "./lib/supabase.ts";
 import { query } from "./lib/db.ts";
 
@@ -56,7 +52,6 @@ app.use(define.middleware(async (ctx) => {
         authUser.email,
         authUser.name ?? authUser.email.split("@")[0],
       );
-      await ensureUserPreferences(user.id);
       ctx.state.user = user;
     } else {
       const row = userResult.rows[0];
@@ -98,7 +93,6 @@ app.use(define.middleware(async (ctx) => {
       authUser.email,
       authUser.name ?? authUser.email.split("@")[0],
     );
-    await ensureUserPreferences(user.id);
     ctx.state.user = user;
     const response = await ctx.next();
     if (authResult.refreshedTokens && response) {

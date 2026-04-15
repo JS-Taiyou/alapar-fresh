@@ -1,15 +1,14 @@
-import { useSignal } from "@preact/signals";
+import { type Signal, useSignal } from "@preact/signals";
 import type { Entity } from "../lib/types.ts";
 
 interface EntityManagerProps {
   registryId: string;
-  entities: Entity[];
-  onUpdate: () => void;
+  entities: Signal<Entity[]>;
 }
 
 export default function EntityManager(props: EntityManagerProps) {
   const isOpen = useSignal(false);
-  const entities = useSignal<Entity[]>([...props.entities]);
+  const entities = props.entities;
   const newName = useSignal("");
   const newColor = useSignal("#6b7280");
   const editingId = useSignal<string | null>(null);
@@ -24,11 +23,17 @@ export default function EntityManager(props: EntityManagerProps) {
       if (res.ok) {
         const data = await res.json();
         entities.value = data;
+        globalThis.dispatchEvent(
+          new CustomEvent("entities-changed", {
+            detail: { entities: data },
+          }),
+        );
+        return;
       }
     } catch {
       // ignore
     }
-    props.onUpdate();
+    globalThis.dispatchEvent(new CustomEvent("entities-changed"));
   }
 
   async function handleCreate() {

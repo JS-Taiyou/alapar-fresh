@@ -3,7 +3,9 @@ import {
   calculateBalance,
   calculatePairwiseBreakdown,
   getActiveTransactions,
+  getEntities,
   getSpawnCandidates,
+  getUsers,
 } from "../../lib/store.ts";
 import {
   getCachedSpawnCandidates,
@@ -13,9 +15,8 @@ import { generateETag } from "../../lib/etag.ts";
 
 export const handler = define.handlers({
   async GET(ctx) {
-    const registryId = ctx.state.activeRegistry?.id;
     const userId = ctx.state.user?.id;
-    if (!registryId || !userId) {
+    if (!userId) {
       return Response.json(
         {
           transactions: [],
@@ -25,10 +26,41 @@ export const handler = define.handlers({
           spawnCandidates: [],
           defaultSplit: null,
           entityIds: [],
+          entities: [],
+          currentUserId: null,
+          lastModified: null,
         },
         { status: 200 },
       );
     }
+
+    const url = new URL(ctx.req.url);
+    const requestedId = url.searchParams.get("registryId");
+    const registryId = requestedId && ctx.state.registries.some((r) =>
+        r.id === requestedId
+      )
+      ? requestedId
+      : ctx.state.activeRegistry?.id;
+
+    if (!registryId) {
+      return Response.json(
+        {
+          transactions: [],
+          users: [],
+          balance: 0,
+          balanceEntries: [],
+          spawnCandidates: [],
+          defaultSplit: null,
+          entityIds: [],
+          entities: [],
+          currentUserId: null,
+          lastModified: null,
+        },
+        { status: 200 },
+      );
+    }
+
+    const isActiveRegistry = registryId === ctx.state.activeRegistry?.id;
 
     const { transactions } = await getCachedTransactions(
       registryId,
@@ -40,9 +72,29 @@ export const handler = define.handlers({
       () => getSpawnCandidates(registryId),
     );
 
-    const participantMap = new Map(
-      ctx.state.participants.map((p) => [p.id, p]),
-    );
+    let participants: { id: string; name: string; color: string }[];
+    let entities: { id: string; name: string; color: string }[];
+    let defaultSplit: unknown;
+
+    if (isActiveRegistry) {
+      participants = ctx.state.participants;
+      entities = ctx.state.entities;
+      defaultSplit = ctx.state.activeRegistry?.defaultSplit ?? null;
+    } else {
+      const [users, ents] = await Promise.all([
+        getUsers(registryId),
+        getEntities(registryId),
+      ]);
+      participants = [
+        ...users.map((u) => ({ id: u.id, name: u.name, color: u.color })),
+        ...ents.map((e) => ({ id: e.id, name: e.name, color: e.color })),
+      ];
+      entities = ents;
+      const reg = ctx.state.registries.find((r) => r.id === registryId);
+      defaultSplit = reg?.defaultSplit ?? null;
+    }
+
+    const participantMap = new Map(participants.map((p) => [p.id, p]));
     const enriched = transactions.map((tx) => ({
       ...tx,
       paidByUser: participantMap.get(tx.userPaid) ?? null,
@@ -60,19 +112,25 @@ export const handler = define.handlers({
     const balanceBreakdown = calculatePairwiseBreakdown(
       transactions,
       userId,
-      ctx.state.participants,
+      participants,
     );
 
-    const entityIds = ctx.state.entities.map((e) => e.id);
+    const entityIds = entities.map((e) => e.id);
 
     const data = {
       transactions: enriched,
-      users: ctx.state.participants,
+      users: participants,
       balance,
       balanceEntries: balanceBreakdown,
       spawnCandidates,
-      defaultSplit: ctx.state.activeRegistry?.defaultSplit ?? null,
+      defaultSplit,
       entityIds,
+      entities: isActiveRegistry
+        ? ctx.state.entities
+        : entities.map((e) => ({ id: e.id, name: e.name, color: e.color })),
+      currentUserId: userId,
+      lastModified: ctx.state.registries.find((r) => r.id === registryId)
+        ?.lastModified?.toISOString() ?? null,
     };
 
     const etag = generateETag(data);

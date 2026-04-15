@@ -49,7 +49,8 @@ interface TransactionListProps {
   defaultSplit: Signal<DefaultSplit | null>;
   spawnCandidates: Signal<SpawnCandidate[]>;
   lastModified: Signal<string | null>;
-  entityIds: Set<string>;
+  entityIds: Signal<Set<string>>;
+  entities: Signal<{ id: string; name: string; color: string }[]>;
   supabaseUrl?: string;
   supabaseAnonKey?: string;
   accessToken?: string;
@@ -518,6 +519,8 @@ export default function TransactionList(props: TransactionListProps) {
     const ds = defaultSplit.value;
     const sc = props.spawnCandidates.value;
     const lm = props.lastModified.value;
+    const eids = [...props.entityIds.value];
+    const ents = props.entities.value;
     if (!rid || txs.length === 0 && lm === null) return;
     cache.setRegistrySnapshot({
       registryId: rid,
@@ -533,6 +536,8 @@ export default function TransactionList(props: TransactionListProps) {
       currentUserId: uid,
       defaultSplit: ds,
       spawnCandidates: sc,
+      entityIds: eids,
+      entities: ents,
       lastModified: lm,
     });
   });
@@ -549,6 +554,8 @@ export default function TransactionList(props: TransactionListProps) {
         defaultSplit?: DefaultSplit | null;
         spawnCandidates?: SpawnCandidate[];
         lastModified?: string | null;
+        entityIds?: string[];
+        entities?: { id: string; name: string; color: string }[];
       };
       if (!detail) return;
       registryId.value = detail.registryId;
@@ -575,10 +582,40 @@ export default function TransactionList(props: TransactionListProps) {
       if (detail.lastModified !== undefined) {
         props.lastModified.value = detail.lastModified;
       }
+      if (detail.entityIds) {
+        props.entityIds.value = new Set(detail.entityIds);
+      }
+      if (detail.entities) {
+        props.entities.value = detail.entities;
+      }
     }
     globalThis.addEventListener("registry-switch", onRegistrySwitch);
-    return () =>
+
+    async function onEntitiesChanged(e: Event) {
+      const detail = (e as CustomEvent).detail as {
+        entities?: { id: string; name: string; color: string }[];
+      } | undefined;
+      if (detail?.entities) {
+        props.entityIds.value = new Set(detail.entities.map((e) => e.id));
+        return;
+      }
+      const rid = registryId.value;
+      if (!rid) return;
+      try {
+        const res = await fetch(`/api/entities?registryId=${rid}`);
+        if (!res.ok) return;
+        const data = await res.json() as { id: string }[];
+        props.entityIds.value = new Set(data.map((e) => e.id));
+      } catch {
+        // ignore
+      }
+    }
+    globalThis.addEventListener("entities-changed", onEntitiesChanged);
+
+    return () => {
       globalThis.removeEventListener("registry-switch", onRegistrySwitch);
+      globalThis.removeEventListener("entities-changed", onEntitiesChanged);
+    };
   });
 
   useSignalEffect(() => {
@@ -606,14 +643,17 @@ export default function TransactionList(props: TransactionListProps) {
         const cached = await cache.getRegistrySnapshot(rid);
         if (cached?.lastModified === lastModified) return;
 
-        const dashRes = await fetch("/api/dashboard");
+        const dashRes = await fetch(`/api/dashboard?registryId=${rid}`);
         if (!dashRes.ok) return;
         const data = await dashRes.json() as {
           transactions: unknown[];
           balance: number;
           balanceEntries: BalanceBreakdownEntry[];
+          users: Participant[];
           defaultSplit: DefaultSplit | null;
           spawnCandidates: SpawnCandidate[];
+          entityIds: string[];
+          entities: { id: string; name: string; color: string }[];
         };
 
         transactions.value = (data.transactions as EnrichedTransaction[]).map((
@@ -633,6 +673,15 @@ export default function TransactionList(props: TransactionListProps) {
         }
         if (data.spawnCandidates) {
           props.spawnCandidates.value = data.spawnCandidates;
+        }
+        if (data.users) {
+          users.value = data.users;
+        }
+        if (data.entityIds) {
+          props.entityIds.value = new Set(data.entityIds);
+        }
+        if (data.entities) {
+          props.entities.value = data.entities;
         }
         props.lastModified.value = lastModified;
       } catch { /* wake-up refresh failure non-critical */ }
@@ -1957,7 +2006,7 @@ export default function TransactionList(props: TransactionListProps) {
                                             (Tú)
                                           </span>
                                         )}
-                                        {props.entityIds.has(user.id) && (
+                                        {props.entityIds.value.has(user.id) && (
                                           <span class="text-xs ml-1 px-1.5 py-0.5 rounded bg-slate-700 text-slate-400">
                                             tercero
                                           </span>
@@ -2123,7 +2172,7 @@ export default function TransactionList(props: TransactionListProps) {
                                           (Tú)
                                         </span>
                                       )}
-                                      {props.entityIds.has(user.id) && (
+                                      {props.entityIds.value.has(user.id) && (
                                         <span class="text-xs ml-1 px-1 py-0.5 rounded bg-slate-700 text-slate-400">
                                           tercero
                                         </span>
@@ -2437,7 +2486,7 @@ export default function TransactionList(props: TransactionListProps) {
                                           (Tú)
                                         </span>
                                       )}
-                                      {props.entityIds.has(user.id) && (
+                                      {props.entityIds.value.has(user.id) && (
                                         <span class="text-xs ml-1 px-1.5 py-0.5 rounded bg-slate-700 text-slate-400">
                                           tercero
                                         </span>
@@ -2571,7 +2620,7 @@ export default function TransactionList(props: TransactionListProps) {
                                         (Tú)
                                       </span>
                                     )}
-                                    {props.entityIds.has(user.id) && (
+                                    {props.entityIds.value.has(user.id) && (
                                       <span class="text-xs ml-1 px-1 py-0.5 rounded bg-slate-700 text-slate-400">
                                         tercero
                                       </span>

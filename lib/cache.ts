@@ -75,6 +75,17 @@ async function deleteEntry(storeName: string, key: string): Promise<void> {
   });
 }
 
+async function getAllKeys(storeName: string): Promise<IDBValidKey[]> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readonly");
+    const store = tx.objectStore(storeName);
+    const request = store.getAllKeys();
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+  });
+}
+
 async function getAllByIndex(
   storeName: string,
   indexName: string,
@@ -109,6 +120,8 @@ export interface CachedRegistryData {
   currentUserId: string;
   defaultSplit: unknown;
   spawnCandidates: unknown[];
+  entityIds: string[];
+  entities: { id: string; name: string; color: string }[];
   lastModified: string | null;
   cachedAt: number;
 }
@@ -243,6 +256,18 @@ export const cache = {
     ]);
   },
 
+  async getLastActiveRegistry(): Promise<string | null> {
+    const entry = await get<{ key: string; value: string }>(
+      STORES.meta,
+      "lastActiveRegistry",
+    );
+    return entry?.value ?? null;
+  },
+
+  async setLastActiveRegistry(registryId: string): Promise<void> {
+    await put(STORES.meta, { key: "lastActiveRegistry", value: registryId });
+  },
+
   async clearAll(): Promise<void> {
     const db = await openDB();
     const storeNames = Array.from(db.objectStoreNames);
@@ -254,6 +279,25 @@ export const cache = {
         request.onerror = () => reject(request.error);
         request.onsuccess = () => resolve();
       });
+    }
+  },
+
+  async cleanOrphanedEntries(validRegistryIds: string[]): Promise<void> {
+    const validSet = new Set(validRegistryIds);
+
+    const registryDataKeys = await getAllKeys(STORES.registryData);
+    const balanceKeys = await getAllKeys(STORES.balance);
+    const exerciseKeys = await getAllKeys(STORES.exercises);
+
+    const orphanedIds = new Set<string>();
+    for (const key of [...registryDataKeys, ...balanceKeys, ...exerciseKeys]) {
+      if (!validSet.has(key as string)) {
+        orphanedIds.add(key as string);
+      }
+    }
+
+    for (const id of orphanedIds) {
+      await this.invalidateRegistry(id);
     }
   },
 };
