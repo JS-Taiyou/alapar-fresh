@@ -414,7 +414,7 @@ export default function TransactionList(props: TransactionListProps) {
 
     subscribeToRegistry(
       rid,
-      async (payload) => {
+      (payload) => {
         const participantMap = new Map(users.value.map((u) => [u.id, u]));
 
         const mapRow = (row: Record<string, unknown>): EnrichedTransaction => ({
@@ -490,14 +490,29 @@ export default function TransactionList(props: TransactionListProps) {
             t.id === payload.new.id ? mapRow(payload.new) : t
           );
         }
-        try {
-          const resp = await fetch("/api/dashboard");
-          if (resp.ok) {
-            const data = await resp.json();
-            balance.value = data.balance;
-            balanceEntries.value = data.balanceEntries;
-          }
-        } catch { /* ignore refetch errors */ }
+        const allParticipants = [
+          ...users.value.map((u) => ({
+            id: u.id,
+            name: u.name,
+            color: u.color,
+          })),
+          ...props.entities.value.map((e) => ({
+            id: e.id,
+            name: e.name,
+            color: e.color,
+          })),
+        ];
+        balance.value = calculateBalance(
+          transactions.value as Parameters<typeof calculateBalance>[0],
+          currentUserId.value,
+        );
+        balanceEntries.value = calculatePairwiseBreakdown(
+          transactions.value as Parameters<
+            typeof calculatePairwiseBreakdown
+          >[0],
+          currentUserId.value,
+          allParticipants,
+        );
       },
       props.accessToken,
     );
@@ -862,11 +877,23 @@ export default function TransactionList(props: TransactionListProps) {
   }
 
   function recalculate() {
+    const allParticipants = [
+      ...users.value.map((u) => ({
+        id: u.id,
+        name: u.name,
+        color: u.color,
+      })),
+      ...props.entities.value.map((e) => ({
+        id: e.id,
+        name: e.name,
+        color: e.color,
+      })),
+    ];
     balance.value = calculateBalance(transactions.value, currentUserId.value);
     balanceEntries.value = calculatePairwiseBreakdown(
       transactions.value,
       currentUserId.value,
-      users.value,
+      allParticipants,
     );
   }
 
