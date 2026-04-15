@@ -23,8 +23,8 @@ export const handler = define.handlers({
 
     const form = await ctx.req.formData();
     const description = form.get("description") as string;
-    const amount = parseFloat(form.get("amount") as string);
-    const originalAmount = parseFloat(form.get("originalAmount") as string);
+    const amountRaw = form.get("amount") as string;
+    const originalAmountRaw = form.get("originalAmount") as string;
     const type = (form.get("type") as string) || "unico";
     const splitJsonStr = form.get("splitJson") as string;
     const userPaid = form.get("userPaid") as string;
@@ -37,7 +37,37 @@ export const handler = define.handlers({
       : null;
     const relatedTransactionId = (form.get("relatedTransactionId") as string) ||
       null;
-    const splitJson: TransactionSplit = JSON.parse(splitJsonStr);
+
+    if (!description || !description.trim()) {
+      return Response.json({ error: "Descripción requerida" }, { status: 400 });
+    }
+    if (!amountRaw || isNaN(parseFloat(amountRaw))) {
+      return Response.json({ error: "Monto inválido" }, { status: 400 });
+    }
+    const amount = parseFloat(amountRaw);
+    if (!isFinite(amount)) {
+      return Response.json({ error: "Monto inválido" }, { status: 400 });
+    }
+    const originalAmount = originalAmountRaw
+      ? parseFloat(originalAmountRaw)
+      : amount;
+    if (!isFinite(originalAmount)) {
+      return Response.json({ error: "Monto original inválido" }, {
+        status: 400,
+      });
+    }
+    if (!userPaid) {
+      return Response.json({ error: "Usuario pagador requerido" }, {
+        status: 400,
+      });
+    }
+
+    let splitJson: TransactionSplit;
+    try {
+      splitJson = JSON.parse(splitJsonStr ?? "{}");
+    } catch {
+      return Response.json({ error: "Split JSON inválido" }, { status: 400 });
+    }
 
     const updated = await updateTransaction(id, {
       description,
@@ -59,7 +89,12 @@ export const handler = define.handlers({
 
     sendPushToRegistry(tx.registry_id, {
       title: "Transacción actualizada",
-      body: `${description} — $${originalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      body: `${description} — $${
+        originalAmount.toLocaleString("en-US", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })
+      }`,
       registryId: tx.registry_id,
       url: "/dashboard",
     }, userId).catch(() => {});

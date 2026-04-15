@@ -8,21 +8,14 @@ export const handler = define.handlers({
     const systemUserId = ctx.state.user?.id;
 
     if (!registryId || !systemUserId) {
-      return new Response(JSON.stringify({ error: "Missing data" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return Response.json({ error: "Missing data" }, { status: 400 });
     }
 
     const role = await getUserRole(systemUserId, registryId);
     if (role !== "owner") {
-      return new Response(
-        JSON.stringify({ error: "Only owners can create invitations" }),
-        {
-          status: 403,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
+      return Response.json({ error: "Only owners can create invitations" }, {
+        status: 403,
+      });
     }
 
     const expiresAt = body.expiresAt
@@ -37,15 +30,10 @@ export const handler = define.handlers({
       maxUses,
     );
 
-    return new Response(
-      JSON.stringify({
-        id: invitation.id,
-        code: invitation.code,
-        expiresAt: invitation.expiresAt?.toISOString() ?? null,
-      }),
-      {
-        headers: { "Content-Type": "application/json" },
-      },
-    );
+    return Response.json({
+      id: invitation.id,
+      code: invitation.code,
+      expiresAt: invitation.expiresAt?.toISOString() ?? null,
+    });
   },
 });

@@ -10,20 +10,20 @@ import type {
   User,
 } from "./types.ts";
 import {
-  calculateBalance as calcBalancePure,
-  calculatePairwiseBreakdown as calcPairwiseBreakdownPure,
-  calculateFullPairwiseBalances as calcFullPairwisePure,
   buildEqualSplit,
   buildFixedSplit,
   buildPercentageSplit,
+  calculateBalance as calcBalancePure,
+  calculateFullPairwiseBalances as calcFullPairwisePure,
+  calculatePairwiseBreakdown as calcPairwiseBreakdownPure,
 } from "./calculations.ts";
 
 export {
   buildEqualSplit,
   buildFixedSplit,
   buildPercentageSplit,
-  calcPairwiseBreakdownPure as calculatePairwiseBreakdown,
   calcFullPairwisePure as calculateFullPairwiseBalances,
+  calcPairwiseBreakdownPure as calculatePairwiseBreakdown,
 };
 
 const MONTHS_ES = [
@@ -59,7 +59,12 @@ function rowToTransaction(row: Record<string, unknown>): Transaction {
     description: row.description as string,
     amount: parseFloat(row.amount as string),
     originalAmount: parseFloat(row.original_amount as string),
-    type: row.type as "unico" | "parcialidad" | "recurrente" | "pago" | "ajuste",
+    type: row.type as
+      | "unico"
+      | "parcialidad"
+      | "recurrente"
+      | "pago"
+      | "ajuste",
     exerciseId: row.exercise_id as string | null,
     installmentCurrent: row.installment_current as number | null,
     installmentTotal: row.installment_total as number | null,
@@ -99,7 +104,9 @@ function rowToRegistry(row: Record<string, unknown>): Registry {
         : row.default_split_json as DefaultSplit)
       : null,
     defaultSplitMemberCount: (row.default_split_member_count as number) ?? null,
-    lastModified: row.last_modified ? new Date(row.last_modified as string) : null,
+    lastModified: row.last_modified
+      ? new Date(row.last_modified as string)
+      : null,
   };
 }
 
@@ -230,7 +237,9 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
 
   const registriesList = registries.rows.map(rowToRegistry);
   const ownerRegistryIds = new Set<string>(
-    registries.rows.filter((r) => r.membership_role === "owner").map((r) => r.id as string),
+    registries.rows.filter((r) => r.membership_role === "owner").map((r) =>
+      r.id as string
+    ),
   );
   let activeRegistry: Registry | null = null;
   let isOwner = false;
@@ -403,7 +412,11 @@ export async function updateTransaction(
   values.push(id);
   values.push(userId);
   const result = await query(
-    `UPDATE transactions SET ${sets.join(", ")} WHERE id = $${idx} AND registry_id IN (SELECT rm.registry_id FROM registry_members rm WHERE rm.user_id = $${idx + 1} AND rm.registry_id = transactions.registry_id) RETURNING *`,
+    `UPDATE transactions SET ${
+      sets.join(", ")
+    } WHERE id = $${idx} AND registry_id IN (SELECT rm.registry_id FROM registry_members rm WHERE rm.user_id = $${
+      idx + 1
+    } AND rm.registry_id = transactions.registry_id) RETURNING *`,
     values,
   );
   if (result.rows.length === 0) return undefined;
@@ -654,9 +667,7 @@ export async function cloneTransactionForNextPeriod(
       source.type === "parcialidad" && source.installmentCurrent !== null
         ? source.installmentCurrent + installmentOffset
         : null,
-      source.type === "parcialidad"
-        ? source.installmentTotal
-        : null,
+      source.type === "parcialidad" ? source.installmentTotal : null,
       false,
       recurringGroupId,
       source.notes,
@@ -677,7 +688,9 @@ export async function batchCloneTransactions(
     `SELECT * FROM transactions WHERE id = ANY($1::uuid[])`,
     [ids],
   );
-  const sources = new Map(result.rows.map(rowToTransaction).map((t) => [t.id, t]));
+  const sources = new Map(
+    result.rows.map(rowToTransaction).map((t) => [t.id, t]),
+  );
 
   const rows: unknown[][] = [];
   for (const item of items) {
@@ -711,7 +724,11 @@ export async function batchCloneTransactions(
 
   const cols = 14;
   const placeholders = rows.map((_, rowIdx) =>
-    `(${Array.from({ length: cols }, (_, c) => `$${rowIdx * cols + c + 1}`).join(", ")})`
+    `(${
+      Array.from({ length: cols }, (_, c) => `$${rowIdx * cols + c + 1}`).join(
+        ", ",
+      )
+    })`
   ).join(", ");
   const flatValues = rows.flat();
 
@@ -771,7 +788,11 @@ export async function updateEntity(
   const entities = await getEntities(registryId);
   const idx = entities.findIndex((e) => e.id === entityId);
   if (idx === -1) return undefined;
-  entities[idx] = { ...entities[idx], name, color: color ?? entities[idx].color };
+  entities[idx] = {
+    ...entities[idx],
+    name,
+    color: color ?? entities[idx].color,
+  };
   await query(
     "UPDATE registries SET entities_json = $1 WHERE id = $2",
     [JSON.stringify(entities), registryId],
@@ -1026,7 +1047,9 @@ export async function isEmailAllowed(email: string): Promise<boolean> {
   return result.rows.length > 0;
 }
 
-export async function getRegistryStamp(registryId: string): Promise<string | null> {
+export async function getRegistryStamp(
+  registryId: string,
+): Promise<string | null> {
   const result = await query(
     "SELECT last_modified FROM registries WHERE id = $1",
     [registryId],

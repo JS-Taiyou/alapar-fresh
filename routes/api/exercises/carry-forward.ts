@@ -1,5 +1,9 @@
 import { define } from "../../../utils.ts";
-import { batchCloneTransactions, getTransactionById, isMemberOfRegistry } from "../../../lib/store.ts";
+import {
+  batchCloneTransactions,
+  getTransactionById,
+  isMemberOfRegistry,
+} from "../../../lib/store.ts";
 
 export const handler = define.handlers({
   async POST(ctx) {
@@ -11,9 +15,7 @@ export const handler = define.handlers({
     const body = await ctx.req.json();
     const items: { id: string; quantity?: number }[] = body.items ?? [];
     if (items.length === 0) {
-      return new Response(JSON.stringify({ created: 0 }), {
-        headers: { "Content-Type": "application/json" },
-      });
+      return Response.json({ created: 0 });
     }
 
     const first = await getTransactionById(items[0].id);
@@ -29,8 +31,6 @@ export const handler = define.handlers({
       items.map((item) => ({ id: item.id, quantity: item.quantity ?? 1 })),
     );
 
-    return new Response(JSON.stringify({ created: items.length }), {
-      headers: { "Content-Type": "application/json" },
-    });
+    return Response.json({ created: items.length });
   },
 });

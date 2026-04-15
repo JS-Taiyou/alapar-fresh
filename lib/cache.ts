@@ -24,7 +24,9 @@ function openDB(): Promise<IDBDatabase> {
         db.createObjectStore(STORES.registryData, { keyPath: "registryId" });
       }
       if (!db.objectStoreNames.contains(STORES.transactions)) {
-        const txStore = db.createObjectStore(STORES.transactions, { keyPath: "key" });
+        const txStore = db.createObjectStore(STORES.transactions, {
+          keyPath: "key",
+        });
         txStore.createIndex("registryId", "registryId");
       }
       if (!db.objectStoreNames.contains(STORES.balance)) {
@@ -73,7 +75,11 @@ async function deleteEntry(storeName: string, key: string): Promise<void> {
   });
 }
 
-async function getAllByIndex(storeName: string, indexName: string, key: string): Promise<unknown[]> {
+async function getAllByIndex(
+  storeName: string,
+  indexName: string,
+  key: string,
+): Promise<unknown[]> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, "readonly");
@@ -102,6 +108,7 @@ export interface CachedRegistryData {
   users: unknown[];
   currentUserId: string;
   defaultSplit: unknown;
+  spawnCandidates: unknown[];
   lastModified: string | null;
   cachedAt: number;
 }
@@ -118,59 +125,90 @@ export interface CachedMeta {
 }
 
 export const cache = {
-  async getTransactions(registryId: string, exerciseId: string | null): Promise<CachedTransactionEntry | undefined> {
+  getTransactions(
+    registryId: string,
+    exerciseId: string | null,
+  ): Promise<CachedTransactionEntry | undefined> {
     const key = `${registryId}:${exerciseId ?? "active"}`;
     return get<CachedTransactionEntry>(STORES.transactions, key);
   },
 
-  async setTransactions(registryId: string, exerciseId: string | null, data: unknown[], etag?: string): Promise<void> {
+  async setTransactions(
+    registryId: string,
+    exerciseId: string | null,
+    data: unknown[],
+    etag?: string,
+  ): Promise<void> {
     const key = `${registryId}:${exerciseId ?? "active"}`;
-    await put(STORES.transactions, {
-      key,
-      registryId,
-      exerciseId,
-      data,
-      cachedAt: Date.now(),
-      etag,
-    } satisfies CachedTransactionEntry);
+    await put(
+      STORES.transactions,
+      {
+        key,
+        registryId,
+        exerciseId,
+        data,
+        cachedAt: Date.now(),
+        etag,
+      } satisfies CachedTransactionEntry,
+    );
   },
 
-  async getRegistryData(registryId: string): Promise<CachedRegistryData | undefined> {
+  getRegistryData(
+    registryId: string,
+  ): Promise<CachedRegistryData | undefined> {
     return get<CachedRegistryData>(STORES.registryData, registryId);
   },
 
-  async setRegistryData(registryId: string, data: Omit<CachedRegistryData, "registryId" | "cachedAt">): Promise<void> {
-    await put(STORES.registryData, {
-      registryId,
-      ...data,
-      cachedAt: Date.now(),
-    } satisfies CachedRegistryData);
+  async setRegistryData(
+    registryId: string,
+    data: Omit<CachedRegistryData, "registryId" | "cachedAt">,
+  ): Promise<void> {
+    await put(
+      STORES.registryData,
+      {
+        registryId,
+        ...data,
+        cachedAt: Date.now(),
+      } satisfies CachedRegistryData,
+    );
   },
 
-  async getRegistrySnapshot(registryId: string): Promise<CachedRegistryData | undefined> {
+  getRegistrySnapshot(
+    registryId: string,
+  ): Promise<CachedRegistryData | undefined> {
     return get<CachedRegistryData>(STORES.registryData, registryId);
   },
 
-  async setRegistrySnapshot(snapshot: Omit<CachedRegistryData, "cachedAt">): Promise<void> {
-    await put(STORES.registryData, {
-      ...snapshot,
-      cachedAt: Date.now(),
-    } satisfies CachedRegistryData);
+  async setRegistrySnapshot(
+    snapshot: Omit<CachedRegistryData, "cachedAt">,
+  ): Promise<void> {
+    await put(
+      STORES.registryData,
+      {
+        ...snapshot,
+        cachedAt: Date.now(),
+      } satisfies CachedRegistryData,
+    );
   },
 
-  async getRegistries(userId: string): Promise<CachedRegistries | undefined> {
+  getRegistries(userId: string): Promise<CachedRegistries | undefined> {
     return get<CachedRegistries>(STORES.registries, userId);
   },
 
   async setRegistries(userId: string, registries: unknown[]): Promise<void> {
-    await put(STORES.registries, {
-      userId,
-      registries,
-      cachedAt: Date.now(),
-    } satisfies CachedRegistries);
+    await put(
+      STORES.registries,
+      {
+        userId,
+        registries,
+        cachedAt: Date.now(),
+      } satisfies CachedRegistries,
+    );
   },
 
-  async getExercises(registryId: string): Promise<{ exercises: unknown[]; cachedAt: number } | undefined> {
+  getExercises(
+    registryId: string,
+  ): Promise<{ exercises: unknown[]; cachedAt: number } | undefined> {
     return get(STORES.exercises, registryId);
   },
 
@@ -192,7 +230,11 @@ export const cache = {
   },
 
   async invalidateRegistry(registryId: string): Promise<void> {
-    const entries = await getAllByIndex(STORES.transactions, "registryId", registryId) as CachedTransactionEntry[];
+    const entries = await getAllByIndex(
+      STORES.transactions,
+      "registryId",
+      registryId,
+    ) as CachedTransactionEntry[];
     await Promise.all([
       deleteEntry(STORES.registryData, registryId),
       deleteEntry(STORES.balance, registryId),

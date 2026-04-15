@@ -8,16 +8,12 @@ export const handler = define.handlers({
     const refreshToken = body.refreshToken as string;
 
     if (!accessToken || !refreshToken) {
-      return new Response(JSON.stringify({ error: "Missing tokens" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return Response.json({ error: "Missing tokens" }, { status: 400 });
     }
 
     const headers = new Headers();
     setAuthCookies(headers, accessToken, refreshToken);
-    headers.set("Content-Type", "application/json");
 
-    return new Response(JSON.stringify({ ok: true }), { headers });
+    return Response.json({ ok: true }, { headers });
   },
 });

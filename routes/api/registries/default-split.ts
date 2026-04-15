@@ -10,43 +10,28 @@ export const handler = define.handlers({
     };
 
     if (!registryId || !splits || !Array.isArray(splits)) {
-      return new Response(JSON.stringify({ error: "Datos inválidos" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return Response.json({ error: "Datos inválidos" }, { status: 400 });
     }
 
     if (!ctx.state.isOwner) {
-      return new Response(
-        JSON.stringify({ error: "Solo el owner puede configurar esto" }),
-        {
-          status: 403,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
+      return Response.json({ error: "Solo el owner puede configurar esto" }, {
+        status: 403,
+      });
     }
 
     const total = splits.reduce((s, sp) => s + sp.percentage, 0);
     if (Math.abs(total - 100) >= 0.01) {
-      return new Response(
-        JSON.stringify({ error: "Los porcentajes deben sumar 100%" }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
+      return Response.json({ error: "Los porcentajes deben sumar 100%" }, {
+        status: 400,
+      });
     }
 
     const registryUserIds = ctx.state.participants.map((u) => u.id);
     const allValid = splits.every((s) => registryUserIds.includes(s.userId));
     if (!allValid) {
-      return new Response(
-        JSON.stringify({ error: "Usuario no encontrado en el registro" }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
+      return Response.json({ error: "Usuario no encontrado en el registro" }, {
+        status: 400,
+      });
     }
 
     if (splits.length === 0) {
@@ -55,9 +40,7 @@ export const handler = define.handlers({
       await setDefaultSplit(registryId, splits);
     }
 
-    return new Response(JSON.stringify({ ok: true }), {
-      headers: { "Content-Type": "application/json" },
-    });
+    return Response.json({ ok: true });
   },
 
   async DELETE(ctx) {
@@ -65,15 +48,10 @@ export const handler = define.handlers({
     const { registryId } = body as { registryId: string };
 
     if (!ctx.state.isOwner) {
-      return new Response(JSON.stringify({ error: "Solo el owner" }), {
-        status: 403,
-        headers: { "Content-Type": "application/json" },
-      });
+      return Response.json({ error: "Solo el owner" }, { status: 403 });
     }
 
     await clearDefaultSplit(registryId);
-    return new Response(JSON.stringify({ ok: true }), {
-      headers: { "Content-Type": "application/json" },
-    });
+    return Response.json({ ok: true });
   },
 });

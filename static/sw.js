@@ -1,6 +1,6 @@
 const CACHE_NAME = "alapar-v1";
 
-const PRECACHE_URLS = ["/", "/dashboard"];
+const _PRECACHE_URLS = ["/", "/dashboard"];
 
 const BUILD_CACHE = "alapar-build-v1";
 const API_CACHE = "alapar-api-v1";
@@ -15,9 +15,12 @@ self.addEventListener("activate", (event) => {
     caches.keys().then((names) =>
       Promise.all(
         names
-          .filter((n) => n !== CACHE_NAME && n !== BUILD_CACHE && n !== API_CACHE && n !== HTML_CACHE)
+          .filter((n) =>
+            n !== CACHE_NAME && n !== BUILD_CACHE && n !== API_CACHE &&
+            n !== HTML_CACHE
+          )
           .map((n) => caches.delete(n)),
-      ),
+      )
     ).then(() => self.clients.claim()),
   );
 });
@@ -109,15 +112,17 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const targetUrl = event.notification.data?.url ?? "/dashboard";
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
-      for (const client of clients) {
-        if (client.url.includes("/dashboard") && "focus" in client) {
-          client.postMessage({ type: "navigate", url: targetUrl });
-          return client.focus();
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(
+      (clients) => {
+        for (const client of clients) {
+          if (client.url.includes("/dashboard") && "focus" in client) {
+            client.postMessage({ type: "navigate", url: targetUrl });
+            return client.focus();
+          }
         }
-      }
-      return self.clients.openWindow(targetUrl);
-    }),
+        return self.clients.openWindow(targetUrl);
+      },
+    ),
   );
 });
 

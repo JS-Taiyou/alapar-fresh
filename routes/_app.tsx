@@ -5,9 +5,15 @@ export default define.page(function App({ Component }) {
     <html>
       <head>
         <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+        />
         <meta name="theme-color" content="#093eaa" />
-        <meta name="description" content="Comparte gastos con tu pareja, amigos o roomies de forma sencilla" />
+        <meta
+          name="description"
+          content="Comparte gastos con tu pareja, amigos o roomies de forma sencilla"
+        />
         <link rel="manifest" href="/manifest.json" />
         <link rel="icon" type="image/svg+xml" href="/logo.svg" />
         <link rel="apple-touch-icon" href="/logo.svg" />
@@ -21,7 +27,8 @@ export default define.page(function App({ Component }) {
           href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
           rel="stylesheet"
         />
-        <style>{`
+        <style>
+          {`
 html,body{background-color:#0a0a0c;color:#f8fafc;margin:0;touch-action:manipulation}
 .font-sans{font-family:"Inter",sans-serif}
 .bg-background{background-color:#0a0a0c}
@@ -32,28 +39,13 @@ html,body{background-color:#0a0a0c;color:#f8fafc;margin:0;touch-action:manipulat
 .custom-scrollbar::-webkit-scrollbar-track{background:transparent}
 .custom-scrollbar::-webkit-scrollbar-thumb{background:#333;border-radius:10px}
 .group:hover .sidebar-action-btns{opacity:1!important}
-`}</style>
+`}
+        </style>
         <title>A la par</title>
       </head>
       <body class="font-sans bg-background text-slate-100 min-h-screen">
         <Component />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-window.addEventListener('load',function(){
-  if(!('serviceWorker' in navigator))return;
-  navigator.serviceWorker.register('/sw.js').then(function(){
-    if(caches&&caches.keys){
-      caches.keys().then(function(names){
-        var kept=['alapar-v1','alapar-build-v1','alapar-api-v1','alapar-html-v1'];
-        names.forEach(function(n){if(kept.indexOf(n)===-1)caches.delete(n)});
-      });
-    }
-  });
-});
-`,
-          }}
-        />
+        <script src="/sw-register.js" />
       </body>
     </html>
   );

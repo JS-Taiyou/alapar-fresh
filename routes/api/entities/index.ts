@@ -8,21 +8,14 @@ export const handler = define.handlers({
     const registryId = url.searchParams.get("registryId") ||
       ctx.state.activeRegistry?.id;
     if (!registryId) {
-      return new Response(JSON.stringify([]), {
-        headers: { "Content-Type": "application/json" },
-      });
+      return Response.json([]);
     }
     const entities = await getEntities(registryId);
-    return new Response(
-      JSON.stringify(entities.map((e) => ({
-        id: e.id,
-        name: e.name,
-        color: e.color,
-      }))),
-      {
-        headers: { "Content-Type": "application/json" },
-      },
-    );
+    return Response.json(entities.map((e) => ({
+      id: e.id,
+      name: e.name,
+      color: e.color,
+    })));
   },
 
   async POST(ctx) {
@@ -30,44 +23,29 @@ export const handler = define.handlers({
     const { name, color, registryId } = body;
 
     if (!name || !name.trim()) {
-      return new Response(JSON.stringify({ error: "Nombre requerido" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return Response.json({ error: "Nombre requerido" }, { status: 400 });
     }
 
     const activeRegistryId = registryId || ctx.state.activeRegistry?.id;
     if (!activeRegistryId) {
-      return new Response(JSON.stringify({ error: "Sin registro activo" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return Response.json({ error: "Sin registro activo" }, { status: 400 });
     }
 
     const isMember = ctx.state.registries.some((r) =>
       r.id === activeRegistryId
     );
     if (!isMember) {
-      return new Response(JSON.stringify({ error: "No eres miembro" }), {
-        status: 403,
-        headers: { "Content-Type": "application/json" },
-      });
+      return Response.json({ error: "No eres miembro" }, { status: 403 });
     }
 
     const entity = await createEntity(activeRegistryId, name.trim(), color);
 
     invalidateRegistry(activeRegistryId);
 
-    return new Response(
-      JSON.stringify({
-        id: entity.id,
-        name: entity.name,
-        color: entity.color,
-      }),
-      {
-        status: 201,
-        headers: { "Content-Type": "application/json" },
-      },
-    );
+    return Response.json({
+      id: entity.id,
+      name: entity.name,
+      color: entity.color,
+    }, { status: 201 });
   },
 });

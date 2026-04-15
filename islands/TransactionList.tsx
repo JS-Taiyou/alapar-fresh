@@ -1,4 +1,9 @@
-import { type Signal, useComputed, useSignal, useSignalEffect } from "@preact/signals";
+import {
+  type Signal,
+  useComputed,
+  useSignal,
+  useSignalEffect,
+} from "@preact/signals";
 import type {
   BalanceBreakdownEntry,
   DefaultSplit,
@@ -12,9 +17,27 @@ import {
   calculatePairwiseBreakdown,
   computeDefaultPercentages,
 } from "../lib/calculations.ts";
-import { subscribeToRegistry, unsubscribeAll, resubscribe, setupRealtimeConfig } from "../lib/realtime.ts";
-import { requestNotificationPermission, subscribeToPush } from "../lib/notifications.ts";
+import {
+  resubscribe,
+  setupRealtimeConfig,
+  subscribeToRegistry,
+  unsubscribeAll,
+} from "../lib/realtime.ts";
+import {
+  requestNotificationPermission,
+  subscribeToPush,
+} from "../lib/notifications.ts";
 import { cache } from "../lib/cache.ts";
+import { sanitizeDecimal, sanitizeInteger } from "../lib/format.ts";
+
+interface SpawnCandidate {
+  id: string;
+  description: string;
+  type: "parcialidad" | "recurrente";
+  originalAmount: number;
+  installmentCurrent: number | null;
+  installmentTotal: number | null;
+}
 
 interface TransactionListProps {
   transactions: Signal<EnrichedTransaction[]>;
@@ -24,11 +47,12 @@ interface TransactionListProps {
   balance: Signal<number>;
   balanceEntries: Signal<BalanceBreakdownEntry[]>;
   defaultSplit: Signal<DefaultSplit | null>;
+  spawnCandidates: Signal<SpawnCandidate[]>;
+  lastModified: Signal<string | null>;
   entityIds: Set<string>;
   supabaseUrl?: string;
   supabaseAnonKey?: string;
   accessToken?: string;
-  lastModified?: string | null;
 }
 
 type SplitMode = "auto" | "percentage" | "fixed";
@@ -38,24 +62,6 @@ type TransactionType =
   | "recurrente"
   | "pago"
   | "ajuste";
-
-function sanitizeDecimal(raw: string): string {
-  let v = raw.replace(/[^0-9.]/g, "");
-  const dotIdx = v.indexOf(".");
-  if (dotIdx !== -1) {
-    v = v.slice(0, dotIdx + 1) + v.slice(dotIdx + 1).replace(/\./g, "");
-    const parts = v.split(".");
-    if (parts[1] && parts[1].length > 2) {
-      parts[1] = parts[1].slice(0, 2);
-      v = parts.join(".");
-    }
-  }
-  return v;
-}
-
-function sanitizeInteger(raw: string): string {
-  return raw.replace(/[^0-9]/g, "");
-}
 
 function TransactionCardClickable(props: {
   tx: EnrichedTransaction;
@@ -182,9 +188,24 @@ function TransactionCardClickable(props: {
             }}
             class="w-full text-left bg-slate-800/60 px-5 py-2.5 border-l-4 border-l-indigo-500/40 border border-t-0 border-white/5 flex items-center gap-3 hover:bg-slate-700/60 transition-colors rounded-b-custom"
           >
-            <svg class="w-3.5 h-3.5 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
-              <path d="M10.172 13.828a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.102 1.101" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
+            <svg
+              class="w-3.5 h-3.5 text-slate-500 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+              />
+              <path
+                d="M10.172 13.828a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.102 1.101"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+              />
             </svg>
             <div class="flex-1 min-w-0">
               <p class="text-xs font-medium text-slate-300 truncate">
@@ -198,8 +219,18 @@ function TransactionCardClickable(props: {
                 })}
               </p>
             </div>
-            <svg class="w-3 h-3 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
+            <svg
+              class="w-3 h-3 text-slate-500 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M19 9l-7 7-7-7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+              />
             </svg>
           </button>
         )}
@@ -247,7 +278,9 @@ function TransactionCardClickable(props: {
       class="w-full text-left bg-card p-5 rounded-custom border border-white/5 flex justify-between items-center transition-transform active:scale-[0.98] hover:bg-white/2"
     >
       <div class="flex flex-col min-w-0">
-        <span class="text-lg font-semibold text-white truncate">{tx.description}</span>
+        <span class="text-lg font-semibold text-white truncate">
+          {tx.description}
+        </span>
         <div class="text-sm text-gray-500">
           <span class="block sm:inline">
             {new Date(tx.createdAt).toLocaleDateString("es-MX", {
@@ -298,13 +331,18 @@ function TransactionCardClickable(props: {
       <div class="text-right flex flex-col items-end">
         <span
           class={`text-xl font-bold ${
-            isZero ? "text-green-500" : isPositive ? "text-green-500" : "text-red-500"
+            isZero
+              ? "text-green-500"
+              : isPositive
+              ? "text-green-500"
+              : "text-red-500"
           }`}
         >
-          {isZero ? "" : isPositive ? "+" : "-"}${Math.abs(remainingBalance).toLocaleString(
-            "en-US",
-            { minimumFractionDigits: 2, maximumFractionDigits: 2 },
-          )}
+          {isZero ? "" : isPositive ? "+" : "-"}${Math.abs(remainingBalance)
+            .toLocaleString(
+              "en-US",
+              { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+            )}
         </span>
         <span class="text-xs text-slate-500">
           de ${perInstallmentTotal.toLocaleString("en-US", {
@@ -364,7 +402,9 @@ export default function TransactionList(props: TransactionListProps) {
 
   useSignalEffect(() => {
     const rid = registryId.value;
-    if (!rid || !props.supabaseUrl || !props.supabaseAnonKey || !props.accessToken) return;
+    if (
+      !rid || !props.supabaseUrl || !props.supabaseAnonKey || !props.accessToken
+    ) return;
 
     setupRealtimeConfig(props.supabaseUrl, props.supabaseAnonKey);
 
@@ -380,14 +420,24 @@ export default function TransactionList(props: TransactionListProps) {
           id: row.id as string,
           registry_id: row.registry_id as string,
           description: row.description as string,
-          amount: typeof row.amount === "string" ? parseFloat(row.amount) : (row.amount as number),
-          originalAmount: typeof row.original_amount === "string" ? parseFloat(row.original_amount) : (row.original_amount as number),
-          type: row.type as "unico" | "parcialidad" | "recurrente" | "pago" | "ajuste",
+          amount: typeof row.amount === "string"
+            ? parseFloat(row.amount)
+            : (row.amount as number),
+          originalAmount: typeof row.original_amount === "string"
+            ? parseFloat(row.original_amount)
+            : (row.original_amount as number),
+          type: row.type as
+            | "unico"
+            | "parcialidad"
+            | "recurrente"
+            | "pago"
+            | "ajuste",
           exerciseId: row.exercise_id as string | null,
           installmentCurrent: row.installment_current as number | null,
           installmentTotal: row.installment_total as number | null,
           recurringDisabled: (row.recurring_disabled as boolean) ?? false,
-          recurringGroupId: (row.recurring_group_id as string) ?? row.id as string,
+          recurringGroupId: (row.recurring_group_id as string) ??
+            row.id as string,
           notes: row.notes as string,
           splitJson: typeof row.split_json === "string"
             ? JSON.parse(row.split_json)
@@ -400,25 +450,40 @@ export default function TransactionList(props: TransactionListProps) {
         });
 
         if (payload.eventType === "INSERT" && payload.new?.id) {
-          const existing = transactions.value.find((t) => t.id === payload.new.id);
+          const existing = transactions.value.find((t) =>
+            t.id === payload.new.id
+          );
           if (!existing) {
             transactions.value = [mapRow(payload.new), ...transactions.value];
             const creator = payload.new.creator_id as string;
             if (creator !== currentUserId.value) {
               const now = Date.now();
-              if (now - lastNotificationAt >= NOTIFICATION_COOLDOWN && Notification.permission === "granted") {
+              if (
+                now - lastNotificationAt >= NOTIFICATION_COOLDOWN &&
+                Notification.permission === "granted"
+              ) {
                 lastNotificationAt = now;
-                const desc = (payload.new.description as string) ?? "Nueva transacción";
-                const amt = typeof payload.new.amount === "number" ? payload.new.amount : 0;
+                const desc = (payload.new.description as string) ??
+                  "Nueva transacción";
+                const amt = typeof payload.new.amount === "number"
+                  ? payload.new.amount
+                  : 0;
                 new Notification("Nueva transacción", {
-                  body: `${desc} — $${amt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                  body: `${desc} — $${
+                    amt.toLocaleString("en-US", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })
+                  }`,
                   icon: "/logo.svg",
                 });
               }
             }
           }
         } else if (payload.eventType === "DELETE" && payload.old?.id) {
-          transactions.value = transactions.value.filter((t) => t.id !== payload.old.id);
+          transactions.value = transactions.value.filter((t) =>
+            t.id !== payload.old.id
+          );
         } else if (payload.eventType === "UPDATE" && payload.new?.id) {
           transactions.value = transactions.value.map((t) =>
             t.id === payload.new.id ? mapRow(payload.new) : t
@@ -451,19 +516,23 @@ export default function TransactionList(props: TransactionListProps) {
     const usrs = users.value;
     const uid = currentUserId.value;
     const ds = defaultSplit.value;
-    const lm = props.lastModified ?? null;
+    const sc = props.spawnCandidates.value;
+    const lm = props.lastModified.value;
     if (!rid || txs.length === 0 && lm === null) return;
     cache.setRegistrySnapshot({
       registryId: rid,
       transactions: txs.map((t) => ({
         ...t,
-        createdAt: t.createdAt.toISOString(),
+        createdAt: typeof t.createdAt === "string"
+          ? t.createdAt
+          : t.createdAt.toISOString(),
       })),
       balance: bal,
       balanceEntries: be,
       users: usrs,
       currentUserId: uid,
       defaultSplit: ds,
+      spawnCandidates: sc,
       lastModified: lm,
     });
   });
@@ -478,25 +547,38 @@ export default function TransactionList(props: TransactionListProps) {
         users?: Participant[];
         currentUserId?: string;
         defaultSplit?: DefaultSplit | null;
+        spawnCandidates?: SpawnCandidate[];
+        lastModified?: string | null;
       };
       if (!detail) return;
       registryId.value = detail.registryId;
       if (detail.transactions) {
         transactions.value = detail.transactions.map((t) => ({
           ...t,
-          createdAt: typeof (t as unknown as { createdAt: unknown }).createdAt === "string"
-            ? new Date((t as unknown as { createdAt: string }).createdAt)
-            : t.createdAt,
+          createdAt:
+            typeof (t as unknown as { createdAt: unknown }).createdAt ===
+                "string"
+              ? new Date((t as unknown as { createdAt: string }).createdAt)
+              : t.createdAt,
         })) as EnrichedTransaction[];
       }
       if (detail.balance !== undefined) balance.value = detail.balance;
       if (detail.balanceEntries) balanceEntries.value = detail.balanceEntries;
       if (detail.users) users.value = detail.users;
       if (detail.currentUserId) currentUserId.value = detail.currentUserId;
-      if (detail.defaultSplit !== undefined) defaultSplit.value = detail.defaultSplit;
+      if (detail.defaultSplit !== undefined) {
+        defaultSplit.value = detail.defaultSplit;
+      }
+      if (detail.spawnCandidates !== undefined) {
+        props.spawnCandidates.value = detail.spawnCandidates;
+      }
+      if (detail.lastModified !== undefined) {
+        props.lastModified.value = detail.lastModified;
+      }
     }
     globalThis.addEventListener("registry-switch", onRegistrySwitch);
-    return () => globalThis.removeEventListener("registry-switch", onRegistrySwitch);
+    return () =>
+      globalThis.removeEventListener("registry-switch", onRegistrySwitch);
   });
 
   useSignalEffect(() => {
@@ -518,7 +600,9 @@ export default function TransactionList(props: TransactionListProps) {
       try {
         const stampRes = await fetch(`/api/stamp/${rid}`);
         if (!stampRes.ok) return;
-        const { lastModified } = await stampRes.json() as { lastModified: string | null };
+        const { lastModified } = await stampRes.json() as {
+          lastModified: string | null;
+        };
         const cached = await cache.getRegistrySnapshot(rid);
         if (cached?.lastModified === lastModified) return;
 
@@ -529,17 +613,28 @@ export default function TransactionList(props: TransactionListProps) {
           balance: number;
           balanceEntries: BalanceBreakdownEntry[];
           defaultSplit: DefaultSplit | null;
+          spawnCandidates: SpawnCandidate[];
         };
 
-        transactions.value = (data.transactions as EnrichedTransaction[]).map((t) => ({
+        transactions.value = (data.transactions as EnrichedTransaction[]).map((
+          t,
+        ) => ({
           ...t,
-          createdAt: typeof (t as unknown as { createdAt: unknown }).createdAt === "string"
-            ? new Date((t as unknown as { createdAt: string }).createdAt)
-            : t.createdAt,
+          createdAt:
+            typeof (t as unknown as { createdAt: unknown }).createdAt ===
+                "string"
+              ? new Date((t as unknown as { createdAt: string }).createdAt)
+              : t.createdAt,
         }));
         balance.value = data.balance;
         balanceEntries.value = data.balanceEntries;
-        if (data.defaultSplit !== undefined) defaultSplit.value = data.defaultSplit;
+        if (data.defaultSplit !== undefined) {
+          defaultSplit.value = data.defaultSplit;
+        }
+        if (data.spawnCandidates) {
+          props.spawnCandidates.value = data.spawnCandidates;
+        }
+        props.lastModified.value = lastModified;
       } catch { /* wake-up refresh failure non-critical */ }
     }
 
@@ -571,7 +666,10 @@ export default function TransactionList(props: TransactionListProps) {
 
   const eligibleTransactions = useComputed(() => {
     const uid = userPaid.value;
-    const debtMap = new Map<string, { tx: EnrichedTransaction; debt: number }>();
+    const debtMap = new Map<
+      string,
+      { tx: EnrichedTransaction; debt: number }
+    >();
 
     for (const tx of transactions.value) {
       if (tx.type === "pago" || tx.type === "ajuste") continue;
@@ -614,7 +712,9 @@ export default function TransactionList(props: TransactionListProps) {
           originalDebt: (() => {
             const us = tx.splitJson.splits.find((s) => s.userId === uid);
             if (!us) return 0;
-            const d = tx.type === "parcialidad" && tx.installmentTotal ? tx.installmentTotal : 1;
+            const d = tx.type === "parcialidad" && tx.installmentTotal
+              ? tx.installmentTotal
+              : 1;
             return us.amount / d;
           })(),
           remainingDebt: Math.round(debt * 100) / 100,
@@ -782,8 +882,9 @@ export default function TransactionList(props: TransactionListProps) {
 
     const lastConfig = loadLastSplitConfig();
     if (lastConfig) {
-      if (lastConfig.splitMode) splitMode.value = lastConfig.splitMode as SplitMode;
-      else splitMode.value = "percentage";
+      if (lastConfig.splitMode) {
+        splitMode.value = lastConfig.splitMode as SplitMode;
+      } else splitMode.value = "percentage";
       percentages.value = lastConfig.percentages;
       userPaid.value = lastConfig.userPaid;
     } else {
@@ -1312,8 +1413,18 @@ export default function TransactionList(props: TransactionListProps) {
                 onClick={() => mobileAddExpanded.value = true}
                 class="w-full py-3 bg-yellow-500 hover:bg-yellow-600 text-white font-bold text-base rounded-custom active:scale-[0.98] transition-all flex items-center justify-center gap-2"
               >
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 4v16m8-8H4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
+                <svg
+                  class="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    d="M12 4v16m8-8H4"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                  />
                 </svg>
                 Agregar
               </button>
@@ -1322,21 +1433,47 @@ export default function TransactionList(props: TransactionListProps) {
               <div class="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => { mobileAddExpanded.value = false; openNewPago(); }}
+                  onClick={() => {
+                    mobileAddExpanded.value = false;
+                    openNewPago();
+                  }}
                   class="flex-1 py-3 bg-green-700 hover:bg-green-800 text-white font-bold text-base rounded-custom active:scale-[0.98] transition-all flex items-center justify-center gap-2"
                 >
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
+                  <svg
+                    class="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                    />
                   </svg>
                   Pago
                 </button>
                 <button
                   type="button"
-                  onClick={() => { mobileAddExpanded.value = false; openNew(); }}
+                  onClick={() => {
+                    mobileAddExpanded.value = false;
+                    openNew();
+                  }}
                   class="flex-1 py-3 bg-yellow-500 hover:bg-yellow-600 text-white font-bold text-base rounded-custom active:scale-[0.98] transition-all flex items-center justify-center gap-2"
                 >
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
+                  <svg
+                    class="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                    />
                   </svg>
                   Gasto
                 </button>
@@ -1394,7 +1531,8 @@ export default function TransactionList(props: TransactionListProps) {
                 tx={tx}
                 users={users.value}
                 currentUserId={currentUserId.value}
-                onClick={() => tx.type !== "ajuste" && openEdit(tx)}
+                onClick={() =>
+                  tx.type !== "ajuste" && openEdit(tx)}
                 allTxs={transactions.value}
               />
             </div>
@@ -1539,7 +1677,8 @@ export default function TransactionList(props: TransactionListProps) {
                       inputmode="decimal"
                       value={expenseType.value === "parcialidad" &&
                           installmentInputMode.value === "installment"
-                        ? installmentAmountDisplay.value || installmentAmount.value || ""
+                        ? installmentAmountDisplay.value ||
+                          installmentAmount.value || ""
                         : amountDisplay.value || amount.value || ""}
                       onInput={(e) => {
                         if (
@@ -1558,10 +1697,18 @@ export default function TransactionList(props: TransactionListProps) {
                         }
                       }}
                       onBlur={(e) => {
-                        const val = parseFloat((e.target as HTMLInputElement).value) || 0;
-                        (e.target as HTMLInputElement).value = val === 0 ? "" : val.toString();
-                        if (expenseType.value === "parcialidad" && installmentInputMode.value === "installment") {
-                          installmentAmountDisplay.value = val === 0 ? "" : val.toString();
+                        const val =
+                          parseFloat((e.target as HTMLInputElement).value) || 0;
+                        (e.target as HTMLInputElement).value = val === 0
+                          ? ""
+                          : val.toString();
+                        if (
+                          expenseType.value === "parcialidad" &&
+                          installmentInputMode.value === "installment"
+                        ) {
+                          installmentAmountDisplay.value = val === 0
+                            ? ""
+                            : val.toString();
                         } else {
                           amountDisplay.value = val === 0 ? "" : val.toString();
                         }
@@ -1686,16 +1833,22 @@ export default function TransactionList(props: TransactionListProps) {
                             if (newTotal > 0) {
                               installmentTotal.value = newTotal;
                             }
-                            if (installmentInputMode.value === "installment" && newTotal > 0) {
+                            if (
+                              installmentInputMode.value === "installment" &&
+                              newTotal > 0
+                            ) {
                               amount.value = Math.round(
                                 installmentAmount.value * newTotal * 100,
                               ) / 100;
                             }
                           }}
                           onBlur={(e) => {
-                            const val = parseInt((e.target as HTMLInputElement).value) || 0;
+                            const val =
+                              parseInt((e.target as HTMLInputElement).value) ||
+                              0;
                             const clamped = val < 1 ? 1 : val;
-                            (e.target as HTMLInputElement).value = clamped.toString();
+                            (e.target as HTMLInputElement).value = clamped
+                              .toString();
                             installmentTotalDisplay.value = clamped.toString();
                             installmentTotal.value = clamped;
                             if (installmentInputMode.value === "installment") {
@@ -1729,7 +1882,8 @@ export default function TransactionList(props: TransactionListProps) {
                   >
                     {users.value.map((user) => (
                       <option key={user.id} value={user.id}>
-                        {user.name}{user.id === currentUserId.value ? " (Tú)" : ""}
+                        {user.name}
+                        {user.id === currentUserId.value ? " (Tú)" : ""}
                       </option>
                     ))}
                   </select>
@@ -1757,64 +1911,169 @@ export default function TransactionList(props: TransactionListProps) {
               {isPago
                 ? (
                   <>
-                  <section class="space-y-3 sm:space-y-4">
-                    <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">
-                      Transferencia
-                    </h3>
-                    <div class="border border-border-custom rounded-custom overflow-hidden">
-                      <table class="hidden md:table w-full text-left border-collapse">
-                        <thead class="bg-slate-800/50">
-                          <tr>
-                            <th class="px-4 py-3 text-xs font-semibold text-slate-400">
-                              USUARIO
-                            </th>
-                            <th class="px-4 py-3 text-xs font-semibold text-slate-400 w-24 text-center">
-                              Pagó
-                            </th>
-                            <th class="px-4 py-3 text-xs font-semibold text-slate-400 w-24 text-center">
-                              Recibió
-                            </th>
-                            {users.value.length > 2 && (
-                              <th class="px-4 py-3 text-xs font-semibold text-slate-400 text-right">
-                                SALDO
+                    <section class="space-y-3 sm:space-y-4">
+                      <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">
+                        Transferencia
+                      </h3>
+                      <div class="border border-border-custom rounded-custom overflow-hidden">
+                        <table class="hidden md:table w-full text-left border-collapse">
+                          <thead class="bg-slate-800/50">
+                            <tr>
+                              <th class="px-4 py-3 text-xs font-semibold text-slate-400">
+                                USUARIO
                               </th>
-                            )}
-                          </tr>
-                        </thead>
-                        <tbody class="divide-y divide-border-custom">
+                              <th class="px-4 py-3 text-xs font-semibold text-slate-400 w-24 text-center">
+                                Pagó
+                              </th>
+                              <th class="px-4 py-3 text-xs font-semibold text-slate-400 w-24 text-center">
+                                Recibió
+                              </th>
+                              {users.value.length > 2 && (
+                                <th class="px-4 py-3 text-xs font-semibold text-slate-400 text-right">
+                                  SALDO
+                                </th>
+                              )}
+                            </tr>
+                          </thead>
+                          <tbody class="divide-y divide-border-custom">
+                            {users.value.map((user) => {
+                              const initials = user.name.split(" ").map((n) =>
+                                n[0]
+                              ).join("").substring(0, 2).toUpperCase();
+                              return (
+                                <tr key={user.id}>
+                                  <td class="px-4 py-3">
+                                    <div class="flex items-center gap-3">
+                                      <div
+                                        class="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                                        style={`background-color: ${user.color}30; color: ${user.color}`}
+                                      >
+                                        {initials}
+                                      </div>
+                                      <span class="text-sm font-medium text-white">
+                                        {user.name}
+                                        {user.id === currentUserId.value && (
+                                          <span class="text-slate-500 ml-1">
+                                            (Tú)
+                                          </span>
+                                        )}
+                                        {props.entityIds.has(user.id) && (
+                                          <span class="text-xs ml-1 px-1.5 py-0.5 rounded bg-slate-700 text-slate-400">
+                                            tercero
+                                          </span>
+                                        )}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td class="px-4 py-3 text-center">
+                                    <input
+                                      type="radio"
+                                      name="pagoPaid"
+                                      value={user.id}
+                                      checked={userPaid.value === user.id}
+                                      onChange={() => {
+                                        userPaid.value = user.id;
+                                        if (
+                                          paymentRecipient.value === user.id
+                                        ) {
+                                          paymentRecipient.value =
+                                            users.value.find((u) =>
+                                              u.id !== user.id
+                                            )?.id ?? "";
+                                        }
+                                      }}
+                                      class="accent-primary"
+                                    />
+                                  </td>
+                                  <td class="px-4 py-3 text-center">
+                                    <input
+                                      type="radio"
+                                      name="pagoRecipient"
+                                      value={user.id}
+                                      checked={paymentRecipient.value ===
+                                        user.id}
+                                      onChange={() => {
+                                        paymentRecipient.value = user.id;
+                                        if (userPaid.value === user.id) {
+                                          userPaid.value =
+                                            users.value.find((u) =>
+                                              u.id !== user.id
+                                            )?.id ?? currentUserId.value;
+                                        }
+                                      }}
+                                      class="accent-indigo-400"
+                                    />
+                                  </td>
+                                  {users.value.length > 2 && (
+                                    <td class="px-4 py-3 text-right">
+                                      {user.id !== currentUserId.value &&
+                                        (() => {
+                                          const bd = balanceEntries.value.find(
+                                            (b) => b.userId === user.id,
+                                          );
+                                          if (
+                                            !bd || Math.abs(bd.amount) < 0.01
+                                          ) {
+                                            return null;
+                                          }
+                                          return bd.amount > 0
+                                            ? (
+                                              <span class="text-xs font-semibold text-green-400">
+                                                Te debe ${bd.amount
+                                                  .toLocaleString(
+                                                    "en-US",
+                                                    {
+                                                      minimumFractionDigits: 2,
+                                                      maximumFractionDigits: 2,
+                                                    },
+                                                  )}
+                                              </span>
+                                            )
+                                            : (
+                                              <span class="text-xs font-semibold text-red-400">
+                                                Le debes ${Math.abs(bd.amount)
+                                                  .toLocaleString(
+                                                    "en-US",
+                                                    {
+                                                      minimumFractionDigits: 2,
+                                                      maximumFractionDigits: 2,
+                                                    },
+                                                  )}
+                                              </span>
+                                            );
+                                        })()}
+                                    </td>
+                                  )}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+
+                        <div class="md:hidden divide-y divide-border-custom">
                           {users.value.map((user) => {
                             const initials = user.name.split(" ").map((n) =>
                               n[0]
-                            ).join("").substring(0, 2).toUpperCase();
+                            )
+                              .join("").substring(0, 2).toUpperCase();
+                            const bd = users.value.length > 2 &&
+                                user.id !== currentUserId.value
+                              ? balanceEntries.value.find((b) =>
+                                b.userId === user.id
+                              )
+                              : null;
                             return (
-                              <tr key={user.id}>
-                                <td class="px-4 py-3">
-                                  <div class="flex items-center gap-3">
-                                    <div
-                                      class="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                                      style={`background-color: ${user.color}30; color: ${user.color}`}
-                                    >
-                                      {initials}
-                                    </div>
-                                    <span class="text-sm font-medium text-white">
-                                      {user.name}
-                                      {user.id === currentUserId.value && (
-                                        <span class="text-slate-500 ml-1">
-                                          (Tú)
-                                        </span>
-                                      )}
-                                      {props.entityIds.has(user.id) && (
-                                        <span class="text-xs ml-1 px-1.5 py-0.5 rounded bg-slate-700 text-slate-400">
-                                          tercero
-                                        </span>
-                                      )}
-                                    </span>
-                                  </div>
-                                </td>
-                                <td class="px-4 py-3 text-center">
+                              <div
+                                key={user.id}
+                                class="flex items-center gap-3 px-3 py-3"
+                              >
+                                <div class="flex flex-col items-center gap-1">
+                                  <span class="text-[9px] text-slate-500 uppercase">
+                                    Pagó
+                                  </span>
                                   <input
                                     type="radio"
-                                    name="pagoPaid"
+                                    name="pagoPaidMobile"
                                     value={user.id}
                                     checked={userPaid.value === user.id}
                                     onChange={() => {
@@ -1828,11 +2087,14 @@ export default function TransactionList(props: TransactionListProps) {
                                     }}
                                     class="accent-primary"
                                   />
-                                </td>
-                                <td class="px-4 py-3 text-center">
+                                </div>
+                                <div class="flex flex-col items-center gap-1">
+                                  <span class="text-[9px] text-slate-500 uppercase">
+                                    Recibió
+                                  </span>
                                   <input
                                     type="radio"
-                                    name="pagoRecipient"
+                                    name="pagoRecipientMobile"
                                     value={user.id}
                                     checked={paymentRecipient.value === user.id}
                                     onChange={() => {
@@ -1845,291 +2107,244 @@ export default function TransactionList(props: TransactionListProps) {
                                     }}
                                     class="accent-indigo-400"
                                   />
-                                </td>
-                                {users.value.length > 2 && (
-                                  <td class="px-4 py-3 text-right">
-                                    {user.id !== currentUserId.value &&
-                                      (() => {
-                                        const bd = balanceEntries.value.find(
-                                          (b) => b.userId === user.id,
-                                        );
-                                        if (!bd || Math.abs(bd.amount) < 0.01) {
-                                          return null;
-                                        }
-                                        return bd.amount > 0
-                                          ? (
-                                            <span class="text-xs font-semibold text-green-400">
-                                              Te debe ${bd.amount
-                                                .toLocaleString(
-                                                  "en-US",
-                                                  {
-                                                    minimumFractionDigits: 2,
-                                                    maximumFractionDigits: 2,
-                                                  },
-                                                )}
-                                            </span>
-                                          )
-                                          : (
-                                            <span class="text-xs font-semibold text-red-400">
-                                              Le debes ${Math.abs(bd.amount)
-                                                .toLocaleString(
-                                                  "en-US",
-                                                  {
-                                                    minimumFractionDigits: 2,
-                                                    maximumFractionDigits: 2,
-                                                  },
-                                                )}
-                                            </span>
-                                          );
-                                      })()}
-                                  </td>
-                                )}
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-
-                      <div class="md:hidden divide-y divide-border-custom">
-                        {users.value.map((user) => {
-                          const initials = user.name.split(" ").map((n) => n[0])
-                            .join("").substring(0, 2).toUpperCase();
-                          const bd = users.value.length > 2 &&
-                              user.id !== currentUserId.value
-                            ? balanceEntries.value.find((b) =>
-                              b.userId === user.id
-                            )
-                            : null;
-                          return (
-                            <div
-                              key={user.id}
-                              class="flex items-center gap-3 px-3 py-3"
-                            >
-                              <div class="flex flex-col items-center gap-1">
-                                <span class="text-[9px] text-slate-500 uppercase">
-                                  Pagó
-                                </span>
-                                <input
-                                  type="radio"
-                                  name="pagoPaidMobile"
-                                  value={user.id}
-                                  checked={userPaid.value === user.id}
-                                  onChange={() => {
-                                    userPaid.value = user.id;
-                                    if (paymentRecipient.value === user.id) {
-                                      paymentRecipient.value =
-                                        users.value.find((u) =>
-                                          u.id !== user.id
-                                        )?.id ?? "";
-                                    }
-                                  }}
-                                  class="accent-primary"
-                                />
-                              </div>
-                              <div class="flex flex-col items-center gap-1">
-                                <span class="text-[9px] text-slate-500 uppercase">
-                                  Recibió
-                                </span>
-                                <input
-                                  type="radio"
-                                  name="pagoRecipientMobile"
-                                  value={user.id}
-                                  checked={paymentRecipient.value === user.id}
-                                  onChange={() => {
-                                    paymentRecipient.value = user.id;
-                                    if (userPaid.value === user.id) {
-                                      userPaid.value = users.value.find((u) =>
-                                        u.id !== user.id
-                                      )?.id ?? currentUserId.value;
-                                    }
-                                  }}
-                                  class="accent-indigo-400"
-                                />
-                              </div>
-                              <div class="flex-1 min-w-0">
-                                <div class="flex items-center gap-2">
-                                  <div
-                                    class="h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
-                                    style={`background-color: ${user.color}30; color: ${user.color}`}
-                                  >
-                                    {initials}
-                                  </div>
-                                  <span class="text-sm font-medium text-white truncate">
-                                    {user.name}
-                                    {user.id === currentUserId.value && (
-                                      <span class="text-slate-500 ml-1">
-                                        (Tú)
-                                      </span>
-                                    )}
-                                    {props.entityIds.has(user.id) && (
-                                      <span class="text-xs ml-1 px-1 py-0.5 rounded bg-slate-700 text-slate-400">
-                                        tercero
-                                      </span>
-                                    )}
-                                  </span>
                                 </div>
-                                {bd && Math.abs(bd.amount) >= 0.01 && (
-                                  <span
-                                    class={`text-xs font-semibold ${
-                                      bd.amount > 0
-                                        ? "text-green-400"
-                                        : "text-red-400"
-                                    } ml-8`}
-                                  >
-                                    {bd.amount > 0
-                                      ? `Te debe $${
-                                        bd.amount.toLocaleString("en-US", {
-                                          minimumFractionDigits: 2,
-                                          maximumFractionDigits: 2,
-                                        })
-                                      }`
-                                      : `Le debes $${
-                                        Math.abs(bd.amount).toLocaleString(
-                                          "en-US",
-                                          {
+                                <div class="flex-1 min-w-0">
+                                  <div class="flex items-center gap-2">
+                                    <div
+                                      class="h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                                      style={`background-color: ${user.color}30; color: ${user.color}`}
+                                    >
+                                      {initials}
+                                    </div>
+                                    <span class="text-sm font-medium text-white truncate">
+                                      {user.name}
+                                      {user.id === currentUserId.value && (
+                                        <span class="text-slate-500 ml-1">
+                                          (Tú)
+                                        </span>
+                                      )}
+                                      {props.entityIds.has(user.id) && (
+                                        <span class="text-xs ml-1 px-1 py-0.5 rounded bg-slate-700 text-slate-400">
+                                          tercero
+                                        </span>
+                                      )}
+                                    </span>
+                                  </div>
+                                  {bd && Math.abs(bd.amount) >= 0.01 && (
+                                    <span
+                                      class={`text-xs font-semibold ${
+                                        bd.amount > 0
+                                          ? "text-green-400"
+                                          : "text-red-400"
+                                      } ml-8`}
+                                    >
+                                      {bd.amount > 0
+                                        ? `Te debe $${
+                                          bd.amount.toLocaleString("en-US", {
                                             minimumFractionDigits: 2,
                                             maximumFractionDigits: 2,
-                                          },
-                                        )
-                                      }`}
-                                  </span>
-                                )}
+                                          })
+                                        }`
+                                        : `Le debes $${
+                                          Math.abs(bd.amount).toLocaleString(
+                                            "en-US",
+                                            {
+                                              minimumFractionDigits: 2,
+                                              maximumFractionDigits: 2,
+                                            },
+                                          )
+                                        }`}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  </section>
+                    </section>
 
-                  <section class="space-y-3">
-                    <label class="flex items-center gap-3 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={linkToTransaction.value}
-                        disabled={!hasEligibleTransactions.value}
-                        onChange={() => {
-                          linkToTransaction.value = !linkToTransaction.value;
-                          if (!linkToTransaction.value) {
-                            selectedRelatedTxId.value = null;
-                          } else {
-                            clampAmountToLinkedDebt();
-                          }
-                        }}
-                        class="accent-primary w-4 h-4"
-                      />
-                      <span class="text-sm font-medium text-slate-300">
-                        Relacionar este pago a una transacción existente
-                      </span>
-                      {!hasEligibleTransactions.value && (
-                        <span class="relative group">
-                          <span class="inline-flex items-center justify-center w-4 h-4 text-xs font-bold rounded-full bg-slate-700 text-slate-400 cursor-help">
-                            ?
-                          </span>
-                          <span class="absolute left-5 top-1/2 -translate-y-1/2 w-64 bg-slate-800 border border-white/10 text-white text-xs font-normal no-underline rounded-custom px-3 py-2 shadow-xl z-50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                            Sólo puedes relacionar pagos cuando tienes saldo por pagar!
-                          </span>
+                    <section class="space-y-3">
+                      <label class="flex items-center gap-3 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={linkToTransaction.value}
+                          disabled={!hasEligibleTransactions.value}
+                          onChange={() => {
+                            linkToTransaction.value = !linkToTransaction.value;
+                            if (!linkToTransaction.value) {
+                              selectedRelatedTxId.value = null;
+                            } else {
+                              clampAmountToLinkedDebt();
+                            }
+                          }}
+                          class="accent-primary w-4 h-4"
+                        />
+                        <span class="text-sm font-medium text-slate-300">
+                          Relacionar este pago a una transacción existente
                         </span>
-                      )}
-                    </label>
-
-                    {linkToTransaction.value && hasEligibleTransactions.value && (
-                      <div class="space-y-2">
-                        <div class="relative">
-                          <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
-                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
-                            </svg>
+                        {!hasEligibleTransactions.value && (
+                          <span class="relative group">
+                            <span class="inline-flex items-center justify-center w-4 h-4 text-xs font-bold rounded-full bg-slate-700 text-slate-400 cursor-help">
+                              ?
+                            </span>
+                            <span class="absolute left-5 top-1/2 -translate-y-1/2 w-64 bg-slate-800 border border-white/10 text-white text-xs font-normal no-underline rounded-custom px-3 py-2 shadow-xl z-50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                              Sólo puedes relacionar pagos cuando tienes saldo
+                              por pagar!
+                            </span>
                           </span>
-                          <input
-                            type="text"
-                            placeholder="Buscar gasto..."
-                            value={relatedTxSearch.value}
-                            onInput={(e) =>
-                              relatedTxSearch.value = (e.target as HTMLInputElement).value}
-                            class="w-full bg-slate-800 border-slate-700 rounded-custom pl-9 pr-8 text-white text-sm placeholder-slate-500 focus:ring-primary focus:border-primary py-2"
-                          />
-                          {relatedTxSearch.value && (
-                            <button
-                              type="button"
-                              onClick={() => relatedTxSearch.value = ""}
-                              class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-white"
-                            >
-                              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
+                        )}
+                      </label>
+
+                      {linkToTransaction.value &&
+                        hasEligibleTransactions.value && (
+                        <div class="space-y-2">
+                          <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
+                              <svg
+                                class="h-4 w-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                                  stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                  stroke-width="2"
+                                />
                               </svg>
-                            </button>
+                            </span>
+                            <input
+                              type="text"
+                              placeholder="Buscar gasto..."
+                              value={relatedTxSearch.value}
+                              onInput={(e) =>
+                                relatedTxSearch.value =
+                                  (e.target as HTMLInputElement).value}
+                              class="w-full bg-slate-800 border-slate-700 rounded-custom pl-9 pr-8 text-white text-sm placeholder-slate-500 focus:ring-primary focus:border-primary py-2"
+                            />
+                            {relatedTxSearch.value && (
+                              <button
+                                type="button"
+                                onClick={() => relatedTxSearch.value = ""}
+                                class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-white"
+                              >
+                                <svg
+                                  class="w-3.5 h-3.5"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    d="M6 18L18 6M6 6l12 12"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                  />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+
+                          <div class="max-h-60 overflow-y-auto custom-scrollbar space-y-1.5 border border-white/5 rounded-custom p-2 bg-slate-900/50">
+                            {filteredEligible.value.length === 0
+                              ? (
+                                <p class="text-xs text-slate-500 text-center py-4">
+                                  No se encontraron gastos.
+                                </p>
+                              )
+                              : filteredEligible.value.map((etx) => {
+                                const isSelected =
+                                  selectedRelatedTxId.value === etx.id;
+                                const paidByName = etx.paidByUser;
+                                const maxAmount = etx.remainingDebt;
+                                return (
+                                  <button
+                                    key={etx.id}
+                                    type="button"
+                                    onClick={() => {
+                                      if (isSelected) {
+                                        selectedRelatedTxId.value = null;
+                                      } else {
+                                        selectedRelatedTxId.value = etx.id;
+                                        paymentRecipient.value = etx.userPaid;
+                                        clampAmountToLinkedDebt();
+                                      }
+                                    }}
+                                    class={`w-full text-left p-3 rounded-custom transition-all ${
+                                      isSelected
+                                        ? "bg-emerald-900/30 border border-emerald-700/40"
+                                        : "bg-slate-800/50 border border-white/5 hover:bg-white/5"
+                                    }`}
+                                  >
+                                    <div class="flex justify-between items-start gap-2">
+                                      <div class="min-w-0 flex-1">
+                                        <p
+                                          class={`text-sm font-medium truncate ${
+                                            isSelected
+                                              ? "text-emerald-300"
+                                              : "text-white"
+                                          }`}
+                                        >
+                                          {etx.description}
+                                        </p>
+                                        <p class="text-xs text-slate-500 mt-0.5">
+                                          Pagó {paidByName} &bull;{" "}
+                                          {new Date(etx.createdAt)
+                                            .toLocaleDateString("es-MX", {
+                                              month: "short",
+                                              day: "numeric",
+                                            })}
+                                        </p>
+                                      </div>
+                                      <div class="text-right shrink-0">
+                                        <p class="text-sm font-bold text-red-400">
+                                          -${maxAmount.toLocaleString("en-US", {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                          })}
+                                        </p>
+                                        {Math.abs(
+                                              etx.remainingDebt -
+                                                etx.originalDebt,
+                                            ) > 0.01 && (
+                                          <p class="text-[10px] text-slate-500">
+                                            de ${etx.originalDebt
+                                              .toLocaleString("en-US", {
+                                                minimumFractionDigits: 2,
+                                                maximumFractionDigits: 2,
+                                              })}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                          </div>
+
+                          {selectedRelatedTx.value && (
+                            <p class="text-xs text-slate-400">
+                              Pago máximo:{" "}
+                              <span class="text-white font-semibold">
+                                ${selectedRelatedTx.value.remainingDebt
+                                  .toLocaleString("en-US", {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}
+                              </span>
+                              {amount.value >
+                                  selectedRelatedTx.value.remainingDebt && (
+                                <span class="text-red-400 ml-2">
+                                  El monto excede la deuda pendiente
+                                </span>
+                              )}
+                            </p>
                           )}
                         </div>
-
-                        <div class="max-h-60 overflow-y-auto custom-scrollbar space-y-1.5 border border-white/5 rounded-custom p-2 bg-slate-900/50">
-                          {filteredEligible.value.length === 0
-                            ? (
-                              <p class="text-xs text-slate-500 text-center py-4">
-                                No se encontraron gastos.
-                              </p>
-                            )
-                            : filteredEligible.value.map((etx) => {
-                              const isSelected = selectedRelatedTxId.value === etx.id;
-                              const paidByName = etx.paidByUser;
-                              const maxAmount = etx.remainingDebt;
-                              return (
-                                <button
-                                  key={etx.id}
-                                  type="button"
-                                  onClick={() => {
-                                    if (isSelected) {
-                                      selectedRelatedTxId.value = null;
-                                    } else {
-                                      selectedRelatedTxId.value = etx.id;
-                                      paymentRecipient.value = etx.userPaid;
-                                      clampAmountToLinkedDebt();
-                                    }
-                                  }}
-                                  class={`w-full text-left p-3 rounded-custom transition-all ${
-                                    isSelected
-                                      ? "bg-emerald-900/30 border border-emerald-700/40"
-                                      : "bg-slate-800/50 border border-white/5 hover:bg-white/5"
-                                  }`}
-                                >
-                                  <div class="flex justify-between items-start gap-2">
-                                    <div class="min-w-0 flex-1">
-                                      <p class={`text-sm font-medium truncate ${isSelected ? "text-emerald-300" : "text-white"}`}>
-                                        {etx.description}
-                                      </p>
-                                      <p class="text-xs text-slate-500 mt-0.5">
-                                        Pagó {paidByName} &bull; {new Date(etx.createdAt).toLocaleDateString("es-MX", { month: "short", day: "numeric" })}
-                                      </p>
-                                    </div>
-                                    <div class="text-right shrink-0">
-                                      <p class="text-sm font-bold text-red-400">
-                                        -${maxAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                      </p>
-                                      {Math.abs(etx.remainingDebt - etx.originalDebt) > 0.01 && (
-                                        <p class="text-[10px] text-slate-500">
-                                          de ${etx.originalDebt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                        </p>
-                                      )}
-                                    </div>
-                                  </div>
-                                </button>
-                              );
-                            })}
-                        </div>
-
-                        {selectedRelatedTx.value && (
-                          <p class="text-xs text-slate-400">
-                            Pago máximo: <span class="text-white font-semibold">${selectedRelatedTx.value.remainingDebt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                            {amount.value > selectedRelatedTx.value.remainingDebt && (
-                              <span class="text-red-400 ml-2">
-                                El monto excede la deuda pendiente
-                              </span>
-                            )}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </section>
+                      )}
+                    </section>
                   </>
                 )
                 : (
@@ -2193,7 +2408,7 @@ export default function TransactionList(props: TransactionListProps) {
                               %
                             </th>
                             <th class="px-4 py-3 text-xs font-semibold text-slate-400 w-40 text-right">
-                               MONTO
+                              MONTO
                             </th>
                           </tr>
                         </thead>
@@ -2495,10 +2710,12 @@ export default function TransactionList(props: TransactionListProps) {
                 <button
                   type="button"
                   disabled={submitting.value ||
-                    (linkToTransaction.value && selectedRelatedTxId.value !== null &&
+                    (linkToTransaction.value &&
+                      selectedRelatedTxId.value !== null &&
                       (() => {
                         const stx = selectedRelatedTx.value;
-                        return stx !== null && Math.abs(amount.value) > stx.remainingDebt + 0.005;
+                        return stx !== null &&
+                          Math.abs(amount.value) > stx.remainingDebt + 0.005;
                       })())}
                   onClick={(e) => handleSubmit(e)}
                   class={`px-8 py-2 text-sm font-semibold rounded-custom transition-all shadow-lg active:scale-95 disabled:opacity-50 ${

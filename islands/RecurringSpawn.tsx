@@ -1,4 +1,4 @@
-import { useSignal } from "@preact/signals";
+import { type Signal, useSignal } from "@preact/signals";
 
 interface SpawnCandidate {
   id: string;
@@ -10,25 +10,25 @@ interface SpawnCandidate {
 }
 
 interface RecurringSpawnProps {
-  candidates: SpawnCandidate[];
+  candidates: Signal<SpawnCandidate[]>;
 }
 
 export default function RecurringSpawn(props: RecurringSpawnProps) {
   const showModal = useSignal(false);
   const loading = useSignal(false);
   const checkedIds = useSignal<Set<string>>(
-    new Set(props.candidates.map((c) => c.id)),
+    new Set(props.candidates.value.map((c) => c.id)),
   );
   const quantities = useSignal<Record<string, number>>(
     Object.fromEntries(
-      props.candidates.filter((c) => c.type === "parcialidad").map((
+      props.candidates.value.filter((c) => c.type === "parcialidad").map((
         c,
       ) => [c.id, 1]),
     ),
   );
   const disabledIds = useSignal<Set<string>>(new Set());
 
-  if (props.candidates.length === 0) return null;
+  if (props.candidates.value.length === 0) return null;
 
   function toggleItem(id: string) {
     const next = new Set(checkedIds.value);
@@ -49,7 +49,7 @@ export default function RecurringSpawn(props: RecurringSpawnProps) {
   }
 
   function adjustQuantity(id: string, delta: number) {
-    const c = props.candidates.find((x) => x.id === id);
+    const c = props.candidates.value.find((x) => x.id === id);
     if (!c || c.type !== "parcialidad") return;
     const cur = quantities.value[id] ?? 1;
     const max = c.installmentTotal !== null && c.installmentCurrent !== null
@@ -82,7 +82,7 @@ export default function RecurringSpawn(props: RecurringSpawnProps) {
       <button
         type="button"
         onClick={() => {
-          checkedIds.value = new Set(props.candidates.map((c) => c.id));
+          checkedIds.value = new Set(props.candidates.value.map((c) => c.id));
           showModal.value = true;
         }}
         class="p-3 bg-card hover:bg-white/5 transition-colors rounded-custom text-gray-300 relative"
@@ -101,9 +101,9 @@ export default function RecurringSpawn(props: RecurringSpawnProps) {
             stroke-width="2"
           />
         </svg>
-        {props.candidates.length > 0 && (
+        {props.candidates.value.length > 0 && (
           <span class="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full text-[10px] font-bold text-white flex items-center justify-center">
-            {props.candidates.length}
+            {props.candidates.value.length}
           </span>
         )}
       </button>
@@ -124,7 +124,7 @@ export default function RecurringSpawn(props: RecurringSpawnProps) {
             </header>
 
             <div class="p-6 space-y-3 overflow-y-auto max-h-[60vh]">
-              {props.candidates.map((item) => {
+              {props.candidates.value.map((item) => {
                 const isDisabled = disabledIds.value.has(item.id);
                 if (isDisabled) {
                   return (

@@ -16,7 +16,9 @@ export const handler = define.handlers({
     };
 
     if (!endpoint || !keys?.p256dh || !keys?.auth) {
-      return Response.json({ error: "Missing subscription data" }, { status: 400 });
+      return Response.json({ error: "Missing subscription data" }, {
+        status: 400,
+      });
     }
 
     await query(

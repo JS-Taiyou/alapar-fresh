@@ -1,8 +1,5 @@
 import { define } from "../../../utils.ts";
-import {
-  createRegistry,
-  getRegistriesForUser,
-} from "../../../lib/store.ts";
+import { createRegistry, getRegistriesForUser } from "../../../lib/store.ts";
 
 export const handler = define.handlers({
   async GET(ctx) {

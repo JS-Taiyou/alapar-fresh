@@ -1,8 +1,15 @@
 import { define } from "../../../utils.ts";
-import { createTransaction, getActiveTransactions } from "../../../lib/store.ts";
-import { getCachedTransactions, invalidateRegistry } from "../../../lib/server-cache.ts";
+import {
+  createTransaction,
+  getActiveTransactions,
+} from "../../../lib/store.ts";
+import {
+  getCachedTransactions,
+  invalidateRegistry,
+} from "../../../lib/server-cache.ts";
 import { sendPushToRegistry } from "../../../lib/push.ts";
 import type { TransactionSplit } from "../../../lib/types.ts";
+import { generateETag } from "../../../lib/etag.ts";
 
 export const handler = define.handlers({
   async GET(ctx) {
@@ -41,8 +48,8 @@ export const handler = define.handlers({
 
     const form = await ctx.req.formData();
     const description = form.get("description") as string;
-    const amount = parseFloat(form.get("amount") as string);
-    const originalAmount = parseFloat(form.get("originalAmount") as string);
+    const amountRaw = form.get("amount") as string;
+    const originalAmountRaw = form.get("originalAmount") as string;
     const type = (form.get("type") as string) || "unico";
     const splitJsonStr = form.get("splitJson") as string;
     const userPaid = form.get("userPaid") as string;
@@ -57,7 +64,39 @@ export const handler = define.handlers({
     const relatedTransactionId = (form.get("relatedTransactionId") as string) ||
       null;
 
-    const splitJson: TransactionSplit = JSON.parse(splitJsonStr);
+    if (!description || !description.trim()) {
+      return Response.json({ error: "Descripción requerida" }, { status: 400 });
+    }
+    if (!amountRaw || isNaN(parseFloat(amountRaw))) {
+      return Response.json({ error: "Monto inválido" }, { status: 400 });
+    }
+    const amount = parseFloat(amountRaw);
+    if (!isFinite(amount)) {
+      return Response.json({ error: "Monto inválido" }, { status: 400 });
+    }
+    const originalAmount = originalAmountRaw
+      ? parseFloat(originalAmountRaw)
+      : amount;
+    if (!isFinite(originalAmount)) {
+      return Response.json({ error: "Monto original inválido" }, {
+        status: 400,
+      });
+    }
+    if (!userPaid) {
+      return Response.json({ error: "Usuario pagador requerido" }, {
+        status: 400,
+      });
+    }
+    if (!registryId) {
+      return Response.json({ error: "Registro requerido" }, { status: 400 });
+    }
+
+    let splitJson: TransactionSplit;
+    try {
+      splitJson = JSON.parse(splitJsonStr ?? "{}");
+    } catch {
+      return Response.json({ error: "Split JSON inválido" }, { status: 400 });
+    }
 
     const tx = await createTransaction({
       registry_id: registryId,
@@ -85,22 +124,18 @@ export const handler = define.handlers({
 
     sendPushToRegistry(registryId, {
       title: "Nueva transacción",
-      body: `${description} — $${originalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      body: `${description} — $${
+        originalAmount.toLocaleString("en-US", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })
+      }`,
       registryId,
       url: "/dashboard",
-    }, userId).catch((err) => console.error("[push] sendPushToRegistry failed:", err));
+    }, userId).catch((err) =>
+      console.error("[push] sendPushToRegistry failed:", err)
+    );
 
     return Response.json(tx);
   },
 });
-
-function generateETag(data: unknown): string {
-  const str = JSON.stringify(data);
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash |= 0;
-  }
-  return `"${Math.abs(hash).toString(36)}"`;
-}

@@ -6,9 +6,10 @@ import {
   getSpawnCandidates,
 } from "../../lib/store.ts";
 import {
-  getCachedTransactions,
   getCachedSpawnCandidates,
+  getCachedTransactions,
 } from "../../lib/server-cache.ts";
+import { generateETag } from "../../lib/etag.ts";
 
 export const handler = define.handlers({
   async GET(ctx) {
@@ -86,14 +87,3 @@ export const handler = define.handlers({
     });
   },
 });
-
-function generateETag(data: unknown): string {
-  const str = JSON.stringify(data);
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash |= 0;
-  }
-  return `"${Math.abs(hash).toString(36)}"`;
-}

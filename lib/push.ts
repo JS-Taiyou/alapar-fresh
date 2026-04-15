@@ -24,13 +24,21 @@ export async function sendPushToRegistry(
   payload: PushPayload,
   excludeUserId?: string,
 ): Promise<void> {
-  console.log("[push] sendPushToRegistry called:", { registryId, excludeUserId, payload: { title: payload.title, body: payload.body } });
+  console.log("[push] sendPushToRegistry called:", {
+    registryId,
+    excludeUserId,
+    payload: { title: payload.title, body: payload.body },
+  });
 
   const key = `${registryId}:${excludeUserId ?? ""}`;
   const now = Date.now();
   const last = lastPushAt.get(key) ?? 0;
   if (now - last < PUSH_COOLDOWN) {
-    console.log("[push] Cooldown active, skipping. Last push was", now - last, "ms ago");
+    console.log(
+      "[push] Cooldown active, skipping. Last push was",
+      now - last,
+      "ms ago",
+    );
     return;
   }
   lastPushAt.set(key, now);
@@ -59,14 +67,20 @@ export async function sendPushToRegistry(
   console.log("[push] Found", subscriptions.length, "subscriptions to notify");
 
   for (const sub of subscriptions) {
-    console.log("[push] Sending to:", { userId: sub.user_id, endpoint: sub.endpoint.substring(0, 50) + "..." });
+    console.log("[push] Sending to:", {
+      userId: sub.user_id,
+      endpoint: sub.endpoint.substring(0, 50) + "...",
+    });
     try {
       const resp = await sendPushNotification(sub, payload, {
         publicKey: vapidPublicKey,
         privateKey: vapidPrivateKey,
         subject: vapidSubject,
       });
-      console.log("[push] Response:", { status: resp.status, statusText: resp.statusText });
+      console.log("[push] Response:", {
+        status: resp.status,
+        statusText: resp.statusText,
+      });
     } catch (err) {
       console.error("[push] Failed to send, removing subscription:", err);
       await query("DELETE FROM push_subscriptions WHERE id = $1", [sub.id]);
@@ -81,7 +95,11 @@ async function sendPushNotification(
 ): Promise<Response> {
   const body = JSON.stringify(payload);
   const jwt = await createVapidJWT(vapidKeys);
-  const encrypted = await encryptPayload(body, subscription.p256dh, subscription.auth);
+  const encrypted = await encryptPayload(
+    body,
+    subscription.p256dh,
+    subscription.auth,
+  );
   const encryptedBytes = new Uint8Array(encrypted);
 
   const headers: Record<string, string> = {
@@ -99,7 +117,9 @@ async function sendPushNotification(
   });
 }
 
-async function createVapidJWT(keys: { publicKey: string; privateKey: string; subject: string }): Promise<string> {
+async function createVapidJWT(
+  keys: { publicKey: string; privateKey: string; subject: string },
+): Promise<string> {
   const header = { typ: "JWT", alg: "ES256" };
   const now = Math.floor(Date.now() / 1000);
   const payload = {
@@ -131,7 +151,11 @@ async function createVapidJWT(keys: { publicKey: string; privateKey: string; sub
   return `${data}.${sigB64}`;
 }
 
-async function encryptPayload(payload: string, p256dh: string, auth: string): Promise<ArrayBuffer> {
+async function encryptPayload(
+  payload: string,
+  p256dh: string,
+  auth: string,
+): Promise<ArrayBuffer> {
   const encoder = new TextEncoder();
   const payloadBytes = encoder.encode(payload);
 
@@ -164,7 +188,10 @@ async function encryptPayload(payload: string, p256dh: string, auth: string): Pr
 
   const ikm = new Uint8Array(sharedBits);
   const salt = crypto.getRandomValues(new Uint8Array(16));
-  const publicKeyRaw = await crypto.subtle.exportKey("raw", ecdhKeyPair.publicKey);
+  const publicKeyRaw = await crypto.subtle.exportKey(
+    "raw",
+    ecdhKeyPair.publicKey,
+  );
 
   const prk = await hkdf(ikm, authBytes, "Content-Encoding: auth\0", 32);
   const context = concatUint8Arrays(
@@ -200,22 +227,34 @@ async function encryptPayload(payload: string, p256dh: string, auth: string): Pr
 
   const pubKeyBytes = new Uint8Array(publicKeyRaw);
   const encBytes = new Uint8Array(encrypted);
-  const result = new Uint8Array(salt.length + 4 + 1 + 1 + pubKeyBytes.length + encBytes.length);
+  const result = new Uint8Array(
+    salt.length + 4 + 1 + 1 + pubKeyBytes.length + encBytes.length,
+  );
   let offset = 0;
-  result.set(salt, offset); offset += salt.length;
+  result.set(salt, offset);
+  offset += salt.length;
   const rs = new Uint8Array(4);
   new DataView(rs.buffer).setUint32(0, 4096);
-  result.set(rs, offset); offset += 4;
+  result.set(rs, offset);
+  offset += 4;
   result[offset++] = 0;
   result[offset++] = pubKeyBytes.length;
-  result.set(pubKeyBytes, offset); offset += pubKeyBytes.length;
+  result.set(pubKeyBytes, offset);
+  offset += pubKeyBytes.length;
   result.set(encBytes, offset);
 
   return result.buffer;
 }
 
-async function hkdf(ikm: Uint8Array, salt: Uint8Array, info: Uint8Array | string, length: number): Promise<Uint8Array> {
-  const infoBytes = typeof info === "string" ? new TextEncoder().encode(info) : info;
+async function hkdf(
+  ikm: Uint8Array,
+  salt: Uint8Array,
+  info: Uint8Array | string,
+  length: number,
+): Promise<Uint8Array> {
+  const infoBytes = typeof info === "string"
+    ? new TextEncoder().encode(info)
+    : info;
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
     ikm.buffer as ArrayBuffer,
@@ -224,7 +263,12 @@ async function hkdf(ikm: Uint8Array, salt: Uint8Array, info: Uint8Array | string
     ["deriveBits"],
   );
   const bits = await crypto.subtle.deriveBits(
-    { name: "HKDF", hash: "SHA-256", salt: salt.buffer as ArrayBuffer, info: infoBytes.buffer as ArrayBuffer },
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: salt.buffer as ArrayBuffer,
+      info: infoBytes.buffer as ArrayBuffer,
+    },
     keyMaterial,
     length * 8,
   );

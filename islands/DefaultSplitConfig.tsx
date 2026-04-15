@@ -1,5 +1,6 @@
 import { useSignal } from "@preact/signals";
 import type { DefaultSplit, User } from "../lib/types.ts";
+import { sanitizeDecimal } from "../lib/format.ts";
 
 interface DefaultSplitConfigProps {
   registryId: string;
@@ -8,15 +9,6 @@ interface DefaultSplitConfigProps {
   isOwner: boolean;
   autoOpen?: boolean;
   onClose?: () => void;
-}
-
-function sanitizeDecimal(raw: string): string {
-  let v = raw.replace(/[^0-9.]/g, "");
-  const dotIdx = v.indexOf(".");
-  if (dotIdx !== -1) {
-    v = v.slice(0, dotIdx + 1) + v.slice(dotIdx + 1).replace(/\./g, "");
-  }
-  return v;
 }
 
 export default function DefaultSplitConfig(props: DefaultSplitConfigProps) {

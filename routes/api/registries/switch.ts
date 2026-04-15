@@ -8,24 +8,16 @@ export const handler = define.handlers({
     const userId = ctx.state.user?.id;
 
     if (!registryId || !userId) {
-      return new Response(JSON.stringify({ error: "Missing data" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return Response.json({ error: "Missing data" }, { status: 400 });
     }
 
     const isMember = ctx.state.registries.some((r) => r.id === registryId);
     if (!isMember) {
-      return new Response(JSON.stringify({ error: "Not a member" }), {
-        status: 403,
-        headers: { "Content-Type": "application/json" },
-      });
+      return Response.json({ error: "Not a member" }, { status: 403 });
     }
 
     await setUserActiveRegistry(userId, registryId);
 
-    return new Response(JSON.stringify({ ok: true }), {
-      headers: { "Content-Type": "application/json" },
-    });
+    return Response.json({ ok: true });
   },
 });

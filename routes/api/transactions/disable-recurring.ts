@@ -15,11 +15,13 @@ export const handler = define.handlers({
     const tx = await getTransactionById(id);
     if (!tx) return new Response("Not found", { status: 404 });
 
-    const updated = await updateTransaction(id, { recurringDisabled: true }, userId);
+    const updated = await updateTransaction(
+      id,
+      { recurringDisabled: true },
+      userId,
+    );
     if (!updated) return new Response("Forbidden", { status: 403 });
 
-    return new Response(JSON.stringify({ ok: true }), {
-      headers: { "Content-Type": "application/json" },
-    });
+    return Response.json({ ok: true });
   },
 });

@@ -196,7 +196,9 @@ export function computeDefaultPercentages(
     }
   }
   return Object.fromEntries(
-    participants.map((u) => [u.id, Math.round(10000 / participants.length) / 100]),
+    participants.map((
+      u,
+    ) => [u.id, Math.round(10000 / participants.length) / 100]),
   );
 }
 

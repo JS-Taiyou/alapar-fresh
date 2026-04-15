@@ -8,27 +8,18 @@ export const handler = define.handlers({
     const systemUserId = ctx.state.user?.id;
 
     if (!registryId || !systemUserId) {
-      return new Response(JSON.stringify({ error: "Missing data" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return Response.json({ error: "Missing data" }, { status: 400 });
     }
 
     const role = await getUserRole(systemUserId, registryId);
     if (role !== "owner") {
-      return new Response(
-        JSON.stringify({ error: "Only owners can list invitations" }),
-        {
-          status: 403,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
+      return Response.json({ error: "Only owners can list invitations" }, {
+        status: 403,
+      });
     }
 
     const invitations = await getInvitationsForRegistry(registryId);
 
-    return new Response(JSON.stringify(invitations), {
-      headers: { "Content-Type": "application/json" },
-    });
+    return Response.json(invitations);
   },
 });

@@ -20,7 +20,7 @@ export const handler = define.handlers({
   async GET(ctx) {
     const id = ctx.params.id;
     const exercise = await getExerciseById(id);
-  if (!exercise) {
+    if (!exercise) {
       return {
         data: {
           exercise: undefined,
@@ -46,9 +46,7 @@ export default define.page(function ExerciseDetail(ctx) {
   const data = ctx.data as ExerciseDetailData;
   const { exercise } = data;
   const currentUser = ctx.state.user;
-  const currentRegistryUserId = currentUser
-    ? currentUser.id
-    : "";
+  const currentRegistryUserId = currentUser ? currentUser.id : "";
 
   if (!exercise) {
     return (
@@ -146,10 +144,12 @@ export default define.page(function ExerciseDetail(ctx) {
                 {exercise.startDate.getFullYear()}
               </h1>
               <p class="text-slate-400 text-sm">
-                {exercise.transactionCount} movimientos &bull; Total: {(personalTotal >= 0 ? "+" : "-")}${Math.abs(personalTotal).toLocaleString(
-                  "en-US",
-                  { minimumFractionDigits: 2, maximumFractionDigits: 2 },
-                )}
+                {exercise.transactionCount} movimientos &bull; Total:{" "}
+                {personalTotal >= 0 ? "+" : "-"}${Math.abs(personalTotal)
+                  .toLocaleString(
+                    "en-US",
+                    { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+                  )}
               </p>
             </div>
           </header>
@@ -157,7 +157,9 @@ export default define.page(function ExerciseDetail(ctx) {
           <div class="space-y-4">
             {data.transactions.map((tx) => {
               const relatedDesc = tx.relatedTransactionId
-                ? data.transactions.find((t) => t.id === tx.relatedTransactionId)?.description
+                ? data.transactions.find((t) =>
+                  t.id === tx.relatedTransactionId
+                )?.description
                 : undefined;
               return (
                 <TransactionCard

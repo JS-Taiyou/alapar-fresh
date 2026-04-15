@@ -9,7 +9,13 @@ interface TransactionCardProps {
 }
 
 export default function TransactionCard(props: TransactionCardProps) {
-  const { transaction: tx, paidByUser, currentUserId, allUsers, relatedDescription } = props;
+  const {
+    transaction: tx,
+    paidByUser,
+    currentUserId,
+    allUsers,
+    relatedDescription,
+  } = props;
 
   if (tx.type === "pago" || tx.type === "ajuste") {
     const isPayer = tx.userPaid === currentUserId;
@@ -56,15 +62,13 @@ export default function TransactionCard(props: TransactionCardProps) {
               month: "short",
               day: "numeric",
               year: "numeric",
-            })} &bull;{" "}
-            {tx.createdAt.toLocaleTimeString("es-MX", {
+            })} &bull; {tx.createdAt.toLocaleTimeString("es-MX", {
               hour: "2-digit",
               minute: "2-digit",
             })}
             {label && (
               <>
-                {" "}&bull;{" "}
-                <span class={amountColor}>{label}</span>
+                {" "}&bull; <span class={amountColor}>{label}</span>
               </>
             )}
             {relatedDescription && (
@@ -87,9 +91,7 @@ export default function TransactionCard(props: TransactionCardProps) {
   }
 
   const isPaidByMe = tx.userPaid === currentUserId;
-  const userSplit = tx.splitJson.splits.find((s) =>
-    s.userId === currentUserId
-  );
+  const userSplit = tx.splitJson.splits.find((s) => s.userId === currentUserId);
   const divisor = tx.type === "parcialidad" && tx.installmentTotal
     ? tx.installmentTotal
     : 1;
@@ -109,19 +111,20 @@ export default function TransactionCard(props: TransactionCardProps) {
             month: "short",
             day: "numeric",
             year: "numeric",
-          })} &bull;{" "}
-          {tx.createdAt.toLocaleTimeString("es-MX", {
+          })} &bull; {tx.createdAt.toLocaleTimeString("es-MX", {
             hour: "2-digit",
             minute: "2-digit",
           })}
           {paidByUser && (
             <>
               {" "}&bull;{" "}
-              <span class={`text-xs px-1.5 py-0.5 rounded ${
-                isPaidByMe
-                  ? "bg-emerald-500/20 text-emerald-400"
-                  : "bg-slate-300 text-slate-800 font-bold"
-              }`}>
+              <span
+                class={`text-xs px-1.5 py-0.5 rounded ${
+                  isPaidByMe
+                    ? "bg-emerald-500/20 text-emerald-400"
+                    : "bg-slate-300 text-slate-800 font-bold"
+                }`}
+              >
                 {isPaidByMe ? "Tú pagaste" : paidByUser.name}
               </span>
             </>

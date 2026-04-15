@@ -1,4 +1,8 @@
-import { createClient, type RealtimeChannel, type SupabaseClient } from "@supabase/supabase-js";
+import {
+  createClient,
+  type RealtimeChannel,
+  type SupabaseClient,
+} from "@supabase/supabase-js";
 
 let supabase: SupabaseClient | null = null;
 let activeChannel: RealtimeChannel | null = null;
@@ -14,8 +18,10 @@ let onChange: ChangeHandler | null = null;
 
 function getSupabase(): SupabaseClient {
   if (!supabase) {
-    const url = (globalThis as Record<string, unknown>).__SUPABASE_URL__ as string;
-    const key = (globalThis as Record<string, unknown>).__SUPABASE_ANON_KEY__ as string;
+    const url = (globalThis as Record<string, unknown>)
+      .__SUPABASE_URL__ as string;
+    const key = (globalThis as Record<string, unknown>)
+      .__SUPABASE_ANON_KEY__ as string;
     if (!url || !key) throw new Error("Supabase config missing");
     supabase = createClient(url, key, {
       realtime: { params: { eventsPerSecond: 2 } },
@@ -24,7 +30,11 @@ function getSupabase(): SupabaseClient {
   return supabase;
 }
 
-export async function subscribeToRegistry(registryId: string, handler: ChangeHandler, accessToken?: string): Promise<void> {
+export async function subscribeToRegistry(
+  registryId: string,
+  handler: ChangeHandler,
+  accessToken?: string,
+): Promise<void> {
   onChange = handler;
 
   if (activeRegistryId === registryId && activeChannel) return;
@@ -80,7 +90,11 @@ export async function resubscribe(): Promise<void> {
   await subscribeToRegistry(rid, handler);
 }
 
-export function setupRealtimeConfig(supabaseUrl: string, supabaseAnonKey: string): void {
+export function setupRealtimeConfig(
+  supabaseUrl: string,
+  supabaseAnonKey: string,
+): void {
   (globalThis as Record<string, unknown>).__SUPABASE_URL__ = supabaseUrl;
-  (globalThis as Record<string, unknown>).__SUPABASE_ANON_KEY__ = supabaseAnonKey;
+  (globalThis as Record<string, unknown>).__SUPABASE_ANON_KEY__ =
+    supabaseAnonKey;
 }

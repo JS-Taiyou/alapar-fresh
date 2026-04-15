@@ -7,15 +7,10 @@ export const handler = define.handlers({
     const email = body.email as string;
 
     if (!email) {
-      return new Response(JSON.stringify({ error: "Missing email" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return Response.json({ error: "Missing email" }, { status: 400 });
     }
 
     const allowed = await isEmailAllowed(email);
-    return new Response(JSON.stringify({ allowed }), {
-      headers: { "Content-Type": "application/json" },
-    });
+    return Response.json({ allowed });
   },
 });

@@ -1,9 +1,9 @@
 import { define } from "../../../utils.ts";
 import {
+  calculateFullPairwiseBalances,
   createExercise,
   createTransaction,
   getActiveTransactions,
-  calculateFullPairwiseBalances,
 } from "../../../lib/store.ts";
 import { invalidateRegistry } from "../../../lib/server-cache.ts";
 
@@ -47,7 +47,8 @@ export const handler = define.handlers({
     for (const debt of debts) {
       await createTransaction({
         registry_id: registryId,
-        description: `Pendiente de ${debt.fromUserName} a favor de ${debt.toUserName}`,
+        description:
+          `Pendiente de ${debt.fromUserName} a favor de ${debt.toUserName}`,
         amount: debt.amount,
         originalAmount: debt.amount,
         type: "ajuste" as const,

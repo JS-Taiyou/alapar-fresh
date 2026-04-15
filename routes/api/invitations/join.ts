@@ -8,27 +8,16 @@ export const handler = define.handlers({
     const systemUserId = ctx.state.user?.id;
 
     if (!code || !systemUserId) {
-      return new Response(JSON.stringify({ error: "Missing data" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return Response.json({ error: "Missing data" }, { status: 400 });
     }
 
     try {
       const registryId = await acceptInvitation(code, systemUserId);
-      return new Response(JSON.stringify({ registryId }), {
-        headers: { "Content-Type": "application/json" },
-      });
+      return Response.json({ registryId });
     } catch (err) {
-      return new Response(
-        JSON.stringify({
-          error: err instanceof Error ? err.message : "Unknown error",
-        }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
+      return Response.json({
+        error: err instanceof Error ? err.message : "Unknown error",
+      }, { status: 400 });
     }
   },
 });

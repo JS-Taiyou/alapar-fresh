@@ -8,8 +8,7 @@ export const handler = define.handlers({
 
     const accept = ctx.req.headers.get("Accept") ?? "";
     if (accept.includes("application/json")) {
-      headers.set("Content-Type", "application/json");
-      return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+      return Response.json({ ok: true }, { status: 200, headers });
     }
 
     headers.set("Location", "/login");

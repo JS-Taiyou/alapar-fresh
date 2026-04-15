@@ -33,9 +33,7 @@ export const handler = define.handlers({
     }
 
     const exercises = await getExercises(registryId);
-    const currentUserId = ctx.state.user
-      ? ctx.state.user.id
-      : "";
+    const currentUserId = ctx.state.user ? ctx.state.user.id : "";
 
     const personalTotals = new Map<string, number>();
     await Promise.all(exercises.map(async (ex) => {

@@ -33,7 +33,9 @@ export default function Sidebar(props: SidebarProps) {
   const sortedRegistries = useComputed(() => {
     const active = activeRegistryId.value;
     const list = registries.value;
-    const rest = list.filter((r) => r.id !== active).sort((a, b) => a.name.localeCompare(b.name));
+    const rest = list.filter((r) => r.id !== active).sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
     const activeReg = list.find((r) => r.id === active);
     return activeReg ? [activeReg, ...rest] : rest;
   });
@@ -52,15 +54,15 @@ export default function Sidebar(props: SidebarProps) {
   const showSplitConfig = useSignal<string | null>(null);
 
   useSignalEffect(() => {
-    isStandalone.value = window.matchMedia("(display-mode: standalone)").matches
-      || (navigator as unknown as { standalone?: boolean }).standalone === true;
+    isStandalone.value =
+      globalThis.matchMedia("(display-mode: standalone)").matches ||
+      (navigator as unknown as { standalone?: boolean }).standalone === true;
 
     let touchStartX = 0;
     let touchStartY = 0;
     let touchStartTime = 0;
     let twoFingerActive = false;
     let dragging = false;
-    let startXForDrag = 0;
 
     const SWIPE_THRESHOLD = 80;
     const MAX_VERTICAL_RATIO = 0.5;
@@ -70,18 +72,22 @@ export default function Sidebar(props: SidebarProps) {
       if (e.touches.length >= 2) {
         return (e.touches[0].clientX + e.touches[1].clientX) / 2;
       }
-      return e.changedTouches.length > 0 ? e.changedTouches[0].clientX : e.touches[0].clientX;
+      return e.changedTouches.length > 0
+        ? e.changedTouches[0].clientX
+        : e.touches[0].clientX;
     }
 
     function getY(e: TouchEvent): number {
       if (e.touches.length >= 2) {
         return (e.touches[0].clientY + e.touches[1].clientY) / 2;
       }
-      return e.changedTouches.length > 0 ? e.changedTouches[0].clientY : e.touches[0].clientY;
+      return e.changedTouches.length > 0
+        ? e.changedTouches[0].clientY
+        : e.touches[0].clientY;
     }
 
     function onTouchStart(e: TouchEvent) {
-      if (window.innerWidth >= 768) return;
+      if (globalThis.innerWidth >= 768) return;
       dragging = false;
 
       if (e.touches.length === 2) {
@@ -90,27 +96,37 @@ export default function Sidebar(props: SidebarProps) {
         touchStartY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
         touchStartTime = Date.now();
         dragging = true;
-        startXForDrag = touchStartX;
       } else if (e.touches.length === 1 && isStandalone.value) {
         twoFingerActive = false;
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
         touchStartTime = Date.now();
         dragging = true;
-        startXForDrag = touchStartX;
       }
     }
 
     function onTouchMove(e: TouchEvent) {
       if (!dragging) return;
-      if (window.innerWidth >= 768) { dragging = false; dragOffset.value = null; return; }
-      if (twoFingerActive && e.touches.length < 2) { dragging = false; dragOffset.value = null; return; }
+      if (globalThis.innerWidth >= 768) {
+        dragging = false;
+        dragOffset.value = null;
+        return;
+      }
+      if (twoFingerActive && e.touches.length < 2) {
+        dragging = false;
+        dragOffset.value = null;
+        return;
+      }
 
       const currentX = getX(e);
       const currentY = getY(e);
       const dx = currentX - touchStartX;
       const dy = Math.abs(currentY - touchStartY);
-      if (dy / (Math.abs(dx) + 1) > MAX_VERTICAL_RATIO) { dragging = false; dragOffset.value = null; return; }
+      if (dy / (Math.abs(dx) + 1) > MAX_VERTICAL_RATIO) {
+        dragging = false;
+        dragOffset.value = null;
+        return;
+      }
 
       if (!mobileOpen.value) {
         if (dx > 0) {
@@ -128,8 +144,11 @@ export default function Sidebar(props: SidebarProps) {
     function onTouchEnd(e: TouchEvent) {
       if (!dragging) return;
       dragging = false;
-      const isMobile = window.innerWidth < 768;
-      if (!isMobile) { dragOffset.value = null; return; }
+      const isMobile = globalThis.innerWidth < 768;
+      if (!isMobile) {
+        dragOffset.value = null;
+        return;
+      }
 
       const dt = Date.now() - touchStartTime;
       const endX = getX(e);
@@ -151,7 +170,9 @@ export default function Sidebar(props: SidebarProps) {
         }
       } else {
         const offset = dragOffset.value ?? SIDEBAR_WIDTH;
-        if (dx < -SWIPE_THRESHOLD || offset < SIDEBAR_WIDTH * (1 - SETTLE_RATIO)) {
+        if (
+          dx < -SWIPE_THRESHOLD || offset < SIDEBAR_WIDTH * (1 - SETTLE_RATIO)
+        ) {
           mobileOpen.value = false;
         }
       }
@@ -179,21 +200,18 @@ export default function Sidebar(props: SidebarProps) {
 
   async function switchRegistry(id: string) {
     if (id === activeRegistryId.value) return;
-    try {
-      const res = await fetch("/api/registries/switch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ registryId: id }),
-      });
-      if (!res.ok) {
-        globalThis.location.reload();
-        return;
-      }
 
-      const cached = await cache.getRegistrySnapshot(id);
-      activeRegistryId.value = id;
-      if (cached && cached.transactions) {
-        globalThis.dispatchEvent(new CustomEvent("registry-switch", {
+    fetch("/api/registries/switch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ registryId: id }),
+    }).catch(() => {});
+
+    const cached = await cache.getRegistrySnapshot(id);
+    activeRegistryId.value = id;
+    if (cached && cached.transactions) {
+      globalThis.dispatchEvent(
+        new CustomEvent("registry-switch", {
           detail: {
             registryId: id,
             transactions: cached.transactions,
@@ -202,23 +220,28 @@ export default function Sidebar(props: SidebarProps) {
             users: cached.users,
             currentUserId: cached.currentUserId,
             defaultSplit: cached.defaultSplit,
+            spawnCandidates: cached.spawnCandidates ?? [],
+            lastModified: cached.lastModified,
           },
-        }));
+        }),
+      );
 
-        validateCacheInBackground(id, cached.lastModified);
-      } else {
-        globalThis.location.href = "/dashboard";
-      }
-    } catch {
-      globalThis.location.reload();
+      validateCacheInBackground(id, cached.lastModified);
+    } else {
+      globalThis.location.href = "/dashboard";
     }
   }
 
-  async function validateCacheInBackground(registryId: string, cachedLastModified: string | null) {
+  async function validateCacheInBackground(
+    registryId: string,
+    cachedLastModified: string | null,
+  ) {
     try {
       const stampRes = await fetch(`/api/stamp/${registryId}`);
       if (!stampRes.ok) return;
-      const { lastModified } = await stampRes.json() as { lastModified: string | null };
+      const { lastModified } = await stampRes.json() as {
+        lastModified: string | null;
+      };
 
       if (lastModified === cachedLastModified) return;
 
@@ -230,18 +253,24 @@ export default function Sidebar(props: SidebarProps) {
         balanceEntries: unknown[];
         users: unknown[];
         defaultSplit: unknown;
+        spawnCandidates: unknown[];
+        lastModified: string | null;
       };
 
-      globalThis.dispatchEvent(new CustomEvent("registry-switch", {
-        detail: {
-          registryId,
-          transactions: data.transactions,
-          balance: data.balance,
-          balanceEntries: data.balanceEntries,
-          users: data.users,
-          defaultSplit: data.defaultSplit,
-        },
-      }));
+      globalThis.dispatchEvent(
+        new CustomEvent("registry-switch", {
+          detail: {
+            registryId,
+            transactions: data.transactions,
+            balance: data.balance,
+            balanceEntries: data.balanceEntries,
+            users: data.users,
+            defaultSplit: data.defaultSplit,
+            spawnCandidates: data.spawnCandidates ?? [],
+            lastModified: lastModified,
+          },
+        }),
+      );
     } catch { /* background validation failure is non-critical */ }
   }
 
@@ -332,8 +361,20 @@ export default function Sidebar(props: SidebarProps) {
 
   const sidebarContent = (
     <>
-      <div class={`border-b border-white/10 flex items-center transition-all duration-300 ${collapsed.value && !mobileOpen.value ? "p-1.5 justify-center" : "p-4 justify-between"}`}>
-        <div class={`flex items-center gap-3 min-w-0 transition-opacity duration-200 overflow-hidden ${collapsed.value && !mobileOpen.value ? "opacity-0 w-0" : "opacity-100"}`}>
+      <div
+        class={`border-b border-white/10 flex items-center transition-all duration-300 ${
+          collapsed.value && !mobileOpen.value
+            ? "p-1.5 justify-center"
+            : "p-4 justify-between"
+        }`}
+      >
+        <div
+          class={`flex items-center gap-3 min-w-0 transition-opacity duration-200 overflow-hidden ${
+            collapsed.value && !mobileOpen.value
+              ? "opacity-0 w-0"
+              : "opacity-100"
+          }`}
+        >
           <div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center font-bold text-white shrink-0">
             {props.userInitials}
           </div>
@@ -357,7 +398,9 @@ export default function Sidebar(props: SidebarProps) {
                 };samesite=lax`;
             }
           }}
-          class={`hover:bg-white/10 rounded-custom text-gray-400 hover:text-white transition-all duration-300 shrink-0 hidden md:flex items-center justify-center bg-white/5 border border-white/10 ${collapsed.value && !mobileOpen.value ? "p-2.5 w-full" : "p-2.5"}`}
+          class={`hover:bg-white/10 rounded-custom text-gray-400 hover:text-white transition-all duration-300 shrink-0 hidden md:flex items-center justify-center bg-white/5 border border-white/10 ${
+            collapsed.value && !mobileOpen.value ? "p-2.5 w-full" : "p-2.5"
+          }`}
         >
           <svg
             class="w-5 h-5 shrink-0"
@@ -385,8 +428,20 @@ export default function Sidebar(props: SidebarProps) {
           </svg>
         </button>
       </div>
-      <div class={`flex-1 overflow-hidden space-y-2 transition-all duration-300 ${collapsed.value && !mobileOpen.value ? "p-1.5" : "p-4 overflow-y-auto custom-scrollbar"}`}>
-        <h3 class={`px-2 text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 whitespace-nowrap transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 h-0" : "opacity-100"}`}>
+      <div
+        class={`flex-1 overflow-hidden space-y-2 transition-all duration-300 ${
+          collapsed.value && !mobileOpen.value
+            ? "p-1.5"
+            : "p-4 overflow-y-auto custom-scrollbar"
+        }`}
+      >
+        <h3
+          class={`px-2 text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 whitespace-nowrap transition-opacity duration-200 ${
+            collapsed.value && !mobileOpen.value
+              ? "opacity-0 h-0"
+              : "opacity-100"
+          }`}
+        >
           Registros
         </h3>
         {sortedRegistries.value.map((r, i) => (
@@ -399,7 +454,9 @@ export default function Sidebar(props: SidebarProps) {
                     confirmRename(r.id);
                   }}
                   class={`w-full flex items-center rounded-custom ${
-                    collapsed.value && !mobileOpen.value ? "justify-center p-2.5" : "gap-3 px-3 py-2.5"
+                    collapsed.value && !mobileOpen.value
+                      ? "justify-center p-2.5"
+                      : "gap-3 px-3 py-2.5"
                   } ${
                     r.id === activeRegistryId.value
                       ? "bg-white/5 border border-white/10 text-white"
@@ -418,7 +475,11 @@ export default function Sidebar(props: SidebarProps) {
                     onInput={(e) =>
                       renameValue.value = (e.target as HTMLInputElement).value}
                     onBlur={() => confirmRename(r.id)}
-                    class={`flex-1 min-w-0 bg-white/5 border border-white/10 rounded text-sm font-medium text-white p-1 px-2 focus:outline-none focus:ring-1 focus:ring-white/20 ${collapsed.value && !mobileOpen.value ? "opacity-0 w-0 p-0" : ""}`}
+                    class={`flex-1 min-w-0 bg-white/5 border border-white/10 rounded text-sm font-medium text-white p-1 px-2 focus:outline-none focus:ring-1 focus:ring-white/20 ${
+                      collapsed.value && !mobileOpen.value
+                        ? "opacity-0 w-0 p-0"
+                        : ""
+                    }`}
                     autofocus
                   />
                 </form>
@@ -435,20 +496,47 @@ export default function Sidebar(props: SidebarProps) {
                     collapsed.value && !mobileOpen.value
                       ? ""
                       : r.id === activeRegistryId.value
-                        ? "bg-white/5 border border-white/10 text-white"
-                        : "hover:bg-white/5 text-gray-400 hover:text-white"
+                      ? "bg-white/5 border border-white/10 text-white"
+                      : "hover:bg-white/5 text-gray-400 hover:text-white"
                   }`}
-                  style={collapsed.value && !mobileOpen.value ? `background-color: ${REGISTRY_COLORS[i % REGISTRY_COLORS.length]}20; border: 1px solid ${REGISTRY_COLORS[i % REGISTRY_COLORS.length]}40` : undefined}
+                  style={collapsed.value && !mobileOpen.value
+                    ? `background-color: ${
+                      REGISTRY_COLORS[i % REGISTRY_COLORS.length]
+                    }20; border: 1px solid ${
+                      REGISTRY_COLORS[i % REGISTRY_COLORS.length]
+                    }40`
+                    : undefined}
                   title={r.name}
                 >
                   <div
-                    class={`rounded-full flex-shrink-0 transition-all duration-300 ${collapsed.value && !mobileOpen.value ? "w-2 h-2" : "w-2 h-2"}`}
-                    style={collapsed.value && !mobileOpen.value ? undefined : `background-color: ${REGISTRY_COLORS[i % REGISTRY_COLORS.length]}`}
+                    class={`rounded-full flex-shrink-0 transition-all duration-300 ${
+                      collapsed.value && !mobileOpen.value
+                        ? "w-2 h-2"
+                        : "w-2 h-2"
+                    }`}
+                    style={collapsed.value && !mobileOpen.value
+                      ? undefined
+                      : `background-color: ${
+                        REGISTRY_COLORS[i % REGISTRY_COLORS.length]
+                      }`}
                   />
-                  <span class={`text-sm font-medium truncate min-w-0 whitespace-nowrap transition-all duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 w-0 overflow-hidden" : "opacity-100 flex-1"}`}>
+                  <span
+                    class={`text-sm font-medium truncate min-w-0 whitespace-nowrap transition-all duration-200 ${
+                      collapsed.value && !mobileOpen.value
+                        ? "opacity-0 w-0 overflow-hidden"
+                        : "opacity-100 flex-1"
+                    }`}
+                  >
                     {r.name}
                   </span>
-                  <span style="opacity:0" class={`sidebar-action-btns items-center gap-1.5 flex-shrink-0 transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "w-0 overflow-hidden hidden" : "flex"}`}>
+                  <span
+                    style="opacity:0"
+                    class={`sidebar-action-btns items-center gap-1.5 flex-shrink-0 transition-opacity duration-200 ${
+                      collapsed.value && !mobileOpen.value
+                        ? "w-0 overflow-hidden hidden"
+                        : "flex"
+                    }`}
+                  >
                     {props.ownerRegistryIds.has(r.id) && (
                       <button
                         type="button"
@@ -521,13 +609,21 @@ export default function Sidebar(props: SidebarProps) {
       </div>
 
       {props.isOwner && activeRegistryId.value && (
-        <div class={`transition-all duration-300 ${collapsed.value && !mobileOpen.value ? "px-1.5 pb-1.5" : "px-4 pb-2"}`}>
+        <div
+          class={`transition-all duration-300 ${
+            collapsed.value && !mobileOpen.value ? "px-1.5 pb-1.5" : "px-4 pb-2"
+          }`}
+        >
           <button
             type="button"
             onClick={() => {
               showInvite.value = true;
             }}
-            class={`w-full flex items-center bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-custom text-sm font-semibold text-emerald-400 transition-all duration-300 ${collapsed.value && !mobileOpen.value ? "justify-center p-2.5" : "justify-center gap-2 py-2.5 px-3"}`}
+            class={`w-full flex items-center bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-custom text-sm font-semibold text-emerald-400 transition-all duration-300 ${
+              collapsed.value && !mobileOpen.value
+                ? "justify-center p-2.5"
+                : "justify-center gap-2 py-2.5 px-3"
+            }`}
           >
             <svg
               class="w-5 h-5 shrink-0"
@@ -542,14 +638,32 @@ export default function Sidebar(props: SidebarProps) {
                 stroke-width="2"
               />
             </svg>
-            <span class={`whitespace-nowrap transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 w-0 overflow-hidden" : "opacity-100"}`}>Invitar</span>
+            <span
+              class={`whitespace-nowrap transition-opacity duration-200 ${
+                collapsed.value && !mobileOpen.value
+                  ? "opacity-0 w-0 overflow-hidden"
+                  : "opacity-100"
+              }`}
+            >
+              Invitar
+            </span>
           </button>
         </div>
       )}
 
       {activeRegistryId.value && (
-        <div class={`transition-all duration-300 ${collapsed.value && !mobileOpen.value ? "px-1.5 pb-1.5" : "px-4 pb-2"}`}>
-          <div class={`transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 h-0 overflow-hidden" : "opacity-100"}`}>
+        <div
+          class={`transition-all duration-300 ${
+            collapsed.value && !mobileOpen.value ? "px-1.5 pb-1.5" : "px-4 pb-2"
+          }`}
+        >
+          <div
+            class={`transition-opacity duration-200 ${
+              collapsed.value && !mobileOpen.value
+                ? "opacity-0 h-0 overflow-hidden"
+                : "opacity-100"
+            }`}
+          >
             <EntityManager
               registryId={activeRegistryId.value}
               entities={props.entities}
@@ -587,10 +701,18 @@ export default function Sidebar(props: SidebarProps) {
         </div>
       )}
 
-      <div class={`border-t border-white/10 space-y-2 transition-all duration-300 ${collapsed.value && !mobileOpen.value ? "p-1.5" : "p-4"}`}>
+      <div
+        class={`border-t border-white/10 space-y-2 transition-all duration-300 ${
+          collapsed.value && !mobileOpen.value ? "p-1.5" : "p-4"
+        }`}
+      >
         <a
           href="/registries/new"
-          class={`flex items-center bg-white/5 hover:bg-white/10 border border-white/10 rounded-custom text-sm font-semibold text-white transition-all duration-300 ${collapsed.value && !mobileOpen.value ? "justify-center p-2.5" : "justify-center gap-2 py-3 px-4"}`}
+          class={`flex items-center bg-white/5 hover:bg-white/10 border border-white/10 rounded-custom text-sm font-semibold text-white transition-all duration-300 ${
+            collapsed.value && !mobileOpen.value
+              ? "justify-center p-2.5"
+              : "justify-center gap-2 py-3 px-4"
+          }`}
         >
           <svg
             class="w-5 h-5 shrink-0"
@@ -605,14 +727,24 @@ export default function Sidebar(props: SidebarProps) {
               stroke-width="2"
             />
           </svg>
-          <span class={`whitespace-nowrap transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 w-0 overflow-hidden" : "opacity-100"}`}>
+          <span
+            class={`whitespace-nowrap transition-opacity duration-200 ${
+              collapsed.value && !mobileOpen.value
+                ? "opacity-0 w-0 overflow-hidden"
+                : "opacity-100"
+            }`}
+          >
             Nuevo Registro
           </span>
         </a>
         <button
           type="button"
           onClick={handleLogout}
-          class={`w-full flex items-center bg-white/5 hover:bg-white/10 border border-white/10 rounded-custom text-sm font-semibold text-slate-400 hover:text-red-400 transition-all duration-300 ${collapsed.value && !mobileOpen.value ? "justify-center p-2.5" : "justify-center gap-2 py-2.5 px-4"}`}
+          class={`w-full flex items-center bg-white/5 hover:bg-white/10 border border-white/10 rounded-custom text-sm font-semibold text-slate-400 hover:text-red-400 transition-all duration-300 ${
+            collapsed.value && !mobileOpen.value
+              ? "justify-center p-2.5"
+              : "justify-center gap-2 py-2.5 px-4"
+          }`}
         >
           <svg
             class="w-4 h-4 shrink-0"
@@ -627,7 +759,15 @@ export default function Sidebar(props: SidebarProps) {
               stroke-width="2"
             />
           </svg>
-          <span class={`whitespace-nowrap transition-opacity duration-200 ${collapsed.value && !mobileOpen.value ? "opacity-0 w-0 overflow-hidden" : "opacity-100"}`}>Cerrar sesión</span>
+          <span
+            class={`whitespace-nowrap transition-opacity duration-200 ${
+              collapsed.value && !mobileOpen.value
+                ? "opacity-0 w-0 overflow-hidden"
+                : "opacity-100"
+            }`}
+          >
+            Cerrar sesión
+          </span>
         </button>
       </div>
     </>
@@ -638,7 +778,9 @@ export default function Sidebar(props: SidebarProps) {
       <button
         type="button"
         onClick={() => mobileOpen.value = true}
-        class={`md:hidden fixed bottom-20 left-4 z-40 w-12 h-12 bg-surface border border-border-custom rounded-full text-white shadow-lg flex items-center justify-center hover:bg-white/10 active:scale-95 transition-all ${isStandalone.value ? "hidden" : ""}`}
+        class={`md:hidden fixed bottom-20 left-4 z-40 w-12 h-12 bg-surface border border-border-custom rounded-full text-white shadow-lg flex items-center justify-center hover:bg-white/10 active:scale-95 transition-all ${
+          isStandalone.value ? "hidden" : ""
+        }`}
       >
         <svg
           class="w-5 h-5"
@@ -658,8 +800,13 @@ export default function Sidebar(props: SidebarProps) {
       {(mobileOpen.value || dragOffset.value !== null) && (
         <div
           class="md:hidden fixed inset-0 z-40 bg-black/60 transition-opacity duration-300"
-          style={dragOffset.value !== null ? { opacity: (dragOffset.value / SIDEBAR_WIDTH) * 0.6 } : undefined}
-          onClick={() => { mobileOpen.value = false; dragOffset.value = null; }}
+          style={dragOffset.value !== null
+            ? { opacity: (dragOffset.value / SIDEBAR_WIDTH) * 0.6 }
+            : undefined}
+          onClick={() => {
+            mobileOpen.value = false;
+            dragOffset.value = null;
+          }}
         />
       )}
 
@@ -673,10 +820,18 @@ export default function Sidebar(props: SidebarProps) {
 
       <aside
         class={`md:hidden fixed top-0 left-0 z-50 w-72 bg-[#0a0a0a] border-r border-white/10 flex flex-col h-full ${
-          dragOffset.value !== null ? "transition-none" : "transition-transform duration-300"
+          dragOffset.value !== null
+            ? "transition-none"
+            : "transition-transform duration-300"
         }`}
         style={{
-          transform: `translateX(${dragOffset.value !== null ? `${dragOffset.value - SIDEBAR_WIDTH}px` : mobileOpen.value ? "0" : "-100%"})`,
+          transform: `translateX(${
+            dragOffset.value !== null
+              ? `${dragOffset.value - SIDEBAR_WIDTH}px`
+              : mobileOpen.value
+              ? "0"
+              : "-100%"
+          })`,
         }}
       >
         <div class="flex items-center justify-between p-4 border-b border-white/10">
@@ -794,7 +949,9 @@ export default function Sidebar(props: SidebarProps) {
         <DefaultSplitConfig
           registryId={showSplitConfig.value}
           users={props.registryUsers}
-          defaultSplit={registries.value.find((r) => r.id === showSplitConfig.value)?.defaultSplit ?? null}
+          defaultSplit={registries.value.find((r) =>
+            r.id === showSplitConfig.value
+          )?.defaultSplit ?? null}
           isOwner={props.ownerRegistryIds.has(showSplitConfig.value)}
           autoOpen
           onClose={() => showSplitConfig.value = null}

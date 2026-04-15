@@ -6,8 +6,11 @@ import {
   getActiveTransactions,
   getSpawnCandidates,
 } from "../../lib/store.ts";
-import { getCachedTransactions, getCachedSpawnCandidates } from "../../lib/server-cache.ts";
-import { getSupabaseUrl, getSupabaseAnonKey } from "../../lib/supabase.ts";
+import {
+  getCachedSpawnCandidates,
+  getCachedTransactions,
+} from "../../lib/server-cache.ts";
+import { getSupabaseAnonKey, getSupabaseUrl } from "../../lib/supabase.ts";
 import { Head } from "fresh/runtime";
 import TransactionList from "../../islands/TransactionList.tsx";
 import CortarButton from "../../islands/CortarButton.tsx";
@@ -111,7 +114,8 @@ export const handler = define.handlers({
         accessToken: getAccessToken(ctx.req.headers.get("cookie") ?? ""),
         supabaseUrl: getSupabaseUrl(),
         supabaseAnonKey: getSupabaseAnonKey(),
-        lastModified: ctx.state.activeRegistry?.lastModified?.toISOString() ?? null,
+        lastModified: ctx.state.activeRegistry?.lastModified?.toISOString() ??
+          null,
       },
     };
   },
@@ -142,6 +146,8 @@ export default define.page(function DashboardIndex(ctx) {
   const $defaultSplit = useSignal<DefaultSplit | null>(
     ctx.state.activeRegistry?.defaultSplit ?? null,
   );
+  const $spawnCandidates = useSignal(data.spawnCandidates);
+  const $lastModified = useSignal<string | null>(data.lastModified);
 
   const entityIds = new Set(ctx.state.entities.map((e) => e.id));
   const hasMultipleUsers = ctx.state.participants.length > 1;
@@ -159,7 +165,7 @@ export default define.page(function DashboardIndex(ctx) {
             users={$users}
           />
           <div class="flex items-center gap-2 sm:gap-4 shrink-0">
-            <RecurringSpawn candidates={data.spawnCandidates} />
+            <RecurringSpawn candidates={$spawnCandidates} />
             <a
               href="/dashboard/history"
               class="p-3 bg-card hover:bg-white/5 transition-colors rounded-custom text-gray-300"
@@ -191,11 +197,12 @@ export default define.page(function DashboardIndex(ctx) {
         balance={$balance}
         balanceEntries={$balanceEntries}
         defaultSplit={$defaultSplit}
+        spawnCandidates={$spawnCandidates}
+        lastModified={$lastModified}
         entityIds={entityIds}
         supabaseUrl={data.supabaseUrl}
         supabaseAnonKey={data.supabaseAnonKey}
         accessToken={data.accessToken}
-        lastModified={data.lastModified}
       />
     </>
   );

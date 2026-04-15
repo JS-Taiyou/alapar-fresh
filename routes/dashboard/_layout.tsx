@@ -1,5 +1,9 @@
 import { define } from "../../utils.ts";
 import { getTransactionCounts } from "../../lib/store.ts";
+import {
+  getCachedTransactionCounts,
+  setCachedTransactionCounts,
+} from "../../lib/server-cache.ts";
 import Sidebar from "../../islands/Sidebar.tsx";
 
 export default define.layout(async function DashboardLayout(ctx) {
@@ -12,11 +16,15 @@ export default define.layout(async function DashboardLayout(ctx) {
 
   const deletableRegistryIds = new Set<string>();
   if (ctx.state.registries.length > 0) {
-    const counts = await getTransactionCounts(
-      ctx.state.registries.map((r) => r.id),
-    );
+    const registryIds = ctx.state.registries.map((r) => r.id);
+    const { counts, hit } = getCachedTransactionCounts(registryIds);
+    let finalCounts = counts;
+    if (!hit) {
+      finalCounts = await getTransactionCounts(registryIds);
+      void setCachedTransactionCounts(finalCounts);
+    }
     for (const r of ctx.state.registries) {
-      if ((counts.get(r.id) ?? 0) === 0) deletableRegistryIds.add(r.id);
+      if ((finalCounts.get(r.id) ?? 0) === 0) deletableRegistryIds.add(r.id);
     }
   }
 

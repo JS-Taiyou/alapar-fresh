@@ -1,4 +1,4 @@
-import { App, staticFiles } from "fresh";
+import { App, csrf, staticFiles } from "fresh";
 import { define, type State } from "./utils.ts";
 import {
   createUserFromSupabase,
@@ -11,6 +11,7 @@ import { query } from "./lib/db.ts";
 export const app = new App<State>();
 
 app.use(staticFiles());
+app.use(csrf());
 
 app.use(define.middleware(async (ctx) => {
   ctx.state.user = null;
@@ -80,7 +81,11 @@ app.use(define.middleware(async (ctx) => {
     }
     const response = await ctx.next();
     if (authResult.refreshedTokens && response) {
-      setAuthCookies(response.headers, authResult.refreshedTokens.accessToken, authResult.refreshedTokens.refreshToken);
+      setAuthCookies(
+        response.headers,
+        authResult.refreshedTokens.accessToken,
+        authResult.refreshedTokens.refreshToken,
+      );
     }
     return response;
   }
@@ -97,7 +102,11 @@ app.use(define.middleware(async (ctx) => {
     ctx.state.user = user;
     const response = await ctx.next();
     if (authResult.refreshedTokens && response) {
-      setAuthCookies(response.headers, authResult.refreshedTokens.accessToken, authResult.refreshedTokens.refreshToken);
+      setAuthCookies(
+        response.headers,
+        authResult.refreshedTokens.accessToken,
+        authResult.refreshedTokens.refreshToken,
+      );
     }
     return response;
   }
@@ -125,7 +134,11 @@ app.use(define.middleware(async (ctx) => {
 
   const response = await ctx.next();
   if (authResult.refreshedTokens && response) {
-    setAuthCookies(response.headers, authResult.refreshedTokens.accessToken, authResult.refreshedTokens.refreshToken);
+    setAuthCookies(
+      response.headers,
+      authResult.refreshedTokens.accessToken,
+      authResult.refreshedTokens.refreshToken,
+    );
   }
   return response;
 }));
@@ -165,5 +178,14 @@ app.use(define.middleware(async (ctx) => {
 
   return await ctx.next();
 }));
+
+app.onError("*", (ctx) => {
+  console.error("Unhandled error:", ctx.error);
+  return new Response("Internal Server Error", { status: 500 });
+});
+
+app.notFound(() => {
+  return new Response("Not Found", { status: 404 });
+});
 
 app.fsRoutes();
