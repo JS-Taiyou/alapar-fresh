@@ -17,6 +17,7 @@ import {
   calculateFullPairwiseBalances as calcFullPairwisePure,
   calculatePairwiseBreakdown as calcPairwiseBreakdownPure,
 } from "./calculations.ts";
+import { getUserActiveRegistry } from "./server-cache.ts";
 
 export {
   buildEqualSplit,
@@ -204,8 +205,12 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
   let participants: Participant[] = [];
 
   if (registriesList.length > 0) {
-    activeRegistry = registriesList[0];
-    const activeRow = registriesResult.rows[0];
+    const cachedActiveId = getUserActiveRegistry(user.id);
+    activeRegistry = cachedActiveId
+      ? registriesList.find((r) => r.id === cachedActiveId) ?? registriesList[0]
+      : registriesList[0];
+    const activeIdx = registriesList.indexOf(activeRegistry);
+    const activeRow = registriesResult.rows[activeIdx];
     isOwner = activeRow.membership_role === "owner";
 
     const usersResult = await query(

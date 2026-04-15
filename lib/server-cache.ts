@@ -12,6 +12,7 @@ interface RegistryCache {
 const CACHE_TTL_MS = 15 * 60 * 1000;
 const MAX_ENTRIES = 200;
 const cache = new Map<string, RegistryCache>();
+const userActiveRegistries = new Map<string, string>();
 
 function evictIfNeeded(): void {
   if (cache.size < MAX_ENTRIES) return;
@@ -147,4 +148,15 @@ export function setCachedTransactionCounts(
       entry.transactionCounts = counts;
     }
   }
+}
+
+export function getUserActiveRegistry(userId: string): string | null {
+  return userActiveRegistries.get(userId) ?? null;
+}
+
+export function setUserActiveRegistry(
+  userId: string,
+  registryId: string,
+): void {
+  userActiveRegistries.set(userId, registryId);
 }

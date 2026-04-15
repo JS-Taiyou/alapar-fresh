@@ -1,5 +1,6 @@
 import { define } from "../../../utils.ts";
 import { getRegistryStamp, isMemberOfRegistry } from "../../../lib/store.ts";
+import { setUserActiveRegistry } from "../../../lib/server-cache.ts";
 
 export const handler = define.handlers({
   async GET(ctx) {
@@ -14,6 +15,8 @@ export const handler = define.handlers({
     if (!member) {
       return Response.json({ error: "Not a member" }, { status: 403 });
     }
+
+    setUserActiveRegistry(userId, registryId);
 
     const lastModified = await getRegistryStamp(registryId);
 
