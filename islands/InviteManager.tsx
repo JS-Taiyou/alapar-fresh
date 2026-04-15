@@ -72,7 +72,9 @@ export default function InviteManager(props: InviteManagerProps) {
   }
 
   function copyCode(code: string) {
-    navigator.clipboard.writeText(code);
+    navigator.clipboard.writeText(
+      `${globalThis.location.origin}/join/${code}`,
+    );
   }
 
   return (

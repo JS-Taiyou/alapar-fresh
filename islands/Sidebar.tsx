@@ -301,7 +301,9 @@ export default function Sidebar(props: SidebarProps) {
   }
 
   function copyCode() {
-    navigator.clipboard.writeText(inviteCode.value);
+    navigator.clipboard.writeText(
+      `${globalThis.location.origin}/join/${inviteCode.value}`,
+    );
     copied.value = true;
     setTimeout(() => {
       copied.value = false;
