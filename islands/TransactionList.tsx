@@ -596,16 +596,18 @@ export default function TransactionList(props: TransactionListProps) {
         entities?: { id: string; name: string; color: string }[];
       } | undefined;
       if (detail?.entities) {
-        props.entityIds.value = new Set(detail.entities.map((e) => e.id));
+        props.entityIds.value = new Set(detail.entities.map((ent) => ent.id));
         return;
       }
       const rid = registryId.value;
       if (!rid) return;
       try {
         const res = await fetch(`/api/entities?registryId=${rid}`);
+        if (rid !== registryId.value) return;
         if (!res.ok) return;
         const data = await res.json() as { id: string }[];
-        props.entityIds.value = new Set(data.map((e) => e.id));
+        if (rid !== registryId.value) return;
+        props.entityIds.value = new Set(data.map((ent) => ent.id));
       } catch {
         // ignore
       }
@@ -636,14 +638,17 @@ export default function TransactionList(props: TransactionListProps) {
 
       try {
         const stampRes = await fetch(`/api/stamp/${rid}`);
+        if (rid !== registryId.value) return;
         if (!stampRes.ok) return;
         const { lastModified } = await stampRes.json() as {
           lastModified: string | null;
         };
         const cached = await cache.getRegistrySnapshot(rid);
+        if (rid !== registryId.value) return;
         if (cached?.lastModified === lastModified) return;
 
         const dashRes = await fetch(`/api/dashboard?registryId=${rid}`);
+        if (rid !== registryId.value) return;
         if (!dashRes.ok) return;
         const data = await dashRes.json() as {
           transactions: unknown[];

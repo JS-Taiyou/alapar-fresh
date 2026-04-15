@@ -88,6 +88,7 @@ export default function Sidebar(props: SidebarProps) {
   const dragOffset = useSignal<number | null>(null);
   const SIDEBAR_WIDTH = 288;
   const $entities = useSignal<Entity[]>([...props.entities]);
+  let switchGen = 0;
   const inviteLoading = useSignal(false);
   const inviteCode = useSignal("");
   const inviteError = useSignal("");
@@ -248,9 +249,11 @@ export default function Sidebar(props: SidebarProps) {
   async function switchRegistry(id: string) {
     if (id === activeRegistryId.value) return;
 
+    const gen = ++switchGen;
     cache.setLastActiveRegistry(id).catch(() => {});
 
     const cached = await cache.getRegistrySnapshot(id);
+    if (gen !== switchGen) return;
     activeRegistryId.value = id;
 
     if (cached && cached.transactions && cached.entities) {
@@ -274,12 +277,13 @@ export default function Sidebar(props: SidebarProps) {
         }),
       );
 
-      validateCacheInBackground(id, cached.lastModified);
+      validateCacheInBackground(id, cached.lastModified, gen);
       return;
     }
 
     try {
       const res = await fetch(`/api/dashboard?registryId=${id}`);
+      if (gen !== switchGen) return;
       if (!res.ok) throw new Error();
       const data = await res.json() as {
         transactions: unknown[];
@@ -311,6 +315,7 @@ export default function Sidebar(props: SidebarProps) {
         }),
       );
     } catch {
+      if (gen !== switchGen) return;
       globalThis.location.href = "/dashboard";
     }
   }
@@ -318,9 +323,11 @@ export default function Sidebar(props: SidebarProps) {
   async function validateCacheInBackground(
     registryId: string,
     cachedLastModified: string | null,
+    gen: number,
   ) {
     try {
       const stampRes = await fetch(`/api/stamp/${registryId}`);
+      if (gen !== switchGen) return;
       if (!stampRes.ok) return;
       const { lastModified } = await stampRes.json() as {
         lastModified: string | null;
@@ -329,6 +336,7 @@ export default function Sidebar(props: SidebarProps) {
       if (lastModified === cachedLastModified) return;
 
       const dashRes = await fetch(`/api/dashboard?registryId=${registryId}`);
+      if (gen !== switchGen) return;
       if (!dashRes.ok) return;
       const data = await dashRes.json() as {
         transactions: unknown[];
