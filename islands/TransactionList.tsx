@@ -2017,7 +2017,14 @@ export default function TransactionList(props: TransactionListProps) {
                             </tr>
                           </thead>
                           <tbody class="divide-y divide-border-custom">
-                            {users.value.map((user) => {
+                            {[
+                              ...users.value,
+                              ...props.entities.value.map((e) => ({
+                                id: e.id,
+                                name: e.name,
+                                color: e.color,
+                              })),
+                            ].map((user) => {
                               const initials = user.name.split(" ").map((n) =>
                                 n[0]
                               ).join("").substring(0, 2).toUpperCase();

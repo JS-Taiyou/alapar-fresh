@@ -155,14 +155,15 @@ export default define.page(function DashboardIndex(ctx) {
     new Set($entities.value.map((e) => e.id))
   );
 
-  const hasMultipleUsers = $users.value.length > 1;
+  const hasMultipleParticipants =
+    $users.value.length + $entities.value.length > 1;
 
   return (
     <>
       <Head>
         <title>A la par - Dashboard</title>
       </Head>
-      {hasMultipleUsers && (
+      {hasMultipleParticipants && (
         <header class="p-4 sm:p-6 bg-[#0a0a0a] border-b border-white/10 flex justify-between items-center gap-2">
           <BalanceBreakdown
             balance={$balance}
