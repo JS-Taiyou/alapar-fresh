@@ -148,6 +148,7 @@ app.use(define.middleware(async (ctx) => {
     "/join",
     "/forgot-password",
     "/reset-password",
+    "/auth/callback",
     "/api/auth/callback",
     "/api/auth/logout",
     "/api/auth/check-email",
