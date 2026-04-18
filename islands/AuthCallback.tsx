@@ -1,11 +1,7 @@
 import { useEffect } from "preact/hooks";
 import { useSignal } from "@preact/signals";
-import { createClient } from "@supabase/supabase-js";
-import type { SupabaseClient } from "@supabase/supabase-js";
 
 interface AuthCallbackProps {
-  supabaseUrl: string;
-  supabaseAnonKey: string;
   redirectPath: string;
 }
 
@@ -13,55 +9,36 @@ export default function AuthCallback(props: AuthCallbackProps) {
   const error = useSignal("");
   const debug = useSignal("Initializing...");
 
-  let client: SupabaseClient;
-  try {
-    client = createClient(props.supabaseUrl, props.supabaseAnonKey);
-  } catch (e) {
-    error.value = "Error al inicializar el cliente de auth";
-    debug.value = String(e);
-  }
-
   useEffect(() => {
-    if (error.value) return;
+    const hash = globalThis.location.hash.substring(1);
+    const params = new URLSearchParams(hash);
+    const accessToken = params.get("access_token");
+    const refreshToken = params.get("refresh_token");
+    const hashError = params.get("error_description");
 
-    const href = globalThis.location.href;
-    const hash = globalThis.location.hash;
-    debug.value = `URL: ${href} | hash: ${hash}`;
-
-    const params = new URL(href).searchParams;
-    const code = params.get("code");
-
-    if (!code) {
-      debug.value = `No code param. Full URL: ${href}`;
-      error.value = "No code param found in URL";
+    if (hashError) {
+      debug.value = `Auth error: ${hashError}`;
+      error.value = hashError;
       return;
     }
 
-    debug.value = `Exchanging code: ${code.substring(0, 8)}...`;
+    if (!accessToken || !refreshToken) {
+      debug.value = `No tokens in hash. URL: ${globalThis.location.href}`;
+      error.value = "No se recibieron tokens de autenticación.";
+      return;
+    }
 
-    client.auth.exchangeCodeForSession(code)
-      .then(({ data, error: exchangeError }) => {
-        if (exchangeError || !data.session) {
-          debug.value = `Exchange failed: ${exchangeError?.message ?? "no session"}`;
-          error.value = exchangeError?.message ?? "Exchange returned no session";
-          return;
-        }
+    debug.value = "Tokens found, setting cookies...";
 
-        debug.value = "Exchange OK, setting cookies...";
-
-        return fetch("/api/auth/callback", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            accessToken: data.session.access_token,
-            refreshToken: data.session.refresh_token,
-          }),
-        });
-      })
+    fetch("/api/auth/callback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accessToken, refreshToken }),
+    })
       .then((res) => {
-        if (res && res.ok) {
+        if (res.ok) {
           globalThis.location.href = props.redirectPath;
-        } else if (res) {
+        } else {
           res.text().then((t) => {
             debug.value = `Cookie set failed: ${t}`;
             error.value = `Cookie set failed: ${t}`;
@@ -69,7 +46,7 @@ export default function AuthCallback(props: AuthCallbackProps) {
         }
       })
       .catch((err) => {
-        debug.value = `Callback error: ${String(err)}`;
+        debug.value = `Fetch error: ${String(err)}`;
         error.value = String(err);
       });
   }, []);
