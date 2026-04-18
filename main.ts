@@ -146,6 +146,8 @@ app.use(define.middleware(async (ctx) => {
     "/login",
     "/signup",
     "/join",
+    "/forgot-password",
+    "/reset-password",
     "/api/auth/callback",
     "/api/auth/logout",
     "/api/auth/check-email",
@@ -156,7 +158,7 @@ app.use(define.middleware(async (ctx) => {
     return ctx.redirect(`/login?redirect=${encodeURIComponent(path)}`);
   }
 
-  if (hasUser && (path === "/login" || path === "/signup")) {
+  if (hasUser && (path === "/login" || path === "/signup" || path === "/forgot-password")) {
     return ctx.redirect("/");
   }
 

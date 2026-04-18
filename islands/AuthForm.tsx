@@ -257,6 +257,17 @@ export default function AuthForm(props: AuthFormProps) {
           </>
         )}
 
+      {props.mode === "login" && (
+        <p class="text-center text-sm">
+          <a
+            href="/forgot-password"
+            class="text-slate-400 hover:text-primary hover:underline"
+          >
+            Olvidaste tu contraseña?
+          </a>
+        </p>
+      )}
+
       <p class="text-center text-sm text-slate-400">
         {props.mode === "login"
           ? (
