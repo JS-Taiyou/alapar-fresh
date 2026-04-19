@@ -114,6 +114,7 @@ export interface CachedTransactionEntry {
 export interface CachedRegistryData {
   registryId: string;
   transactions: unknown[];
+  transactionPayments: unknown[];
   balance: number;
   balanceEntries: unknown[];
   users: unknown[];

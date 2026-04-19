@@ -9,6 +9,7 @@ import type {
   DefaultSplit,
   Participant,
   SplitEntry,
+  TransactionPayment,
   TransactionSplit,
 } from "../lib/types.ts";
 import { type EnrichedTransaction } from "./shared-signals.ts";
@@ -51,6 +52,7 @@ interface TransactionListProps {
   lastModified: Signal<string | null>;
   entityIds: Signal<Set<string>>;
   entities: Signal<{ id: string; name: string; color: string }[]>;
+  transactionPayments: Signal<TransactionPayment[]>;
   supabaseUrl?: string;
   supabaseAnonKey?: string;
   accessToken?: string;
@@ -70,8 +72,10 @@ function TransactionCardClickable(props: {
   currentUserId: string;
   onClick: () => void;
   allTxs?: EnrichedTransaction[];
+  transactionPayments?: TransactionPayment[];
 }) {
   const { tx, users, currentUserId } = props;
+  const tpList = props.transactionPayments ?? [];
 
   if (tx.type === "ajuste") {
     const formattedAmount = tx.originalAmount.toLocaleString("en-US", {
@@ -127,9 +131,14 @@ function TransactionCardClickable(props: {
       label = `Te pagó ${payerUser.name}`;
     }
 
-    const relatedTx = tx.relatedTransactionId
-      ? props.allTxs?.find((t) => t.id === tx.relatedTransactionId)
-      : undefined;
+    const linkedExpenseIds = tpList
+      .filter((tp) => tp.pagoId === tx.id)
+      .map((tp) => tp.expenseId);
+    const linkedExpenses = linkedExpenseIds.length > 0
+      ? (props.allTxs ?? []).filter((t) => linkedExpenseIds.includes(t.id))
+      : (tx.relatedTransactionId
+        ? (props.allTxs ?? []).filter((t) => t.id === tx.relatedTransactionId)
+        : []);
 
     return (
       <div class="w-full">
@@ -137,7 +146,7 @@ function TransactionCardClickable(props: {
           type="button"
           onClick={props.onClick}
           class={`w-full text-left bg-card p-5 border-l-4 border-l-indigo-500 border border-white/5 flex justify-between items-center transition-transform active:scale-[0.98] hover:bg-white/2 ${
-            !relatedTx ? "rounded-custom" : "rounded-t-custom"
+            linkedExpenses.length === 0 ? "rounded-custom" : "rounded-t-custom"
           }`}
         >
           <div class="flex flex-col min-w-0">
@@ -169,72 +178,76 @@ function TransactionCardClickable(props: {
             </span>
           </div>
         </button>
-        {relatedTx && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              const el = document.getElementById(`tx-${relatedTx.id}`);
-              if (el) {
-                el.scrollIntoView({ behavior: "smooth", block: "center" });
-                setTimeout(() => {
-                  el.classList.remove("highlight-pulse");
-                  void el.offsetWidth;
-                  el.classList.add("highlight-pulse");
-                  el.addEventListener("animationend", () => {
+        {linkedExpenses.length > 0 &&
+          linkedExpenses.map((relatedTx, idx) => (
+            <button
+              key={relatedTx.id}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                const el = document.getElementById(`tx-${relatedTx.id}`);
+                if (el) {
+                  el.scrollIntoView({ behavior: "smooth", block: "center" });
+                  setTimeout(() => {
                     el.classList.remove("highlight-pulse");
-                  }, { once: true });
-                }, 450);
-              }
-            }}
-            class="w-full text-left bg-slate-800/60 px-5 py-2.5 border-l-4 border-l-indigo-500/40 border border-t-0 border-white/5 flex items-center gap-3 hover:bg-slate-700/60 transition-colors rounded-b-custom"
-          >
-            <svg
-              class="w-3.5 h-3.5 text-slate-500 shrink-0"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+                    void el.offsetWidth;
+                    el.classList.add("highlight-pulse");
+                    el.addEventListener("animationend", () => {
+                      el.classList.remove("highlight-pulse");
+                    }, { once: true });
+                  }, 450);
+                }
+              }}
+              class={`w-full text-left bg-slate-800/60 px-5 py-2.5 border-l-4 border-l-indigo-500/40 border border-t-0 border-white/5 flex items-center gap-3 hover:bg-slate-700/60 transition-colors ${
+                idx === linkedExpenses.length - 1 ? "rounded-b-custom" : ""
+              }`}
             >
-              <path
-                d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-              />
-              <path
-                d="M10.172 13.828a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.102 1.101"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-              />
-            </svg>
-            <div class="flex-1 min-w-0">
-              <p class="text-xs font-medium text-slate-300 truncate">
-                {relatedTx.description}
-              </p>
-              <p class="text-[10px] text-slate-500">
-                {new Date(relatedTx.createdAt).toLocaleDateString("es-MX", {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                })}
-              </p>
-            </div>
-            <svg
-              class="w-3 h-3 text-slate-500 shrink-0"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M19 9l-7 7-7-7"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-              />
-            </svg>
-          </button>
-        )}
+              <svg
+                class="w-3.5 h-3.5 text-slate-500 shrink-0"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                />
+                <path
+                  d="M10.172 13.828a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.102 1.101"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                />
+              </svg>
+              <div class="flex-1 min-w-0">
+                <p class="text-xs font-medium text-slate-300 truncate">
+                  {relatedTx.description}
+                </p>
+                <p class="text-[10px] text-slate-500">
+                  {new Date(relatedTx.createdAt).toLocaleDateString("es-MX", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </p>
+              </div>
+              <svg
+                class="w-3 h-3 text-slate-500 shrink-0"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  d="M19 9l-7 7-7-7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                />
+              </svg>
+            </button>
+          ))}
       </div>
     );
   }
@@ -250,19 +263,39 @@ function TransactionCardClickable(props: {
     ? perInstallmentTotal - perInstallmentSplit
     : -perInstallmentSplit;
 
+  const linkedPaymentTps = tpList.filter((tp) => tp.expenseId === tx.id);
+  const linkedPaymentIds = new Set(linkedPaymentTps.map((tp) => tp.pagoId));
   const linkedPayments = (props.allTxs ?? []).filter(
-    (t) => t.type === "pago" && t.relatedTransactionId === tx.id,
+    (t) =>
+      linkedPaymentIds.has(t.id) ||
+      (t.type === "pago" && t.relatedTransactionId === tx.id),
   );
 
   let paymentsAffectingMe = 0;
   if (!isPaidByMe && personalBalance < 0) {
-    paymentsAffectingMe = linkedPayments
-      .filter((p) => p.userPaid === currentUserId)
-      .reduce((sum, p) => sum + p.originalAmount, 0);
+    paymentsAffectingMe = linkedPaymentTps
+      .filter((tp) => {
+        const pagoTx = (props.allTxs ?? []).find((t) => t.id === tp.pagoId);
+        return pagoTx?.userPaid === currentUserId;
+      })
+      .reduce((sum, tp) => sum + tp.amount, 0);
+    if (paymentsAffectingMe === 0) {
+      paymentsAffectingMe = linkedPayments
+        .filter((p) => p.userPaid === currentUserId)
+        .reduce((sum, p) => sum + p.originalAmount, 0);
+    }
   } else if (isPaidByMe && personalBalance > 0) {
-    paymentsAffectingMe = linkedPayments
-      .filter((p) => p.splitJson.splits[0]?.userId === currentUserId)
-      .reduce((sum, p) => sum + p.originalAmount, 0);
+    paymentsAffectingMe = linkedPaymentTps
+      .filter((tp) => {
+        const pagoTx = (props.allTxs ?? []).find((t) => t.id === tp.pagoId);
+        return pagoTx?.splitJson?.splits?.[0]?.userId === currentUserId;
+      })
+      .reduce((sum, tp) => sum + tp.amount, 0);
+    if (paymentsAffectingMe === 0) {
+      paymentsAffectingMe = linkedPayments
+        .filter((p) => p.splitJson.splits[0]?.userId === currentUserId)
+        .reduce((sum, p) => sum + p.originalAmount, 0);
+    }
   }
 
   const remainingBalance = isPaidByMe
@@ -398,6 +431,8 @@ export default function TransactionList(props: TransactionListProps) {
   const linkToTransaction = useSignal(false);
   const selectedRelatedTxId = useSignal<string | null>(null);
   const relatedTxSearch = useSignal("");
+  const selectedExpenseIds = useSignal<string[]>([]);
+  const transactionPayments = props.transactionPayments;
 
   const isEditing = useComputed(() => editingId.value !== null);
 
@@ -536,6 +571,7 @@ export default function TransactionList(props: TransactionListProps) {
     const lm = props.lastModified.value;
     const eids = [...props.entityIds.value];
     const ents = props.entities.value;
+    const tps = transactionPayments.value;
     if (!rid || txs.length === 0 && lm === null) return;
     cache.setRegistrySnapshot({
       registryId: rid,
@@ -545,6 +581,7 @@ export default function TransactionList(props: TransactionListProps) {
           ? t.createdAt
           : t.createdAt.toISOString(),
       })),
+      transactionPayments: tps,
       balance: bal,
       balanceEntries: be,
       users: usrs,
@@ -562,6 +599,7 @@ export default function TransactionList(props: TransactionListProps) {
       const detail = (e as CustomEvent).detail as {
         registryId: string;
         transactions?: EnrichedTransaction[];
+        transactionPayments?: TransactionPayment[];
         balance?: number;
         balanceEntries?: BalanceBreakdownEntry[];
         users?: Participant[];
@@ -602,6 +640,9 @@ export default function TransactionList(props: TransactionListProps) {
       }
       if (detail.entities) {
         props.entities.value = detail.entities;
+      }
+      if (detail.transactionPayments) {
+        transactionPayments.value = detail.transactionPayments;
       }
     }
     globalThis.addEventListener("registry-switch", onRegistrySwitch);
@@ -667,6 +708,7 @@ export default function TransactionList(props: TransactionListProps) {
         if (!dashRes.ok) return;
         const data = await dashRes.json() as {
           transactions: unknown[];
+          transactionPayments: TransactionPayment[];
           balance: number;
           balanceEntries: BalanceBreakdownEntry[];
           users: Participant[];
@@ -702,6 +744,9 @@ export default function TransactionList(props: TransactionListProps) {
         }
         if (data.entities) {
           props.entities.value = data.entities;
+        }
+        if (data.transactionPayments) {
+          transactionPayments.value = data.transactionPayments;
         }
         props.lastModified.value = lastModified;
       } catch { /* wake-up refresh failure non-critical */ }
@@ -759,13 +804,24 @@ export default function TransactionList(props: TransactionListProps) {
 
     for (const tx of transactions.value) {
       if (tx.type !== "pago") continue;
-      if (!tx.relatedTransactionId) continue;
       if (tx.userPaid !== uid) continue;
       if (tx.id === (editingId.value ?? undefined)) continue;
 
-      const entry = debtMap.get(tx.relatedTransactionId);
-      if (entry) {
-        entry.debt -= tx.originalAmount;
+      const pagoTps = transactionPayments.value.filter(
+        (tp) => tp.pagoId === tx.id,
+      );
+      if (pagoTps.length > 0) {
+        for (const tp of pagoTps) {
+          const entry = debtMap.get(tp.expenseId);
+          if (entry) {
+            entry.debt -= tp.amount;
+          }
+        }
+      } else if (tx.relatedTransactionId) {
+        const entry = debtMap.get(tx.relatedTransactionId);
+        if (entry) {
+          entry.debt -= tx.originalAmount;
+        }
       }
     }
 
@@ -960,6 +1016,7 @@ export default function TransactionList(props: TransactionListProps) {
     linkToTransaction.value = false;
     selectedRelatedTxId.value = null;
     relatedTxSearch.value = "";
+    selectedExpenseIds.value = [];
 
     const lastConfig = loadLastSplitConfig();
     if (lastConfig) {
@@ -1026,11 +1083,20 @@ export default function TransactionList(props: TransactionListProps) {
       if (recipientSplit) {
         paymentRecipient.value = recipientSplit.userId;
       }
-      if (tx.relatedTransactionId) {
+      const pagoTps = transactionPayments.value.filter(
+        (tp) => tp.pagoId === tx.id,
+      );
+      if (pagoTps.length > 0) {
         linkToTransaction.value = true;
+        selectedExpenseIds.value = pagoTps.map((tp) => tp.expenseId);
+        selectedRelatedTxId.value = null;
+      } else if (tx.relatedTransactionId) {
+        linkToTransaction.value = true;
+        selectedExpenseIds.value = [tx.relatedTransactionId];
         selectedRelatedTxId.value = tx.relatedTransactionId;
       } else {
         linkToTransaction.value = false;
+        selectedExpenseIds.value = [];
         selectedRelatedTxId.value = null;
       }
     } else {
@@ -1089,29 +1155,52 @@ export default function TransactionList(props: TransactionListProps) {
     }));
   }
 
-  function getLinkedDebtCap(): number | null {
-    if (!linkToTransaction.value || !selectedRelatedTxId.value) return null;
-    const stx = eligibleTransactions.value.find((e) =>
-      e.id === selectedRelatedTxId.value
-    );
-    return stx ? stx.remainingDebt : null;
+  function computeAllocation(
+    totalAmount: number,
+    expenseIds: string[],
+  ): Array<{ expenseId: string; amount: number }> {
+    if (expenseIds.length === 0 || totalAmount <= 0) return [];
+    const expenses = expenseIds
+      .map((id) => eligibleTransactions.value.find((e) => e.id === id))
+      .filter((e): e is EligibleTransaction => e !== undefined)
+      .sort((a, b) => a.remainingDebt - b.remainingDebt);
+
+    const result: Array<{ expenseId: string; amount: number }> = [];
+    let remaining = totalAmount;
+    for (const exp of expenses) {
+      if (remaining <= 0) break;
+      const alloc = Math.min(remaining, exp.remainingDebt);
+      result.push({ expenseId: exp.id, amount: Math.round(alloc * 100) / 100 });
+      remaining -= alloc;
+    }
+    return result;
   }
 
-  function clampAmountToLinkedDebt() {
-    const cap = getLinkedDebtCap();
-    if (cap !== null && amount.value > cap) {
-      amount.value = cap;
+  function enforceSelectionConstraint() {
+    const ids = selectedExpenseIds.value;
+    if (ids.length <= 1) return;
+    const totalAmount = Math.abs(amount.value);
+    const expenses = ids
+      .map((id) => eligibleTransactions.value.find((e) => e.id === id))
+      .filter((e): e is EligibleTransaction => e !== undefined)
+      .sort((a, b) => a.remainingDebt - b.remainingDebt);
+
+    while (expenses.length > 1) {
+      const nMinus1Sum = expenses.slice(0, expenses.length - 1).reduce(
+        (s, e) => s + e.remainingDebt,
+        0,
+      );
+      if (totalAmount >= nMinus1Sum) break;
+      const removed = expenses.pop()!;
+      selectedExpenseIds.value = selectedExpenseIds.value.filter(
+        (id) => id !== removed.id,
+      );
     }
   }
 
   function handleAmountChange(raw: string) {
     const sanitized = sanitizeDecimal(raw);
-    let newVal = parseFloat(sanitized) || 0;
-
-    const cap = getLinkedDebtCap();
-    if (cap !== null && newVal > cap) {
-      newVal = cap;
-    }
+    const newVal = parseFloat(sanitized) || 0;
 
     if (
       editingId.value &&
@@ -1133,6 +1222,9 @@ export default function TransactionList(props: TransactionListProps) {
 
     amount.value = newVal;
     amountDisplay.value = sanitized;
+    if (modalMode.value === "payment" && linkToTransaction.value) {
+      enforceSelectionConstraint();
+    }
     return sanitized;
   }
 
@@ -1223,13 +1315,6 @@ export default function TransactionList(props: TransactionListProps) {
     e.preventDefault();
     if (submitting.value) return;
 
-    if (
-      linkToTransaction.value && selectedRelatedTx.value &&
-      Math.abs(amount.value) > selectedRelatedTx.value.remainingDebt + 0.005
-    ) {
-      return;
-    }
-
     let splitJson: TransactionSplit;
 
     if (modalMode.value === "payment") {
@@ -1248,6 +1333,19 @@ export default function TransactionList(props: TransactionListProps) {
       null;
 
     const optimisticId = editingId.value ?? crypto.randomUUID();
+
+    const currentAllocation = modalMode.value === "payment" &&
+        linkToTransaction.value
+      ? computeAllocation(Math.abs(amount.value), selectedExpenseIds.value)
+      : [];
+
+    const optimisticTpEntries = currentAllocation.map((a) => ({
+      id: crypto.randomUUID(),
+      pagoId: optimisticId,
+      expenseId: a.expenseId,
+      amount: a.amount,
+      createdAt: new Date(),
+    }));
 
     const optimistic: EnrichedTransaction = {
       id: optimisticId,
@@ -1269,9 +1367,10 @@ export default function TransactionList(props: TransactionListProps) {
       splitJson,
       creatorId: currentUserId.value,
       userPaid: userPaid.value,
-      relatedTransactionId: linkToTransaction.value && selectedRelatedTxId.value
-        ? selectedRelatedTxId.value
-        : null,
+      relatedTransactionId:
+        linkToTransaction.value && selectedExpenseIds.value.length === 1
+          ? selectedExpenseIds.value[0]
+          : null,
       createdAt: new Date(),
       paidByUser,
     };
@@ -1284,6 +1383,17 @@ export default function TransactionList(props: TransactionListProps) {
       );
     } else {
       transactions.value = [optimistic, ...transactions.value];
+    }
+
+    if (optimisticTpEntries.length > 0) {
+      const otherTps = transactionPayments.value.filter(
+        (tp) => tp.pagoId !== optimisticId,
+      );
+      transactionPayments.value = [...otherTps, ...optimisticTpEntries];
+    } else if (wasEditing) {
+      transactionPayments.value = transactionPayments.value.filter(
+        (tp) => tp.pagoId !== wasEditing,
+      );
     }
 
     isOpen.value = false;
@@ -1305,6 +1415,11 @@ export default function TransactionList(props: TransactionListProps) {
     }
     if (optimistic.relatedTransactionId) {
       form.append("relatedTransactionId", optimistic.relatedTransactionId);
+    }
+    if (currentAllocation.length > 0) {
+      form.append("transactionPayments", JSON.stringify(currentAllocation));
+    } else if (wasEditing && modalMode.value === "payment") {
+      form.append("transactionPayments", JSON.stringify([]));
     }
 
     try {
@@ -1615,6 +1730,7 @@ export default function TransactionList(props: TransactionListProps) {
                 onClick={() =>
                   tx.type !== "ajuste" && openEdit(tx)}
                 allTxs={transactions.value}
+                transactionPayments={transactionPayments.value}
               />
             </div>
           ))}
@@ -2262,14 +2378,13 @@ export default function TransactionList(props: TransactionListProps) {
                             linkToTransaction.value = !linkToTransaction.value;
                             if (!linkToTransaction.value) {
                               selectedRelatedTxId.value = null;
-                            } else {
-                              clampAmountToLinkedDebt();
+                              selectedExpenseIds.value = [];
                             }
                           }}
                           class="accent-primary w-4 h-4"
                         />
                         <span class="text-sm font-medium text-slate-300">
-                          Relacionar este pago a una transacción existente
+                          Relacionar este pago a gastos existentes
                         </span>
                         {!hasEligibleTransactions.value && (
                           <span class="relative group">
@@ -2343,8 +2458,8 @@ export default function TransactionList(props: TransactionListProps) {
                                 </p>
                               )
                               : filteredEligible.value.map((etx) => {
-                                const isSelected =
-                                  selectedRelatedTxId.value === etx.id;
+                                const isSelected = selectedExpenseIds.value
+                                  .includes(etx.id);
                                 const paidByName = etx.paidByUser;
                                 const maxAmount = etx.remainingDebt;
                                 return (
@@ -2353,12 +2468,18 @@ export default function TransactionList(props: TransactionListProps) {
                                     type="button"
                                     onClick={() => {
                                       if (isSelected) {
-                                        selectedRelatedTxId.value = null;
+                                        selectedExpenseIds.value =
+                                          selectedExpenseIds.value.filter(
+                                            (id) => id !== etx.id,
+                                          );
                                       } else {
-                                        selectedRelatedTxId.value = etx.id;
+                                        selectedExpenseIds.value = [
+                                          ...selectedExpenseIds.value,
+                                          etx.id,
+                                        ];
                                         paymentRecipient.value = etx.userPaid;
-                                        clampAmountToLinkedDebt();
                                       }
+                                      enforceSelectionConstraint();
                                     }}
                                     class={`w-full text-left p-3 rounded-custom transition-all ${
                                       isSelected
@@ -2412,23 +2533,61 @@ export default function TransactionList(props: TransactionListProps) {
                               })}
                           </div>
 
-                          {selectedRelatedTx.value && (
-                            <p class="text-xs text-slate-400">
-                              Pago máximo:{" "}
-                              <span class="text-white font-semibold">
-                                ${selectedRelatedTx.value.remainingDebt
-                                  .toLocaleString("en-US", {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}
-                              </span>
-                              {amount.value >
-                                  selectedRelatedTx.value.remainingDebt && (
-                                <span class="text-red-400 ml-2">
-                                  El monto excede la deuda pendiente
-                                </span>
-                              )}
-                            </p>
+                          {selectedExpenseIds.value.length > 0 && (
+                            <div class="space-y-2">
+                              {(() => {
+                                const alloc = computeAllocation(
+                                  Math.abs(amount.value),
+                                  selectedExpenseIds.value,
+                                );
+                                const totalAllocated = alloc.reduce(
+                                  (s, a) => s + a.amount,
+                                  0,
+                                );
+                                const remainder = Math.abs(amount.value) -
+                                  totalAllocated;
+                                return (
+                                  <div class="border border-white/10 rounded-custom p-3 bg-slate-800/40 space-y-2">
+                                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                                      Distribución
+                                    </p>
+                                    {alloc.map((a) => {
+                                      const exp = eligibleTransactions.value
+                                        .find((e) => e.id === a.expenseId);
+                                      return (
+                                        <div
+                                          key={a.expenseId}
+                                          class="flex justify-between items-center text-xs"
+                                        >
+                                          <span class="text-slate-300 truncate">
+                                            {exp?.description ?? "Gasto"}
+                                          </span>
+                                          <span class="text-white font-semibold ml-2">
+                                            ${a.amount.toLocaleString("en-US", {
+                                              minimumFractionDigits: 2,
+                                              maximumFractionDigits: 2,
+                                            })}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                    {remainder > 0.005 && (
+                                      <div class="flex justify-between items-center text-xs border-t border-white/5 pt-1.5">
+                                        <span class="text-slate-400">
+                                          Sin asignar
+                                        </span>
+                                        <span class="text-amber-400 font-semibold">
+                                          ${remainder.toLocaleString("en-US", {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                          })}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </div>
                           )}
                         </div>
                       )}

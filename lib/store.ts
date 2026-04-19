@@ -6,6 +6,7 @@ import type {
   Participant,
   Registry,
   Transaction,
+  TransactionPayment,
   TransactionSplit,
   User,
 } from "./types.ts";
@@ -78,6 +79,18 @@ function rowToTransaction(row: Record<string, unknown>): Transaction {
     relatedTransactionId: (row.related_transaction_id as string) ?? null,
     creatorId: row.creator_id as string,
     userPaid: row.user_paid as string,
+    createdAt: new Date(row.created_at as string),
+  };
+}
+
+function rowToTransactionPayment(
+  row: Record<string, unknown>,
+): TransactionPayment {
+  return {
+    id: row.id as string,
+    pagoId: row.pago_id as string,
+    expenseId: row.expense_id as string,
+    amount: parseFloat(row.amount as string),
     createdAt: new Date(row.created_at as string),
   };
 }
@@ -286,9 +299,61 @@ export async function getTransactionById(
   return rowToTransaction(result.rows[0]);
 }
 
+export async function getTransactionPaymentsForRegistry(
+  registryId: string,
+): Promise<TransactionPayment[]> {
+  console.log("[store] getTransactionPaymentsForRegistry start:", registryId);
+  const result = await query(
+    `SELECT tp.* FROM transaction_payments tp
+     JOIN transactions t ON t.id = tp.pago_id
+     WHERE t.registry_id = $1 AND t.exercise_id IS NULL`,
+    [registryId],
+  );
+  console.log(
+    "[store] getTransactionPaymentsForRegistry done, rows:",
+    result.rows.length,
+  );
+  return result.rows.map(rowToTransactionPayment);
+}
+
+export async function getTransactionPaymentsForPago(
+  pagoId: string,
+): Promise<TransactionPayment[]> {
+  const result = await query(
+    "SELECT * FROM transaction_payments WHERE pago_id = $1",
+    [pagoId],
+  );
+  return result.rows.map(rowToTransactionPayment);
+}
+
+export async function createTransactionPayments(
+  pagoId: string,
+  entries: { expenseId: string; amount: number }[],
+): Promise<TransactionPayment[]> {
+  if (entries.length === 0) return [];
+  const values: unknown[] = [];
+  const placeholders = entries.map((e, i) => {
+    const base = i * 3;
+    values.push(pagoId, e.expenseId, e.amount);
+    return `($${base + 1}, $${base + 2}, $${base + 3})`;
+  }).join(", ");
+  const result = await query(
+    `INSERT INTO transaction_payments (pago_id, expense_id, amount) VALUES ${placeholders} RETURNING *`,
+    values,
+  );
+  return result.rows.map(rowToTransactionPayment);
+}
+
+export async function deleteTransactionPaymentsForPago(
+  pagoId: string,
+): Promise<void> {
+  await query("DELETE FROM transaction_payments WHERE pago_id = $1", [pagoId]);
+}
+
 export async function createTransaction(
   data: Omit<Transaction, "id" | "createdAt">,
   userId: string,
+  transactionPaymentEntries?: { expenseId: string; amount: number }[],
 ): Promise<Transaction | null> {
   const member = await isMemberOfRegistry(userId, data.registry_id);
   if (!member) return null;
@@ -314,13 +379,18 @@ export async function createTransaction(
       data.relatedTransactionId ?? null,
     ],
   );
-  return rowToTransaction(result.rows[0]);
+  const tx = rowToTransaction(result.rows[0]);
+  if (transactionPaymentEntries && transactionPaymentEntries.length > 0) {
+    await createTransactionPayments(tx.id, transactionPaymentEntries);
+  }
+  return tx;
 }
 
 export async function updateTransaction(
   id: string,
   data: Partial<Transaction>,
   userId: string,
+  transactionPaymentEntries?: { expenseId: string; amount: number }[],
 ): Promise<Transaction | undefined> {
   const sets: string[] = [];
   const values: unknown[] = [];
@@ -381,7 +451,14 @@ export async function updateTransaction(
     values,
   );
   if (result.rows.length === 0) return undefined;
-  return rowToTransaction(result.rows[0]);
+  const updated = rowToTransaction(result.rows[0]);
+  if (transactionPaymentEntries !== undefined) {
+    await deleteTransactionPaymentsForPago(id);
+    if (transactionPaymentEntries.length > 0) {
+      await createTransactionPayments(id, transactionPaymentEntries);
+    }
+  }
+  return updated;
 }
 
 export async function deleteTransaction(

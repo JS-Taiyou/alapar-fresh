@@ -78,6 +78,14 @@ export interface RegistryMember {
   joinedAt: Date;
 }
 
+export interface TransactionPayment {
+  id: string;
+  pagoId: string;
+  expenseId: string;
+  amount: number;
+  createdAt: Date;
+}
+
 export interface BalanceBreakdownEntry {
   userId: string;
   userName: string;
