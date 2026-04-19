@@ -5,6 +5,7 @@ import {
   getActiveTransactions,
   getEntities,
   getSpawnCandidates,
+  getTransactionPaymentsForRegistry,
   getUsers,
 } from "../../lib/store.ts";
 import {
@@ -20,6 +21,7 @@ export const handler = define.handlers({
       return Response.json(
         {
           transactions: [],
+          transactionPayments: [],
           users: [],
           balance: 0,
           balanceEntries: [],
@@ -46,6 +48,7 @@ export const handler = define.handlers({
       return Response.json(
         {
           transactions: [],
+          transactionPayments: [],
           users: [],
           balance: 0,
           balanceEntries: [],
@@ -65,6 +68,9 @@ export const handler = define.handlers({
     const { transactions } = await getCachedTransactions(
       registryId,
       () => getActiveTransactions(registryId),
+    );
+    const transactionPayments = await getTransactionPaymentsForRegistry(
+      registryId,
     );
     const balance = await calculateBalance(userId, registryId, transactions);
     const candidates = await getCachedSpawnCandidates(
@@ -119,6 +125,7 @@ export const handler = define.handlers({
 
     const data = {
       transactions: enriched,
+      transactionPayments,
       users: participants,
       balance,
       balanceEntries: balanceBreakdown,

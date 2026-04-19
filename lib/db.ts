@@ -6,7 +6,7 @@ if (!connectionString) throw new Error("DATABASE_URL env var is required");
 const pool = new pg.Pool({
   connectionString,
   ssl: { rejectUnauthorized: false },
-  max: 3,
+  max: 10,
 });
 
 export function getPool() {

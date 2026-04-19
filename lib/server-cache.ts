@@ -1,8 +1,9 @@
 import { query } from "./db.ts";
-import type { Transaction } from "./types.ts";
+import type { Transaction, TransactionPayment } from "./types.ts";
 
 interface RegistryCache {
   transactions: Transaction[];
+  transactionPayments: TransactionPayment[];
   spawnCandidates: Transaction[];
   transactionCounts: Map<string, number> | null;
   lastModified: string | null;
@@ -53,7 +54,9 @@ export async function getStamp(registryId: string): Promise<string | null> {
   );
   if (result.rows.length === 0) return null;
   const lm = result.rows[0].last_modified;
-  return lm ? new Date(lm as string).toISOString() : null;
+  const stamp = lm ? new Date(lm as string).toISOString() : null;
+  console.log("[server-cache] getStamp:", registryId, "=>", stamp);
+  return stamp;
 }
 
 export async function getCachedTransactions(
@@ -74,6 +77,7 @@ export async function getCachedTransactions(
   evictIfNeeded();
   cache.set(registryId, {
     transactions,
+    transactionPayments: [],
     spawnCandidates: [],
     transactionCounts: null,
     lastModified: stamp,
@@ -104,6 +108,7 @@ export async function getCachedSpawnCandidates(
     evictIfNeeded();
     cache.set(registryId, {
       transactions: [],
+      transactionPayments: [],
       spawnCandidates: candidates,
       transactionCounts: null,
       lastModified: stamp,

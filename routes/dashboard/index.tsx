@@ -5,6 +5,7 @@ import {
   calculatePairwiseBreakdown,
   getActiveTransactions,
   getSpawnCandidates,
+  getTransactionPaymentsForRegistry,
 } from "../../lib/store.ts";
 import {
   getCachedSpawnCandidates,
@@ -20,6 +21,7 @@ import type {
   BalanceBreakdownEntry,
   DefaultSplit,
   Participant,
+  TransactionPayment,
 } from "../../lib/types.ts";
 import type { EnrichedTransaction } from "../../islands/shared-signals.ts";
 
@@ -34,6 +36,7 @@ interface SpawnCandidate {
 
 interface DashboardData {
   transactions: EnrichedTransaction[];
+  transactionPayments: TransactionPayment[];
   balance: number;
   currentUserId: string;
   spawnCandidates: SpawnCandidate[];
@@ -49,10 +52,18 @@ export const handler = define.handlers({
   async GET(ctx) {
     const registryId = ctx.state.activeRegistry?.id;
     const userId = ctx.state.user?.id;
+    console.log(
+      "[dashboard] handler start, registryId:",
+      registryId,
+      "userId:",
+      userId,
+    );
     if (!registryId || !userId) {
+      console.log("[dashboard] early return (no registry/user)");
       return {
         data: {
           transactions: [] as EnrichedTransaction[],
+          transactionPayments: [] as TransactionPayment[],
           balance: 0,
           currentUserId: "",
           spawnCandidates: [],
@@ -66,18 +77,41 @@ export const handler = define.handlers({
       };
     }
 
+    console.log("[dashboard] getCachedTransactions start");
     const { transactions } = await getCachedTransactions(
       registryId,
       () => getActiveTransactions(registryId),
     );
+    console.log(
+      "[dashboard] getCachedTransactions done, count:",
+      transactions.length,
+    );
+
+    console.log("[dashboard] getTransactionPaymentsForRegistry start");
+    const transactionPayments = await getTransactionPaymentsForRegistry(
+      registryId,
+    );
+    console.log(
+      "[dashboard] getTransactionPaymentsForRegistry done, count:",
+      transactionPayments.length,
+    );
+
+    console.log("[dashboard] calculateBalance start");
     const balance = await calculateBalance(
       userId,
       registryId,
       transactions,
     );
+    console.log("[dashboard] calculateBalance done:", balance);
+
+    console.log("[dashboard] getCachedSpawnCandidates start");
     const candidates = await getCachedSpawnCandidates(
       registryId,
       () => getSpawnCandidates(registryId),
+    );
+    console.log(
+      "[dashboard] getCachedSpawnCandidates done, count:",
+      candidates.length,
     );
 
     const participantMap = new Map(
@@ -103,9 +137,11 @@ export const handler = define.handlers({
       ctx.state.participants,
     );
 
+    console.log("[dashboard] handler complete, returning data");
     return {
       data: {
         transactions: enriched,
+        transactionPayments,
         balance,
         currentUserId: userId,
         spawnCandidates,
@@ -153,6 +189,9 @@ export default define.page(function DashboardIndex(ctx) {
   );
   const $entityIds = useComputed(() =>
     new Set($entities.value.map((e) => e.id))
+  );
+  const $transactionPayments = useSignal<TransactionPayment[]>(
+    data.transactionPayments,
   );
 
   const hasMultipleParticipants =
@@ -207,6 +246,7 @@ export default define.page(function DashboardIndex(ctx) {
         lastModified={$lastModified}
         entityIds={$entityIds}
         entities={$entities}
+        transactionPayments={$transactionPayments}
         supabaseUrl={data.supabaseUrl}
         supabaseAnonKey={data.supabaseAnonKey}
         accessToken={data.accessToken}

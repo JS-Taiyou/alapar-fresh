@@ -38,6 +38,21 @@ export const handler = define.handlers({
     const relatedTransactionId = (form.get("relatedTransactionId") as string) ||
       null;
 
+    let transactionPaymentEntries:
+      | { expenseId: string; amount: number }[]
+      | undefined;
+    const tpRaw = form.get("transactionPayments") as string;
+    if (tpRaw) {
+      try {
+        transactionPaymentEntries = JSON.parse(tpRaw);
+      } catch {
+        return Response.json(
+          { error: "transactionPayments JSON inválido" },
+          { status: 400 },
+        );
+      }
+    }
+
     if (!description || !description.trim()) {
       return Response.json({ error: "Descripción requerida" }, { status: 400 });
     }
@@ -69,18 +84,23 @@ export const handler = define.handlers({
       return Response.json({ error: "Split JSON inválido" }, { status: 400 });
     }
 
-    const updated = await updateTransaction(id, {
-      description,
-      amount,
-      originalAmount,
-      type: type as "unico" | "parcialidad" | "recurrente",
-      notes,
-      splitJson,
-      userPaid,
-      installmentCurrent,
-      installmentTotal,
-      relatedTransactionId,
-    }, userId);
+    const updated = await updateTransaction(
+      id,
+      {
+        description,
+        amount,
+        originalAmount,
+        type: type as "unico" | "parcialidad" | "recurrente",
+        notes,
+        splitJson,
+        userPaid,
+        installmentCurrent,
+        installmentTotal,
+        relatedTransactionId,
+      },
+      userId,
+      transactionPaymentEntries,
+    );
     if (!updated) {
       return new Response("Forbidden", { status: 403 });
     }
