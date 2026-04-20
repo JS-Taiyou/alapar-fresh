@@ -882,7 +882,12 @@ export default function TransactionList(props: TransactionListProps) {
       const q = searchQuery.value.trim().toLowerCase();
       list = list.filter((tx) => tx.description.toLowerCase().includes(q));
     }
-    return list;
+    return [...list].sort((a, b) => {
+      const da = a.createdAt instanceof Date ? a.createdAt.getTime() : 0;
+      const db = b.createdAt instanceof Date ? b.createdAt.getTime() : 0;
+      if (db !== da) return db - da;
+      return a.description.localeCompare(b.description);
+    });
   });
 
   const splits = useComputed(() => getSplits());

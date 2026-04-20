@@ -275,7 +275,7 @@ export async function getActiveTransactions(
   registryId: string,
 ): Promise<Transaction[]> {
   const result = await query(
-    "SELECT * FROM transactions WHERE exercise_id IS NULL AND registry_id = $1 ORDER BY created_at DESC",
+    "SELECT * FROM transactions WHERE exercise_id IS NULL AND registry_id = $1 ORDER BY created_at DESC, description ASC",
     [registryId],
   );
   return result.rows.map(rowToTransaction);
@@ -285,7 +285,7 @@ export async function getTransactionsByExercise(
   exerciseId: string,
 ): Promise<Transaction[]> {
   const result = await query(
-    "SELECT * FROM transactions WHERE exercise_id = $1 ORDER BY created_at DESC",
+    "SELECT * FROM transactions WHERE exercise_id = $1 ORDER BY created_at DESC, description ASC",
     [exerciseId],
   );
   return result.rows.map(rowToTransaction);
