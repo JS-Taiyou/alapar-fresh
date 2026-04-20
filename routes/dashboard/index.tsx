@@ -1,4 +1,4 @@
-import { useComputed, useSignal } from "@preact/signals";
+import { useSignal } from "@preact/signals";
 import { define } from "../../utils.ts";
 import {
   calculateBalance,
@@ -187,8 +187,8 @@ export default define.page(function DashboardIndex(ctx) {
   const $entities = useSignal<{ id: string; name: string; color: string }[]>(
     ctx.state.entities.map((e) => ({ id: e.id, name: e.name, color: e.color })),
   );
-  const $entityIds = useComputed(() =>
-    new Set($entities.value.map((e) => e.id))
+  const $entityIds = useSignal<Set<string>>(
+    new Set(ctx.state.entities.map((e) => e.id)),
   );
   const $transactionPayments = useSignal<TransactionPayment[]>(
     data.transactionPayments,
