@@ -13,6 +13,15 @@ import type {
   TransactionSplit,
 } from "../lib/types.ts";
 import { type EnrichedTransaction } from "./shared-signals.ts";
+
+function dedupById<T extends { id: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+}
 import {
   calculateBalance,
   calculatePairwiseBreakdown,
@@ -525,7 +534,7 @@ export default function TransactionList(props: TransactionListProps) {
             t.id === payload.new.id ? mapRow(payload.new) : t
           );
         }
-        const allParticipants = [
+        const allParticipants = dedupById([
           ...users.value.map((u) => ({
             id: u.id,
             name: u.name,
@@ -536,7 +545,7 @@ export default function TransactionList(props: TransactionListProps) {
             name: e.name,
             color: e.color,
           })),
-        ];
+        ]);
         balance.value = calculateBalance(
           transactions.value as Parameters<typeof calculateBalance>[0],
           currentUserId.value,
@@ -938,7 +947,7 @@ export default function TransactionList(props: TransactionListProps) {
   }
 
   function recalculate() {
-    const allParticipants = [
+    const allParticipants = dedupById([
       ...users.value.map((u) => ({
         id: u.id,
         name: u.name,
@@ -949,7 +958,7 @@ export default function TransactionList(props: TransactionListProps) {
         name: e.name,
         color: e.color,
       })),
-    ];
+    ]);
     balance.value = calculateBalance(transactions.value, currentUserId.value);
     balanceEntries.value = calculatePairwiseBreakdown(
       transactions.value,
@@ -2138,14 +2147,7 @@ export default function TransactionList(props: TransactionListProps) {
                             </tr>
                           </thead>
                           <tbody class="divide-y divide-border-custom">
-                            {[
-                              ...users.value,
-                              ...props.entities.value.map((e) => ({
-                                id: e.id,
-                                name: e.name,
-                                color: e.color,
-                              })),
-                            ].map((user) => {
+                            {users.value.map((user) => {
                               const initials = user.name.split(" ").map((n) =>
                                 n[0]
                               ).join("").substring(0, 2).toUpperCase();
