@@ -131,7 +131,7 @@ export const handler = define.handlers({
         recurringGroupId: crypto.randomUUID(),
         notes,
         splitJson,
-        creatorId: userPaid,
+        creatorId: userId,
         userPaid,
         relatedTransactionId,
       },

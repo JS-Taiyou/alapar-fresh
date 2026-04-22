@@ -797,13 +797,8 @@ export async function createEntity(
   color?: string,
 ): Promise<Entity> {
   const entities = await getEntities(registryId);
-  let maxId = 0;
-  for (const e of entities) {
-    const num = parseInt(e.id, 10);
-    if (!isNaN(num) && num > maxId) maxId = num;
-  }
   const entity: Entity = {
-    id: String(maxId + 1),
+    id: crypto.randomUUID(),
     name,
     color: color ?? "#6b7280",
   };
