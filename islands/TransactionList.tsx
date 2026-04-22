@@ -1447,8 +1447,13 @@ export default function TransactionList(props: TransactionListProps) {
           const serverPaidBy = users.value.find((u) =>
             u.id === updated.userPaid
           ) ?? null;
+          const serverCreatedAt = typeof updated.createdAt === "string"
+            ? new Date(updated.createdAt)
+            : updated.createdAt;
           transactions.value = transactions.value.map((t) =>
-            t.id === wasEditing ? { ...updated, paidByUser: serverPaidBy } : t
+            t.id === wasEditing
+              ? { ...updated, paidByUser: serverPaidBy, createdAt: serverCreatedAt }
+              : t
           );
           recalculate();
         }
@@ -1462,8 +1467,13 @@ export default function TransactionList(props: TransactionListProps) {
           const serverPaidBy = users.value.find((u) =>
             u.id === created.userPaid
           ) ?? null;
+          const serverCreatedAt = typeof created.createdAt === "string"
+            ? new Date(created.createdAt)
+            : created.createdAt;
           transactions.value = transactions.value.map((t) =>
-            t.id === optimisticId ? { ...created, paidByUser: serverPaidBy } : t
+            t.id === optimisticId
+              ? { ...created, paidByUser: serverPaidBy, createdAt: serverCreatedAt }
+              : t
           );
           recalculate();
         }
@@ -2558,23 +2568,53 @@ export default function TransactionList(props: TransactionListProps) {
                                     <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">
                                       Distribución
                                     </p>
-                                    {alloc.map((a) => {
+                                    {alloc.map((a, idx) => {
                                       const exp = eligibleTransactions.value
                                         .find((e) => e.id === a.expenseId);
+                                      const coverage = exp
+                                        ? Math.min(1, a.amount / exp.remainingDebt)
+                                        : 1;
+                                      const isFull = coverage >= 0.99;
+                                      const barWidth = Math.round(coverage * 100);
+                                      const barColor = isFull
+                                        ? "bg-emerald-500"
+                                        : coverage >= 0.5
+                                        ? "bg-amber-500"
+                                        : "bg-red-400";
                                       return (
                                         <div
                                           key={a.expenseId}
-                                          class="flex justify-between items-center text-xs"
+                                          class={`flex flex-col gap-1${idx > 0 ? " pt-2 border-t border-white/5" : ""}`}
                                         >
-                                          <span class="text-slate-300 truncate">
-                                            {exp?.description ?? "Gasto"}
-                                          </span>
-                                          <span class="text-white font-semibold ml-2">
-                                            ${a.amount.toLocaleString("en-US", {
-                                              minimumFractionDigits: 2,
-                                              maximumFractionDigits: 2,
-                                            })}
-                                          </span>
+                                          <div class="flex justify-between items-center text-xs">
+                                            <span class="text-slate-300 truncate">
+                                              {exp?.description ?? "Gasto"}
+                                            </span>
+                                            <span class="text-white font-semibold ml-2">
+                                              ${a.amount.toLocaleString("en-US", {
+                                                minimumFractionDigits: 2,
+                                                maximumFractionDigits: 2,
+                                              })}
+                                            </span>
+                                          </div>
+                                          <div class="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                                            <div
+                                              class={`h-full ${barColor} rounded-full transition-all`}
+                                              style={`width: ${barWidth}%`}
+                                            />
+                                          </div>
+                                          <div class="flex justify-between items-center text-[10px] text-slate-500">
+                                            <span>
+                                              {isFull
+                                                ? "Completamente cubierto"
+                                                : `Cubriendo $${a.amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} de $${exp!.remainingDebt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                            </span>
+                                            {!isFull && (
+                                              <span class={`${coverage >= 0.5 ? "text-amber-400" : "text-red-400"} font-medium`}>
+                                                {barWidth}%
+                                              </span>
+                                            )}
+                                          </div>
                                         </div>
                                       );
                                     })}
