@@ -1470,11 +1470,17 @@ export default function TransactionList(props: TransactionListProps) {
           const serverCreatedAt = typeof created.createdAt === "string"
             ? new Date(created.createdAt)
             : created.createdAt;
+          const serverId = created.id as string;
           transactions.value = transactions.value.map((t) =>
             t.id === optimisticId
               ? { ...created, paidByUser: serverPaidBy, createdAt: serverCreatedAt }
               : t
           );
+          if (serverId && serverId !== optimisticId) {
+            transactionPayments.value = transactionPayments.value.map((tp) =>
+              tp.pagoId === optimisticId ? { ...tp, pagoId: serverId } : tp
+            );
+          }
           recalculate();
         }
         saveLastSplitConfig();
