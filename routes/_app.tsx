@@ -2,14 +2,14 @@ import { define } from "../utils.ts";
 
 export default define.page(function App({ Component }) {
   return (
-    <html>
+    <html data-theme="dark">
       <head>
         <meta charset="utf-8" />
         <meta
           name="viewport"
           content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
         />
-        <meta name="theme-color" content="#093eaa" />
+        <meta name="theme-color" content="#0a0a0c" />
         <meta
           name="description"
           content="Comparte gastos con tu pareja, amigos o roomies de forma sencilla"
@@ -24,15 +24,9 @@ export default define.page(function App({ Component }) {
           crossorigin="anonymous"
         />
         <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&display=swap"
           rel="stylesheet"
         />
-        <style>
-          {`
-html,body{background-color:#0a0a0c;color:#f8fafc;margin:0;touch-action:manipulation}
-.font-sans{font-family:"Inter",sans-serif}
-`}
-        </style>
         <title>A la par</title>
       </head>
       <body class="font-sans bg-background text-slate-100 min-h-screen">

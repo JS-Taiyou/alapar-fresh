@@ -85,7 +85,7 @@ export default function RecurringSpawn(props: RecurringSpawnProps) {
           checkedIds.value = new Set(props.candidates.value.map((c) => c.id));
           showModal.value = true;
         }}
-        class="p-3 bg-card hover:bg-white/5 transition-colors rounded-custom text-gray-300 relative"
+        class="p-3 bg-card hover:bg-white/5 transition-colors rounded-custom text-zinc-300 relative"
         title="Recurrentes"
       >
         <svg
@@ -118,7 +118,7 @@ export default function RecurringSpawn(props: RecurringSpawnProps) {
           <div class="bg-surface border border-border-custom w-full max-w-lg rounded-custom shadow-2xl flex flex-col overflow-hidden">
             <header class="px-6 py-4 border-b border-border-custom">
               <h2 class="text-xl font-bold text-white">Gastos Recurrentes</h2>
-              <p class="text-sm text-slate-400 mt-1">
+              <p class="text-sm text-zinc-400 mt-1">
                 Selecciona cuáles incluir en este periodo.
               </p>
             </header>
@@ -134,7 +134,7 @@ export default function RecurringSpawn(props: RecurringSpawnProps) {
                     >
                       <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2">
-                          <span class="text-sm font-semibold text-slate-500 line-through truncate">
+                          <span class="text-sm font-semibold text-zinc-400 line-through truncate">
                             {item.description}
                           </span>
                           <span class="text-xs font-medium px-2 py-0.5 rounded bg-red-500/20 text-red-400">
@@ -180,7 +180,7 @@ export default function RecurringSpawn(props: RecurringSpawnProps) {
                             : "Recurrente"}
                         </span>
                       </div>
-                      <div class="flex items-center gap-2 mt-1 text-xs text-slate-400">
+                      <div class="flex items-center gap-2 mt-1 text-xs text-zinc-400">
                         <span>
                           ${item.originalAmount.toLocaleString("en-US", {
                             minimumFractionDigits: 2,
@@ -205,7 +205,7 @@ export default function RecurringSpawn(props: RecurringSpawnProps) {
                         <button
                           type="button"
                           onClick={() => adjustQuantity(item.id, -1)}
-                          class="w-7 h-7 flex items-center justify-center rounded-custom bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors text-sm font-bold"
+                          class="w-7 h-7 flex items-center justify-center rounded-custom bg-white/10 text-zinc-300 hover:bg-white/20 transition-colors text-sm font-bold"
                         >
                           -
                         </button>
@@ -215,7 +215,7 @@ export default function RecurringSpawn(props: RecurringSpawnProps) {
                         <button
                           type="button"
                           onClick={() => adjustQuantity(item.id, 1)}
-                          class="w-7 h-7 flex items-center justify-center rounded-custom bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors text-sm font-bold"
+                          class="w-7 h-7 flex items-center justify-center rounded-custom bg-white/10 text-zinc-300 hover:bg-white/20 transition-colors text-sm font-bold"
                         >
                           +
                         </button>
@@ -226,7 +226,7 @@ export default function RecurringSpawn(props: RecurringSpawnProps) {
                         type="button"
                         onClick={() => handleDisableRecurring(item.id)}
                         title="Desactivar recurrente"
-                        class="shrink-0 p-1.5 text-slate-500 hover:text-red-400 transition-colors rounded-custom hover:bg-red-400/10"
+                        class="shrink-0 p-1.5 text-zinc-400 hover:text-red-400 transition-colors rounded-custom hover:bg-red-400/10"
                       >
                         <svg
                           class="w-4 h-4"
@@ -248,11 +248,11 @@ export default function RecurringSpawn(props: RecurringSpawnProps) {
               })}
             </div>
 
-            <footer class="px-6 py-4 border-t border-border-custom bg-slate-800/20 flex justify-end items-center gap-3">
+            <footer class="px-6 py-4 border-t border-border-custom bg-white/5 flex justify-end items-center gap-3">
               <button
                 type="button"
                 onClick={() => showModal.value = false}
-                class="px-6 py-2 text-sm font-semibold text-slate-300 hover:text-white transition-colors"
+                class="px-6 py-2 text-sm font-semibold text-zinc-300 hover:text-white transition-colors"
               >
                 Cancelar
               </button>

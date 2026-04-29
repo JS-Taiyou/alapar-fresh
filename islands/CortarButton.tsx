@@ -47,23 +47,23 @@ export default function CortarButton(props: CortarButtonProps) {
           <div class="bg-surface border border-border-custom w-full max-w-md rounded-custom shadow-2xl flex flex-col overflow-hidden">
             <header class="px-6 py-4 border-b border-border-custom">
               <h2 class="text-xl font-bold text-white">Cortar ejercicio</h2>
-              <p class="text-sm text-slate-400 mt-1">
+              <p class="text-sm text-zinc-400 mt-1">
                 Esta acción cerrará el periodo actual y no se puede deshacer.
               </p>
             </header>
 
             <div class="p-6">
-              <p class="text-sm text-slate-300">
+              <p class="text-sm text-zinc-300">
                 Se crearán transacciones de ajuste para los saldos pendientes
                 entre los miembros del registro.
               </p>
             </div>
 
-            <footer class="px-6 py-4 border-t border-border-custom bg-slate-800/20 flex justify-end items-center gap-3">
+            <footer class="px-6 py-4 border-t border-border-custom bg-white/5 flex justify-end items-center gap-3">
               <button
                 type="button"
                 onClick={() => showModal.value = false}
-                class="px-6 py-2 text-sm font-semibold text-slate-300 hover:text-white transition-colors"
+                class="px-6 py-2 text-sm font-semibold text-zinc-300 hover:text-white transition-colors"
               >
                 Cancelar
               </button>

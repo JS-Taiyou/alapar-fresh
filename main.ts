@@ -33,7 +33,9 @@ app.use(define.middleware(async (ctx) => {
   if (!authResult) {
     devLog("  No auth result, continuing without user");
     const response = await ctx.next();
-    devLog(`<< RESPONSE ${ctx.req.method} ${path} (no user, status=${response?.status})`);
+    devLog(
+      `<< RESPONSE ${ctx.req.method} ${path} (no user, status=${response?.status})`,
+    );
     return response;
   }
 
@@ -49,8 +51,7 @@ app.use(define.middleware(async (ctx) => {
     path.startsWith("/api/invitations") ||
     path.startsWith("/api/exercises") ||
     path.startsWith("/api/default-split") ||
-    path.startsWith("/api/dashboard") ||
-    path.startsWith("/api/push");
+    path.startsWith("/api/dashboard");
 
   if (!needsFullState) {
     devLog("  Lightweight path, querying user...");
@@ -92,7 +93,9 @@ app.use(define.middleware(async (ctx) => {
       };
     }
     const response = await ctx.next();
-    devLog(`<< RESPONSE ${ctx.req.method} ${path} (lightweight, status=${response?.status})`);
+    devLog(
+      `<< RESPONSE ${ctx.req.method} ${path} (lightweight, status=${response?.status})`,
+    );
     if (authResult.refreshedTokens && response) {
       devLog("  Setting refreshed cookies");
       setAuthCookies(
@@ -106,7 +109,14 @@ app.use(define.middleware(async (ctx) => {
 
   devLog("  Full state path, resolving...");
   const state = await resolveUserState(authUser.id);
-  devLog("  State resolved, user:", state.user?.email, "emailAllowed:", state.isEmailAllowed, "hasRegistry:", !!state.activeRegistry);
+  devLog(
+    "  State resolved, user:",
+    state.user?.email,
+    "emailAllowed:",
+    state.isEmailAllowed,
+    "hasRegistry:",
+    !!state.activeRegistry,
+  );
 
   if (!state.user) {
     const user = await createUserFromSupabase(
@@ -162,7 +172,9 @@ app.use(define.middleware(async (ctx) => {
   const path2 = new URL(ctx.req.url).pathname;
   const hasUser = ctx.state.user !== null;
   const hasRegistry = ctx.state.activeRegistry !== null;
-  devLog(`>> ROUTING ${ctx.req.method} ${path2} hasUser=${hasUser} hasRegistry=${hasRegistry}`);
+  devLog(
+    `>> ROUTING ${ctx.req.method} ${path2} hasUser=${hasUser} hasRegistry=${hasRegistry}`,
+  );
 
   const publicPaths = [
     "/login",
@@ -182,7 +194,10 @@ app.use(define.middleware(async (ctx) => {
     return ctx.redirect(`/login?redirect=${encodeURIComponent(path2)}`);
   }
 
-  if (hasUser && (path2 === "/login" || path2 === "/signup" || path2 === "/forgot-password")) {
+  if (
+    hasUser &&
+    (path2 === "/login" || path2 === "/signup" || path2 === "/forgot-password")
+  ) {
     devLog(`<< ROUTING redirect to / (has user on auth page)`);
     return ctx.redirect("/");
   }

@@ -4,6 +4,7 @@ import {
   useSignal,
   useSignalEffect,
 } from "@preact/signals";
+import { useRef } from "preact/hooks";
 import type {
   BalanceBreakdownEntry,
   DefaultSplit,
@@ -13,11 +14,7 @@ import type {
   TransactionSplit,
 } from "../lib/types.ts";
 import type { EnrichedTransaction } from "../islands/shared-signals.ts";
-import {
-  calculateBalance,
-  calculatePairwiseBreakdown,
-  computeDefaultPercentages,
-} from "../lib/calculations.ts";
+import { computeDefaultPercentages } from "../lib/calculations.ts";
 import { sanitizeDecimal, sanitizeInteger } from "../lib/format.ts";
 
 interface TransactionModalProps {
@@ -43,15 +40,6 @@ type TransactionType =
   | "recurrente"
   | "pago"
   | "ajuste";
-
-function dedupById<T extends { id: string }>(items: T[]): T[] {
-  const seen = new Set<string>();
-  return items.filter((item) => {
-    if (seen.has(item.id)) return false;
-    seen.add(item.id);
-    return true;
-  });
-}
 
 interface EligibleTransaction {
   id: string;
@@ -98,6 +86,7 @@ export default function TransactionModal(props: TransactionModalProps) {
   const selectedRelatedTxId = useSignal<string | null>(null);
   const relatedTxSearch = useSignal("");
   const selectedExpenseIds = useSignal<string[]>([]);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const isEditing = useComputed(() => props.editingId.value !== null);
 
@@ -117,6 +106,24 @@ export default function TransactionModal(props: TransactionModalProps) {
       if (tx) populateEdit(tx);
     } else {
       resetForm();
+    }
+  });
+
+  useSignalEffect(() => {
+    const count = selectedExpenseIds.value.length;
+    if (count === 0) return;
+    const form = formRef.current;
+    if (!form) return;
+    requestAnimationFrame(() => {
+      form.scrollTo({ top: form.scrollHeight, behavior: "smooth" });
+    });
+  });
+
+  useSignalEffect(() => {
+    if (amount.value === 0 && linkToTransaction.value) {
+      linkToTransaction.value = false;
+      selectedRelatedTxId.value = null;
+      selectedExpenseIds.value = [];
     }
   });
 
@@ -586,7 +593,11 @@ export default function TransactionModal(props: TransactionModalProps) {
             : updated.createdAt;
           transactions.value = transactions.value.map((t) =>
             t.id === wasEditing
-              ? { ...updated, paidByUser: serverPaidBy, createdAt: serverCreatedAt }
+              ? {
+                ...updated,
+                paidByUser: serverPaidBy,
+                createdAt: serverCreatedAt,
+              }
               : t
           );
           props.onRecalculate();
@@ -607,7 +618,11 @@ export default function TransactionModal(props: TransactionModalProps) {
           const serverId = created.id as string;
           transactions.value = transactions.value.map((t) =>
             t.id === optimisticId
-              ? { ...created, paidByUser: serverPaidBy, createdAt: serverCreatedAt }
+              ? {
+                ...created,
+                paidByUser: serverPaidBy,
+                createdAt: serverCreatedAt,
+              }
               : t
           );
           if (serverId && serverId !== optimisticId) {
@@ -762,7 +777,7 @@ export default function TransactionModal(props: TransactionModalProps) {
         <header class="px-4 py-3 sm:px-6 sm:py-4 border-b border-border-custom flex justify-between items-center">
           <div>
             <h2 class="text-xl font-bold text-white">{modalTitle}</h2>
-            <p class="text-sm text-slate-400">{modalSubtitle}</p>
+            <p class="text-sm text-zinc-400">{modalSubtitle}</p>
           </div>
           <button
             type="button"
@@ -770,7 +785,7 @@ export default function TransactionModal(props: TransactionModalProps) {
               props.isOpen.value = false;
               props.editingId.value = null;
             }}
-            class="text-slate-400 hover:text-white transition-colors"
+            class="text-zinc-400 hover:text-white transition-colors"
           >
             <svg
               class="h-6 w-6"
@@ -789,18 +804,19 @@ export default function TransactionModal(props: TransactionModalProps) {
         </header>
 
         <form
+          ref={formRef}
           onSubmit={handleSubmit}
           class="p-4 sm:p-6 space-y-4 sm:space-y-8 overflow-y-auto max-h-[75vh]"
         >
           <div class="space-y-2">
             <label
-              class="block text-sm font-medium text-slate-300"
+              class="block text-sm font-medium text-zinc-300"
               for="description"
             >
               Descripción
             </label>
             <input
-              class="block w-full px-4 py-2.5 bg-background border border-border-custom rounded-custom text-white focus:ring-primary focus:border-primary"
+              class="block w-full px-4 py-2.5 bg-background border border-white/20 rounded-custom text-white focus:ring-primary focus:border-primary"
               id="description"
               type="text"
               placeholder={isPago
@@ -816,7 +832,7 @@ export default function TransactionModal(props: TransactionModalProps) {
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6">
             <div class="space-y-2">
               <label
-                class="block text-sm font-medium text-slate-300"
+                class="block text-sm font-medium text-zinc-300"
                 for="total-amount"
               >
                 {isPago
@@ -827,11 +843,11 @@ export default function TransactionModal(props: TransactionModalProps) {
                   : "Monto Total"}
               </label>
               <div class="relative">
-                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400">
                   $
                 </span>
                 <input
-                  class="block w-full pl-8 pr-4 py-2.5 bg-background border border-border-custom rounded-custom text-white text-lg font-semibold focus:ring-primary focus:border-primary"
+                  class="block w-full pl-8 pr-4 py-2.5 bg-background border border-white/20 rounded-custom text-white text-lg font-semibold focus:ring-primary focus:border-primary"
                   id="total-amount"
                   type="text"
                   inputmode="decimal"
@@ -879,7 +895,7 @@ export default function TransactionModal(props: TransactionModalProps) {
               {expenseType.value === "parcialidad" &&
                 installmentInputMode.value === "installment" &&
                 installmentTotal.value > 0 && (
-                <p class="text-xs text-slate-400 mt-1">
+                <p class="text-xs text-zinc-400 mt-1">
                   Total: ${Math.abs(amount.value).toLocaleString("en-US", {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
@@ -889,10 +905,10 @@ export default function TransactionModal(props: TransactionModalProps) {
             </div>
             {!isPago && (
               <div class="space-y-2">
-                <label class="block text-sm font-medium text-slate-300">
+                <label class="block text-sm font-medium text-zinc-300">
                   Tipo
                 </label>
-                <div class="flex gap-1 p-1 bg-background border border-border-custom rounded-custom">
+                <div class="flex gap-1 p-1 bg-background border border-white/20 rounded-custom">
                   {([
                     "unico",
                     "parcialidad",
@@ -905,7 +921,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                       class={`flex-1 py-2 text-sm font-medium rounded-custom transition-colors ${
                         expenseType.value === t
                           ? "bg-primary text-white shadow-sm"
-                          : "text-slate-400 hover:text-white"
+                          : "text-zinc-400 hover:text-white"
                       }`}
                     >
                       {t === "unico"
@@ -931,7 +947,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                   class={`flex-1 py-1.5 text-xs font-medium rounded-custom transition-colors border ${
                     installmentInputMode.value === "total"
                       ? "bg-primary/20 border-primary text-white"
-                      : "bg-background border-border-custom text-slate-400 hover:text-white"
+                      : "bg-background border-white/20 text-zinc-400 hover:text-white"
                   }`}
                 >
                   Monto Total
@@ -950,7 +966,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                   class={`flex-1 py-1.5 text-xs font-medium rounded-custom transition-colors border ${
                     installmentInputMode.value === "installment"
                       ? "bg-primary/20 border-primary text-white"
-                      : "bg-background border-border-custom text-slate-400 hover:text-white"
+                      : "bg-background border-white/20 text-zinc-400 hover:text-white"
                   }`}
                 >
                   Monto por Parcialidad
@@ -958,12 +974,12 @@ export default function TransactionModal(props: TransactionModalProps) {
               </div>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6">
                 <div class="space-y-2">
-                  <label class="block text-sm font-medium text-slate-300">
+                  <label class="block text-sm font-medium text-zinc-300">
                     Parcialidad Actual
                   </label>
                   <div class="flex items-center gap-3">
                     <select
-                      class="block w-full px-4 py-2 bg-background border border-border-custom rounded-custom text-white focus:ring-primary focus:border-primary"
+                      class="block w-full px-4 py-2 bg-background border border-white/20 rounded-custom text-white focus:ring-primary focus:border-primary"
                       value={installmentCurrent.value}
                       onChange={(e) =>
                         installmentCurrent.value = parseInt(
@@ -977,9 +993,9 @@ export default function TransactionModal(props: TransactionModalProps) {
                         ),
                       )}
                     </select>
-                    <span class="text-slate-500">de</span>
+                    <span class="text-zinc-500">de</span>
                     <input
-                      class="block w-20 px-4 py-2 bg-background border border-border-custom rounded-custom text-white focus:ring-primary focus:border-primary"
+                      class="block w-20 px-4 py-2 bg-background border border-white/20 rounded-custom text-white focus:ring-primary focus:border-primary"
                       type="text"
                       inputmode="numeric"
                       value={installmentTotalDisplay.value}
@@ -1018,7 +1034,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                         }
                       }}
                     />
-                    <span class="text-slate-500">meses</span>
+                    <span class="text-zinc-500">meses</span>
                   </div>
                 </div>
               </div>
@@ -1028,14 +1044,14 @@ export default function TransactionModal(props: TransactionModalProps) {
           {!isPago && (
             <div class="space-y-2">
               <label
-                class="block text-sm font-medium text-slate-300"
+                class="block text-sm font-medium text-zinc-300"
                 for="payer-select"
               >
                 Pagó
               </label>
               <select
                 id="payer-select"
-                class="block w-full px-4 py-2.5 bg-background border border-border-custom rounded-custom text-white focus:ring-primary focus:border-primary"
+                class="block w-full px-4 py-2.5 bg-background border border-white/20 rounded-custom text-white focus:ring-primary focus:border-primary"
                 value={userPaid.value}
                 onChange={(e) =>
                   userPaid.value = (e.target as HTMLSelectElement).value}
@@ -1052,13 +1068,13 @@ export default function TransactionModal(props: TransactionModalProps) {
 
           <div class="space-y-2">
             <label
-              class="block text-sm font-medium text-slate-300"
+              class="block text-sm font-medium text-zinc-300"
               for="notes"
             >
               Notas (opcional)
             </label>
             <textarea
-              class="block w-full px-4 py-2.5 bg-background border border-border-custom rounded-custom text-white focus:ring-primary focus:border-primary resize-none"
+              class="block w-full px-4 py-2.5 bg-background border border-white/20 rounded-custom text-white focus:ring-primary focus:border-primary resize-none"
               id="notes"
               rows={2}
               placeholder="Notas adicionales..."
@@ -1072,24 +1088,24 @@ export default function TransactionModal(props: TransactionModalProps) {
             ? (
               <>
                 <section class="space-y-3 sm:space-y-4">
-                  <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">
+                  <h3 class="text-sm font-bold uppercase tracking-wider text-zinc-400">
                     Transferencia
                   </h3>
-                  <div class="border border-border-custom rounded-custom overflow-hidden">
+                  <div class="border border-white/10 rounded-custom overflow-hidden">
                     <table class="hidden md:table w-full text-left border-collapse">
-                      <thead class="bg-slate-800/50">
+                      <thead class="bg-white/5">
                         <tr>
-                          <th class="px-4 py-3 text-xs font-semibold text-slate-400">
+                          <th class="px-4 py-3 text-xs font-semibold text-zinc-400">
                             USUARIO
                           </th>
-                          <th class="px-4 py-3 text-xs font-semibold text-slate-400 w-24 text-center">
+                          <th class="px-4 py-3 text-xs font-semibold text-zinc-400 w-24 text-center">
                             Pagó
                           </th>
-                          <th class="px-4 py-3 text-xs font-semibold text-slate-400 w-24 text-center">
+                          <th class="px-4 py-3 text-xs font-semibold text-zinc-400 w-24 text-center">
                             Recibió
                           </th>
                           {users.value.length > 2 && (
-                            <th class="px-4 py-3 text-xs font-semibold text-slate-400 text-right">
+                            <th class="px-4 py-3 text-xs font-semibold text-zinc-400 text-right">
                               SALDO
                             </th>
                           )}
@@ -1097,9 +1113,8 @@ export default function TransactionModal(props: TransactionModalProps) {
                       </thead>
                       <tbody class="divide-y divide-border-custom">
                         {users.value.map((user) => {
-                          const initials = user.name.split(" ").map((n) =>
-                            n[0]
-                          ).join("").substring(0, 2).toUpperCase();
+                          const initials = user.name.split(" ").map((n) => n[0])
+                            .join("").substring(0, 2).toUpperCase();
                           return (
                             <tr key={user.id}>
                               <td class="px-4 py-3">
@@ -1113,12 +1128,12 @@ export default function TransactionModal(props: TransactionModalProps) {
                                   <span class="text-sm font-medium text-white">
                                     {user.name}
                                     {user.id === currentUserId.value && (
-                                      <span class="text-slate-500 ml-1">
+                                      <span class="text-zinc-500 ml-1">
                                         (Tú)
                                       </span>
                                     )}
                                     {props.entityIds.value.has(user.id) && (
-                                      <span class="text-xs ml-1 px-1.5 py-0.5 rounded bg-slate-700 text-slate-400">
+                                      <span class="text-xs ml-1 px-1.5 py-0.5 rounded bg-white/10 text-zinc-400">
                                         tercero
                                       </span>
                                     )}
@@ -1155,10 +1170,9 @@ export default function TransactionModal(props: TransactionModalProps) {
                                   onChange={() => {
                                     paymentRecipient.value = user.id;
                                     if (userPaid.value === user.id) {
-                                      userPaid.value =
-                                        users.value.find((u) =>
-                                          u.id !== user.id
-                                        )?.id ?? currentUserId.value;
+                                      userPaid.value = users.value.find((u) =>
+                                        u.id !== user.id
+                                      )?.id ?? currentUserId.value;
                                     }
                                   }}
                                   class="accent-indigo-400"
@@ -1168,9 +1182,11 @@ export default function TransactionModal(props: TransactionModalProps) {
                                 <td class="px-4 py-3 text-right">
                                   {user.id !== currentUserId.value &&
                                     (() => {
-                                      const bd = props.balanceEntries.value.find(
-                                        (b) => b.userId === user.id,
-                                      );
+                                      const bd = props.balanceEntries.value
+                                        .find(
+                                          (b) =>
+                                            b.userId === user.id,
+                                        );
                                       if (
                                         !bd || Math.abs(bd.amount) < 0.01
                                       ) {
@@ -1212,9 +1228,7 @@ export default function TransactionModal(props: TransactionModalProps) {
 
                     <div class="md:hidden divide-y divide-border-custom">
                       {users.value.map((user) => {
-                        const initials = user.name.split(" ").map((n) =>
-                          n[0]
-                        )
+                        const initials = user.name.split(" ").map((n) => n[0])
                           .join("").substring(0, 2).toUpperCase();
                         const bd = users.value.length > 2 &&
                             user.id !== currentUserId.value
@@ -1228,7 +1242,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                             class="flex items-center gap-3 px-3 py-3"
                           >
                             <div class="flex flex-col items-center gap-1">
-                              <span class="text-[9px] text-slate-500 uppercase">
+                              <span class="text-[9px] text-zinc-500 uppercase">
                                 Pagó
                               </span>
                               <input
@@ -1240,16 +1254,15 @@ export default function TransactionModal(props: TransactionModalProps) {
                                   userPaid.value = user.id;
                                   if (paymentRecipient.value === user.id) {
                                     paymentRecipient.value =
-                                      users.value.find((u) =>
-                                        u.id !== user.id
-                                      )?.id ?? "";
+                                      users.value.find((u) => u.id !== user.id)
+                                        ?.id ?? "";
                                   }
                                 }}
                                 class="accent-primary"
                               />
                             </div>
                             <div class="flex flex-col items-center gap-1">
-                              <span class="text-[9px] text-slate-500 uppercase">
+                              <span class="text-[9px] text-zinc-500 uppercase">
                                 Recibió
                               </span>
                               <input
@@ -1279,12 +1292,12 @@ export default function TransactionModal(props: TransactionModalProps) {
                                 <span class="text-sm font-medium text-white truncate">
                                   {user.name}
                                   {user.id === currentUserId.value && (
-                                    <span class="text-slate-500 ml-1">
+                                    <span class="text-zinc-500 ml-1">
                                       (Tú)
                                     </span>
                                   )}
                                   {props.entityIds.value.has(user.id) && (
-                                    <span class="text-xs ml-1 px-1 py-0.5 rounded bg-slate-700 text-slate-400">
+                                    <span class="text-xs ml-1 px-1 py-0.5 rounded bg-white/10 text-zinc-400">
                                       tercero
                                     </span>
                                   )}
@@ -1329,7 +1342,8 @@ export default function TransactionModal(props: TransactionModalProps) {
                     <input
                       type="checkbox"
                       checked={linkToTransaction.value}
-                      disabled={!hasEligibleTransactions.value}
+                      disabled={!hasEligibleTransactions.value ||
+                        amount.value === 0}
                       onChange={() => {
                         linkToTransaction.value = !linkToTransaction.value;
                         if (!linkToTransaction.value) {
@@ -1339,17 +1353,17 @@ export default function TransactionModal(props: TransactionModalProps) {
                       }}
                       class="accent-primary w-4 h-4"
                     />
-                    <span class="text-sm font-medium text-slate-300">
+                    <span class="text-sm font-medium text-zinc-300">
                       Relacionar este pago a gastos existentes
                     </span>
                     {!hasEligibleTransactions.value && (
                       <span class="relative group">
-                        <span class="inline-flex items-center justify-center w-4 h-4 text-xs font-bold rounded-full bg-slate-700 text-slate-400 cursor-help">
+                        <span class="inline-flex items-center justify-center w-4 h-4 text-xs font-bold rounded-full bg-white/10 text-zinc-400 cursor-help">
                           ?
                         </span>
-                        <span class="absolute left-5 top-1/2 -translate-y-1/2 w-64 bg-slate-800 border border-white/10 text-white text-xs font-normal no-underline rounded-custom px-3 py-2 shadow-xl z-50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                          Sólo puedes relacionar pagos cuando tienes saldo
-                          por pagar!
+                        <span class="absolute left-5 top-1/2 -translate-y-1/2 w-64 bg-surface border border-white/10 text-white text-xs font-normal no-underline rounded-custom px-3 py-2 shadow-xl z-50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                          Sólo puedes relacionar pagos cuando tienes saldo por
+                          pagar!
                         </span>
                       </span>
                     )}
@@ -1359,7 +1373,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                     hasEligibleTransactions.value && (
                     <div class="space-y-2">
                       <div class="relative">
-                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
+                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-zinc-500">
                           <svg
                             class="h-4 w-4"
                             fill="none"
@@ -1381,13 +1395,13 @@ export default function TransactionModal(props: TransactionModalProps) {
                           onInput={(e) =>
                             relatedTxSearch.value =
                               (e.target as HTMLInputElement).value}
-                          class="w-full bg-slate-800 border-slate-700 rounded-custom pl-9 pr-8 text-white text-sm placeholder-slate-500 focus:ring-primary focus:border-primary py-2"
+                          class="w-full bg-background border-white/20 rounded-custom pl-9 pr-8 text-white text-sm placeholder-zinc-500 focus:ring-primary focus:border-primary py-2"
                         />
                         {relatedTxSearch.value && (
                           <button
                             type="button"
                             onClick={() => relatedTxSearch.value = ""}
-                            class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-white"
+                            class="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-500 hover:text-white"
                           >
                             <svg
                               class="w-3.5 h-3.5"
@@ -1406,10 +1420,10 @@ export default function TransactionModal(props: TransactionModalProps) {
                         )}
                       </div>
 
-                      <div class="max-h-60 overflow-y-auto custom-scrollbar space-y-1.5 border border-white/5 rounded-custom p-2 bg-slate-900/50">
+                      <div class="max-h-60 overflow-y-auto custom-scrollbar space-y-1.5 border border-white/5 rounded-custom p-2 bg-background">
                         {filteredEligible.value.length === 0
                           ? (
-                            <p class="text-xs text-slate-500 text-center py-4">
+                            <p class="text-xs text-zinc-400 text-center py-4">
                               No se encontraron gastos.
                             </p>
                           )
@@ -1440,7 +1454,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                                 class={`w-full text-left p-3 rounded-custom transition-all ${
                                   isSelected
                                     ? "bg-emerald-900/30 border border-emerald-700/40"
-                                    : "bg-slate-800/50 border border-white/5 hover:bg-white/5"
+                                    : "bg-white/5 border border-white/5 hover:bg-white/5"
                                 }`}
                               >
                                 <div class="flex justify-between items-start gap-2">
@@ -1454,7 +1468,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                                     >
                                       {etx.description}
                                     </p>
-                                    <p class="text-xs text-slate-500 mt-0.5">
+                                    <p class="text-xs text-zinc-400 mt-0.5">
                                       Pagó {paidByName} &bull;{" "}
                                       {new Date(etx.createdAt)
                                         .toLocaleDateString("es-MX", {
@@ -1474,7 +1488,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                                           etx.remainingDebt -
                                             etx.originalDebt,
                                         ) > 0.01 && (
-                                      <p class="text-[10px] text-slate-500">
+                                      <p class="text-[10px] text-zinc-400">
                                         de ${etx.originalDebt
                                           .toLocaleString("en-US", {
                                             minimumFractionDigits: 2,
@@ -1503,8 +1517,8 @@ export default function TransactionModal(props: TransactionModalProps) {
                             const remainder = Math.abs(amount.value) -
                               totalAllocated;
                             return (
-                              <div class="border border-white/10 rounded-custom p-3 bg-slate-800/40 space-y-2">
-                                <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                              <div class="border border-white/10 rounded-custom p-3 bg-white/5 space-y-2">
+                                <p class="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
                                   Distribución
                                 </p>
                                 {alloc.map((a, idx) => {
@@ -1523,7 +1537,11 @@ export default function TransactionModal(props: TransactionModalProps) {
                                   return (
                                     <div
                                       key={a.expenseId}
-                                      class={`flex flex-col gap-1${idx > 0 ? " pt-2 border-t border-white/5" : ""}`}
+                                      class={`flex flex-col gap-1${
+                                        idx > 0
+                                          ? " pt-2 border-t border-white/5"
+                                          : ""
+                                      }`}
                                     >
                                       <div class="flex justify-between items-center text-xs">
                                         <span class="text-slate-300 truncate">
@@ -1536,20 +1554,39 @@ export default function TransactionModal(props: TransactionModalProps) {
                                           })}
                                         </span>
                                       </div>
-                                      <div class="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                                      <div class="h-1.5 bg-white/10 rounded-full overflow-hidden">
                                         <div
                                           class={`h-full ${barColor} rounded-full transition-all`}
                                           style={`width: ${barWidth}%`}
                                         />
                                       </div>
-                                      <div class="flex justify-between items-center text-[10px] text-slate-500">
+                                      <div class="flex justify-between items-center text-[10px] text-zinc-400">
                                         <span>
                                           {isFull
                                             ? "Completamente cubierto"
-                                            : `Cubriendo $${a.amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} de $${exp!.remainingDebt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                            : `Cubriendo $${
+                                              a.amount.toLocaleString("en-US", {
+                                                minimumFractionDigits: 2,
+                                                maximumFractionDigits: 2,
+                                              })
+                                            } de $${
+                                              exp!.remainingDebt.toLocaleString(
+                                                "en-US",
+                                                {
+                                                  minimumFractionDigits: 2,
+                                                  maximumFractionDigits: 2,
+                                                },
+                                              )
+                                            }`}
                                         </span>
                                         {!isFull && (
-                                          <span class={`${coverage >= 0.5 ? "text-amber-400" : "text-red-400"} font-medium`}>
+                                          <span
+                                            class={`${
+                                              coverage >= 0.5
+                                                ? "text-amber-400"
+                                                : "text-red-400"
+                                            } font-medium`}
+                                          >
                                             {barWidth}%
                                           </span>
                                         )}
@@ -1559,7 +1596,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                                 })}
                                 {remainder > 0.005 && (
                                   <div class="flex justify-between items-center text-xs border-t border-white/5 pt-1.5">
-                                    <span class="text-slate-400">
+                                    <span class="text-zinc-400">
                                       Sin asignar
                                     </span>
                                     <span class="text-amber-400 font-semibold">
@@ -1583,7 +1620,7 @@ export default function TransactionModal(props: TransactionModalProps) {
             : (
               <section class="space-y-3 sm:space-y-4">
                 <div class="flex justify-between items-center">
-                  <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">
+                  <h3 class="text-sm font-bold uppercase tracking-wider text-zinc-400">
                     División
                   </h3>
                   <div class="flex gap-2">
@@ -1593,7 +1630,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                       class={`text-xs font-semibold px-3 py-1.5 rounded transition-colors ${
                         splitMode.value === "auto"
                           ? "bg-primary text-white shadow-sm"
-                          : "text-slate-400 hover:text-white hover:bg-white/5"
+                          : "text-zinc-400 hover:text-white hover:bg-white/5"
                       }`}
                     >
                       Auto
@@ -1611,7 +1648,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                       class={`text-xs font-semibold px-3 py-1.5 rounded transition-colors ${
                         splitMode.value === "percentage"
                           ? "bg-primary text-white shadow-sm"
-                          : "text-slate-400 hover:text-white hover:bg-white/5"
+                          : "text-zinc-400 hover:text-white hover:bg-white/5"
                       }`}
                     >
                       Porcentaje
@@ -1622,7 +1659,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                       class={`text-xs font-semibold px-3 py-1.5 rounded transition-colors ${
                         splitMode.value === "fixed"
                           ? "bg-primary text-white shadow-sm"
-                          : "text-slate-400 hover:text-white hover:bg-white/5"
+                          : "text-zinc-400 hover:text-white hover:bg-white/5"
                       }`}
                     >
                       Monto Fijo
@@ -1630,17 +1667,17 @@ export default function TransactionModal(props: TransactionModalProps) {
                   </div>
                 </div>
 
-                <div class="border border-border-custom rounded-custom overflow-hidden">
+                <div class="border border-white/10 rounded-custom overflow-hidden">
                   <table class="hidden md:table w-full text-left border-collapse">
-                    <thead class="bg-slate-800/50">
+                    <thead class="bg-white/5">
                       <tr>
-                        <th class="px-4 py-3 text-xs font-semibold text-slate-400">
+                        <th class="px-4 py-3 text-xs font-semibold text-zinc-400">
                           USUARIO
                         </th>
-                        <th class="px-4 py-3 text-xs font-semibold text-slate-400 w-32 text-right">
+                        <th class="px-4 py-3 text-xs font-semibold text-zinc-400 w-32 text-right">
                           %
                         </th>
-                        <th class="px-4 py-3 text-xs font-semibold text-slate-400 w-40 text-right">
+                        <th class="px-4 py-3 text-xs font-semibold text-zinc-400 w-40 text-right">
                           MONTO
                         </th>
                       </tr>
@@ -1650,9 +1687,8 @@ export default function TransactionModal(props: TransactionModalProps) {
                         const split = splits.value.find((s) =>
                           s.userId === user.id
                         );
-                        const initials = user.name.split(" ").map((n) =>
-                          n[0]
-                        ).join("").substring(0, 2).toUpperCase();
+                        const initials = user.name.split(" ").map((n) => n[0])
+                          .join("").substring(0, 2).toUpperCase();
                         return (
                           <tr key={user.id}>
                             <td class="px-4 py-3">
@@ -1666,12 +1702,12 @@ export default function TransactionModal(props: TransactionModalProps) {
                                 <span class="text-sm font-medium text-white">
                                   {user.name}
                                   {user.id === currentUserId.value && (
-                                    <span class="text-slate-500 ml-1">
+                                    <span class="text-zinc-500 ml-1">
                                       (Tú)
                                     </span>
                                   )}
                                   {props.entityIds.value.has(user.id) && (
-                                    <span class="text-xs ml-1 px-1.5 py-0.5 rounded bg-slate-700 text-slate-400">
+                                    <span class="text-xs ml-1 px-1.5 py-0.5 rounded bg-white/10 text-zinc-400">
                                       tercero
                                     </span>
                                   )}
@@ -1683,7 +1719,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                                 {splitMode.value === "percentage"
                                   ? (
                                     <input
-                                      class="w-20 px-2 py-1 bg-background border border-border-custom rounded text-right text-sm font-medium text-white focus:ring-primary focus:border-primary"
+                                      class="w-20 px-2 py-1 bg-background border border-white/20 rounded text-right text-sm font-medium text-white focus:ring-primary focus:border-primary"
                                       type="text"
                                       inputmode="decimal"
                                       value={percentages.value[user.id] ??
@@ -1703,11 +1739,11 @@ export default function TransactionModal(props: TransactionModalProps) {
                                     />
                                   )
                                   : (
-                                    <span class="text-sm text-slate-400">
+                                    <span class="text-sm text-zinc-400">
                                       {split?.percentage.toFixed(0) ?? 0}
                                     </span>
                                   )}
-                                <span class="ml-1 text-slate-500">%</span>
+                                <span class="ml-1 text-zinc-500">%</span>
                               </div>
                             </td>
                             <td class="px-4 py-3">
@@ -1715,7 +1751,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                                 {splitMode.value === "fixed"
                                   ? (
                                     <input
-                                      class="w-28 px-2 py-1 bg-background border border-border-custom rounded text-right text-sm font-medium text-white focus:ring-primary focus:border-primary"
+                                      class="w-28 px-2 py-1 bg-background border border-white/20 rounded text-right text-sm font-medium text-white focus:ring-primary focus:border-primary"
                                       type="text"
                                       inputmode="decimal"
                                       value={fixedAmounts.value[user.id] ??
@@ -1740,7 +1776,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                                     </span>
                                   )}
                                 {splitMode.value === "fixed" && (
-                                  <span class="ml-1 text-slate-500">$</span>
+                                  <span class="ml-1 text-zinc-500">$</span>
                                 )}
                               </div>
                             </td>
@@ -1748,9 +1784,9 @@ export default function TransactionModal(props: TransactionModalProps) {
                         );
                       })}
                     </tbody>
-                    <tfoot class="bg-slate-800/30">
+                    <tfoot class="bg-white/5">
                       <tr>
-                        <td class="px-4 py-2 text-xs font-bold text-slate-400 italic">
+                        <td class="px-4 py-2 text-xs font-bold text-zinc-400 italic">
                           TOTAL
                         </td>
                         <td
@@ -1800,12 +1836,12 @@ export default function TransactionModal(props: TransactionModalProps) {
                               <span class="text-sm font-medium text-white truncate">
                                 {user.name}
                                 {user.id === currentUserId.value && (
-                                  <span class="text-slate-500 ml-1">
+                                  <span class="text-zinc-500 ml-1">
                                     (Tú)
                                   </span>
                                 )}
                                 {props.entityIds.value.has(user.id) && (
-                                  <span class="text-xs ml-1 px-1 py-0.5 rounded bg-slate-700 text-slate-400">
+                                  <span class="text-xs ml-1 px-1 py-0.5 rounded bg-white/10 text-zinc-400">
                                     tercero
                                   </span>
                                 )}
@@ -1816,7 +1852,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                                 {splitMode.value === "percentage"
                                   ? (
                                     <input
-                                      class="w-16 px-2 py-1 bg-background border border-border-custom rounded text-right text-sm font-medium text-white focus:ring-primary focus:border-primary"
+                                      class="w-16 px-2 py-1 bg-background border border-white/20 rounded text-right text-sm font-medium text-white focus:ring-primary focus:border-primary"
                                       type="text"
                                       inputmode="decimal"
                                       value={percentages.value[user.id] ??
@@ -1836,11 +1872,11 @@ export default function TransactionModal(props: TransactionModalProps) {
                                     />
                                   )
                                   : (
-                                    <span class="text-slate-400">
+                                    <span class="text-zinc-400">
                                       {split?.percentage.toFixed(0) ?? 0}
                                     </span>
                                   )}
-                                <span class="ml-0.5 text-slate-500 text-xs">
+                                <span class="ml-0.5 text-zinc-500 text-xs">
                                   %
                                 </span>
                               </div>
@@ -1848,7 +1884,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                                 {splitMode.value === "fixed"
                                   ? (
                                     <input
-                                      class="w-24 px-2 py-1 bg-background border border-border-custom rounded text-right text-sm font-medium text-white focus:ring-primary focus:border-primary"
+                                      class="w-24 px-2 py-1 bg-background border border-white/20 rounded text-right text-sm font-medium text-white focus:ring-primary focus:border-primary"
                                       type="text"
                                       inputmode="decimal"
                                       value={fixedAmounts.value[user.id] ??
@@ -1873,7 +1909,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                                     </span>
                                   )}
                                 {splitMode.value === "fixed" && (
-                                  <span class="ml-0.5 text-slate-500 text-xs">
+                                  <span class="ml-0.5 text-zinc-500 text-xs">
                                     $
                                   </span>
                                 )}
@@ -1883,8 +1919,8 @@ export default function TransactionModal(props: TransactionModalProps) {
                         </div>
                       );
                     })}
-                    <div class="flex items-center justify-between px-3 py-2 bg-slate-800/30">
-                      <span class="text-xs font-bold text-slate-400 italic">
+                    <div class="flex items-center justify-between px-3 py-2 bg-white/5">
+                      <span class="text-xs font-bold text-zinc-400 italic">
                         TOTAL
                       </span>
                       <div class="flex items-center gap-4">
@@ -1916,7 +1952,7 @@ export default function TransactionModal(props: TransactionModalProps) {
             )}
         </form>
 
-        <footer class="px-4 py-3 sm:px-6 sm:py-4 border-t border-border-custom bg-slate-800/20 flex justify-between items-center gap-3">
+        <footer class="px-4 py-3 sm:px-6 sm:py-4 border-t border-border-custom bg-white/5 flex justify-between items-center gap-3">
           <div>
             {isEditing.value && (
               <button
@@ -1936,7 +1972,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                 props.isOpen.value = false;
                 props.editingId.value = null;
               }}
-              class="px-6 py-2 text-sm font-semibold text-slate-300 hover:text-white transition-colors"
+              class="px-6 py-2 text-sm font-semibold text-zinc-300 hover:text-white transition-colors"
             >
               Cancelar
             </button>

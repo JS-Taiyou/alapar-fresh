@@ -15,7 +15,7 @@ export default function JoinCodeForm() {
       <input
         type="text"
         placeholder="Código (ej: K9X2M4B7)"
-        class="flex-1 px-4 py-2.5 bg-background border border-border-custom rounded-custom text-white text-sm uppercase focus:ring-emerald-500 focus:border-emerald-500"
+        class="flex-1 px-4 py-2.5 bg-background border border-white/20 rounded-custom text-white text-sm uppercase focus:ring-emerald-500 focus:border-emerald-500"
         maxLength={8}
         value={code.value}
         onInput={(e) => code.value = (e.target as HTMLInputElement).value}

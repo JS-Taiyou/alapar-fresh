@@ -8,7 +8,6 @@ import type {
   BalanceBreakdownEntry,
   DefaultSplit,
   Participant,
-  SplitEntry,
   TransactionPayment,
   TransactionSplit,
 } from "../lib/types.ts";
@@ -39,6 +38,8 @@ import {
 import { cache } from "../lib/cache.ts";
 import TransactionModal from "../components/TransactionModal.tsx";
 
+let lastPushSubscribedRegistry: string | null = null;
+
 interface SpawnCandidate {
   id: string;
   description: string;
@@ -66,7 +67,6 @@ interface TransactionListProps {
   accessToken?: string;
 }
 
-
 function TransactionCardClickable(props: {
   tx: EnrichedTransaction;
   users: Participant[];
@@ -93,7 +93,7 @@ function TransactionCardClickable(props: {
               Saldo pendiente
             </span>
           </span>
-          <span class="text-sm text-gray-500">
+          <span class="text-sm text-zinc-400">
             {new Date(tx.createdAt).toLocaleDateString("es-MX", {
               month: "short",
               day: "numeric",
@@ -157,7 +157,7 @@ function TransactionCardClickable(props: {
                 Pago
               </span>
             </span>
-            <span class="text-sm text-gray-500">
+            <span class="text-sm text-zinc-400">
               {new Date(tx.createdAt).toLocaleDateString("es-MX", {
                 month: "short",
                 day: "numeric",
@@ -223,10 +223,10 @@ function TransactionCardClickable(props: {
                 />
               </svg>
               <div class="flex-1 min-w-0">
-                <p class="text-xs font-medium text-slate-300 truncate">
+                <p class="text-xs font-medium text-zinc-300 truncate">
                   {relatedTx.description}
                 </p>
-                <p class="text-[10px] text-slate-500">
+                <p class="text-[10px] text-zinc-400">
                   {new Date(relatedTx.createdAt).toLocaleDateString("es-MX", {
                     month: "short",
                     day: "numeric",
@@ -316,7 +316,7 @@ function TransactionCardClickable(props: {
         <span class="text-lg font-semibold text-white truncate">
           {tx.description}
         </span>
-        <div class="text-sm text-gray-500">
+        <div class="text-sm text-zinc-400">
           <span class="block sm:inline">
             {new Date(tx.createdAt).toLocaleDateString("es-MX", {
               month: "short",
@@ -379,7 +379,7 @@ function TransactionCardClickable(props: {
               { minimumFractionDigits: 2, maximumFractionDigits: 2 },
             )}
         </span>
-        <span class="text-xs text-slate-500">
+        <span class="text-xs text-zinc-400">
           de ${perInstallmentTotal.toLocaleString("en-US", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
@@ -525,7 +525,10 @@ export default function TransactionList(props: TransactionListProps) {
     );
 
     requestNotificationPermission().then((granted) => {
-      if (granted) subscribeToPush(rid);
+      if (granted && rid !== lastPushSubscribedRegistry) {
+        lastPushSubscribedRegistry = rid;
+        subscribeToPush(rid);
+      }
     });
 
     return () => unsubscribeAll();
@@ -761,9 +764,9 @@ export default function TransactionList(props: TransactionListProps) {
     return (
       <main class="flex-1 overflow-y-auto custom-scrollbar p-6 flex items-center justify-center">
         <div class="text-center max-w-sm space-y-6">
-          <div class="bg-slate-800 p-6 rounded-full mx-auto w-fit">
+          <div class="bg-white/5 p-6 rounded-full mx-auto w-fit">
             <svg
-              class="h-16 w-16 text-slate-600"
+              class="h-16 w-16 text-zinc-500"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -779,7 +782,7 @@ export default function TransactionList(props: TransactionListProps) {
           <h3 class="text-2xl font-bold text-white">
             Está muy solo aquí
           </h3>
-          <p class="text-slate-400 text-base leading-relaxed">
+          <p class="text-zinc-400 text-base leading-relaxed">
             Asegúrate de invitar otros usuarios o crear un{" "}
             <span
               class="font-bold underline cursor-pointer text-orange-400 relative"
@@ -790,7 +793,7 @@ export default function TransactionList(props: TransactionListProps) {
             >
               tercero
               {showTerceroPopover.value && (
-                <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-slate-800 border border-white/10 text-white text-xs font-normal no-underline rounded-custom px-3 py-2 shadow-xl z-50">
+                <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-surface border border-white/10 text-white text-xs font-normal no-underline rounded-custom px-3 py-2 shadow-xl z-50">
                   Un tercero es una entidad diferente de ti pero que no se va a
                   registrar como usuario, por ejemplo: un banco!
                 </span>
@@ -847,7 +850,7 @@ export default function TransactionList(props: TransactionListProps) {
     <>
       <main class="flex-1 overflow-y-auto custom-scrollbar p-2 sm:p-6 space-y-4 relative">
         <div class="flex justify-between items-center mb-2">
-          <h2 class="text-lg font-semibold text-gray-200">
+          <h2 class="text-lg font-semibold text-zinc-200">
             {filterUserId.value
               ? `Ejercicio actual (pagados por ${
                 users.value.find((u) => u.id === filterUserId.value)?.name ??
@@ -867,7 +870,7 @@ export default function TransactionList(props: TransactionListProps) {
                   class={`text-xs font-semibold px-3 py-1.5 rounded transition-colors ${
                     filterUserId.value === null
                       ? "bg-primary text-white shadow-sm"
-                      : "text-slate-400 hover:text-white hover:bg-white/5 border border-white/10"
+                      : "text-zinc-400 hover:text-white hover:bg-white/5 border border-white/10"
                   }`}
                 >
                   Todos
@@ -889,7 +892,7 @@ export default function TransactionList(props: TransactionListProps) {
                       class={`text-xs font-semibold px-3 py-1.5 rounded transition-colors flex items-center gap-1.5 ${
                         filterUserId.value === user.id
                           ? "text-white shadow-sm"
-                          : "text-slate-400 hover:text-white hover:bg-white/5 border border-white/10"
+                          : "text-zinc-400 hover:text-white hover:bg-white/5 border border-white/10"
                       }`}
                       style={filterUserId.value === user.id
                         ? `background-color: ${user.color}`
@@ -908,7 +911,7 @@ export default function TransactionList(props: TransactionListProps) {
               </div>
             )}
             <div class="relative">
-              <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-zinc-500">
                 <svg
                   class="h-5 w-5"
                   fill="none"
@@ -929,13 +932,13 @@ export default function TransactionList(props: TransactionListProps) {
                 value={searchQuery.value}
                 onInput={(e) =>
                   searchQuery.value = (e.target as HTMLInputElement).value}
-                class="w-full bg-slate-800 border-slate-700 rounded-custom pl-10 text-white placeholder-slate-500 focus:ring-primary focus:border-primary py-2.5"
+                class="w-full bg-surface border-border-custom rounded-custom pl-10 text-white placeholder-zinc-500 focus:ring-primary focus:border-primary py-2.5"
               />
               {searchQuery.value && (
                 <button
                   type="button"
                   onClick={() => searchQuery.value = ""}
-                  class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-white"
+                  class="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-500 hover:text-white"
                 >
                   <svg
                     class="w-4 h-4"
@@ -1035,9 +1038,9 @@ export default function TransactionList(props: TransactionListProps) {
         {transactions.value.length === 0
           ? (
             <div class="flex flex-col items-center justify-center py-20 text-center">
-              <div class="bg-slate-800 p-4 rounded-full mb-4">
+              <div class="bg-white/5 p-4 rounded-full mb-4">
                 <svg
-                  class="h-12 w-12 text-slate-600"
+                  class="h-12 w-12 text-zinc-500"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -1050,10 +1053,10 @@ export default function TransactionList(props: TransactionListProps) {
                   />
                 </svg>
               </div>
-              <h3 class="text-lg font-medium text-slate-300">
+              <h3 class="text-lg font-medium text-zinc-300">
                 Sin transacciones
               </h3>
-              <p class="text-slate-500 mt-2">
+              <p class="text-zinc-400 mt-2">
                 Agrega un gasto o un pago
               </p>
             </div>
@@ -1061,7 +1064,7 @@ export default function TransactionList(props: TransactionListProps) {
           : filteredTransactions.value.length === 0
           ? (
             <div class="flex flex-col items-center justify-center py-12 text-center">
-              <p class="text-slate-500">
+              <p class="text-zinc-400">
                 No se encontraron transacciones con estos filtros.
               </p>
               <button
@@ -1089,12 +1092,12 @@ export default function TransactionList(props: TransactionListProps) {
               />
             </div>
           ))}
-        <div class="h-24" />
+        <div class="h-12" />
       </main>
 
       <div class="hidden sm:flex fixed bottom-8 right-8 z-50 flex-col gap-3">
         <div class="group relative">
-          <span class="absolute right-full top-1/2 -translate-y-1/2 mr-3 whitespace-nowrap bg-slate-800 text-white text-sm px-3 py-1.5 rounded-custom shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+          <span class="absolute right-full top-1/2 -translate-y-1/2 mr-3 whitespace-nowrap bg-surface text-white text-sm px-3 py-1.5 rounded-custom shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
             Agregar pago
           </span>
           <button
@@ -1118,7 +1121,7 @@ export default function TransactionList(props: TransactionListProps) {
           </button>
         </div>
         <div class="group relative">
-          <span class="absolute right-full top-1/2 -translate-y-1/2 mr-3 whitespace-nowrap bg-slate-800 text-white text-sm px-3 py-1.5 rounded-custom shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+          <span class="absolute right-full top-1/2 -translate-y-1/2 mr-3 whitespace-nowrap bg-surface text-white text-sm px-3 py-1.5 rounded-custom shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
             Agregar gasto
           </span>
           <button
@@ -1142,7 +1145,6 @@ export default function TransactionList(props: TransactionListProps) {
           </button>
         </div>
       </div>
-
 
       <TransactionModal
         isOpen={isOpen}

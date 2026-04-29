@@ -37,7 +37,8 @@ export default function AuthForm(props: AuthFormProps) {
       const { error: oauthError } = await client.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: globalThis.location.origin + "/auth/callback?next=" + encodeURIComponent(redirectPath),
+          redirectTo: globalThis.location.origin + "/auth/callback?next=" +
+            encodeURIComponent(redirectPath),
         },
       });
       if (oauthError) {
@@ -144,7 +145,7 @@ export default function AuthForm(props: AuthFormProps) {
     <form onSubmit={handleSubmit} class="space-y-5">
       {successMessage.value
         ? (
-          <div class="text-sm text-blue-300 bg-blue-400/10 border border-blue-400/20 rounded-custom px-4 py-3 text-center">
+          <div class="text-sm text-blue-200 bg-blue-500/20 border border-blue-500/30 rounded-custom px-4 py-3 text-center">
             {successMessage.value}
           </div>
         )
@@ -153,13 +154,13 @@ export default function AuthForm(props: AuthFormProps) {
             {props.mode === "signup" && (
               <div>
                 <label
-                  class="block text-sm font-medium text-slate-300 mb-1.5"
+                  class="block text-sm font-medium text-zinc-300 mb-1.5"
                   for="name"
                 >
                   Nombre
                 </label>
                 <input
-                  class="block w-full px-4 py-2.5 bg-background border border-border-custom rounded-custom text-white focus:ring-primary focus:border-primary"
+                  class="block w-full px-4 py-2.5 bg-background border border-white/20 rounded-custom text-white focus:ring-primary focus:border-primary"
                   id="name"
                   type="text"
                   placeholder="Tu nombre"
@@ -172,13 +173,13 @@ export default function AuthForm(props: AuthFormProps) {
             )}
             <div>
               <label
-                class="block text-sm font-medium text-slate-300 mb-1.5"
+                class="block text-sm font-medium text-zinc-300 mb-1.5"
                 for="email"
               >
                 Email
               </label>
               <input
-                class="block w-full px-4 py-2.5 bg-background border border-border-custom rounded-custom text-white focus:ring-primary focus:border-primary"
+                class="block w-full px-4 py-2.5 bg-background border border-white/20 rounded-custom text-white focus:ring-primary focus:border-primary"
                 id="email"
                 type="email"
                 placeholder="tu@email.com"
@@ -190,14 +191,14 @@ export default function AuthForm(props: AuthFormProps) {
             </div>
             <div>
               <label
-                class="block text-sm font-medium text-slate-300 mb-1.5"
+                class="block text-sm font-medium text-zinc-300 mb-1.5"
                 for="password"
               >
                 Contraseña
               </label>
               <div class="relative">
                 <input
-                  class="block w-full px-4 py-2.5 pr-11 bg-background border border-border-custom rounded-custom text-white focus:ring-primary focus:border-primary"
+                  class="block w-full px-4 py-2.5 pr-11 bg-background border border-white/20 rounded-custom text-white focus:ring-primary focus:border-primary"
                   id="password"
                   type={showPassword.value ? "text" : "password"}
                   placeholder="••••••••"
@@ -209,7 +210,7 @@ export default function AuthForm(props: AuthFormProps) {
                 />
                 <button
                   type="button"
-                  class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300"
+                  class="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-300"
                   onClick={() => showPassword.value = !showPassword.value}
                   tabIndex={-1}
                   aria-label={showPassword.value
@@ -258,7 +259,7 @@ export default function AuthForm(props: AuthFormProps) {
             </div>
 
             {error.value && (
-              <div class="text-sm text-red-400 bg-red-400/10 border border-red-400/20 rounded-custom px-4 py-2">
+              <div class="text-sm text-red-300 bg-red-500/20 border border-red-500/30 rounded-custom px-4 py-2">
                 {error.value}
               </div>
             )}
@@ -267,7 +268,7 @@ export default function AuthForm(props: AuthFormProps) {
               type="button"
               onClick={handleGoogleSignIn}
               disabled={loading.value}
-              class="w-full py-3 bg-white/5 hover:bg-white/10 border border-border-custom text-white font-medium rounded-custom transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+              class="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/20 text-white font-medium rounded-custom transition-all flex items-center justify-center gap-3 disabled:opacity-50"
             >
               <svg class="w-5 h-5" viewBox="0 0 24 24">
                 <path
@@ -292,10 +293,10 @@ export default function AuthForm(props: AuthFormProps) {
 
             <div class="relative">
               <div class="absolute inset-0 flex items-center">
-                <div class="w-full border-t border-border-custom" />
+                <div class="w-full border-t border-white/10" />
               </div>
               <div class="relative flex justify-center text-sm">
-                <span class="bg-surface px-3 text-slate-500">o</span>
+                <span class="bg-surface px-3 text-zinc-500">o</span>
               </div>
             </div>
 
@@ -317,14 +318,14 @@ export default function AuthForm(props: AuthFormProps) {
         <p class="text-center text-sm">
           <a
             href="/forgot-password"
-            class="text-slate-400 hover:text-primary hover:underline"
+            class="text-zinc-400 hover:text-primary hover:underline"
           >
             Olvidaste tu contraseña?
           </a>
         </p>
       )}
 
-      <p class="text-center text-sm text-slate-400">
+      <p class="text-center text-sm text-zinc-400">
         {props.mode === "login"
           ? (
             <>

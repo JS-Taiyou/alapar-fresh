@@ -52,8 +52,7 @@ export default define.page(function JoinPage(ctx) {
           Invitación no encontrada
         </h1>
         <p class="text-slate-400 mb-6">
-          El código <span class="font-mono text-white">{data.code}</span>
-          {" "}
+          El código <span class="font-mono text-white">{data.code}</span>{" "}
           no es válido o ha expirado.
         </p>
         <a

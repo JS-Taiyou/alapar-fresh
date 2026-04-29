@@ -23,7 +23,7 @@ export default define.page(function ForgotPasswordPage() {
           </svg>
         </div>
         <h1 class="text-2xl font-bold text-white">Recuperar Contraseña</h1>
-        <p class="text-slate-400 text-sm mt-2">
+        <p class="text-zinc-400 text-sm mt-2">
           Ingresa tu email y te enviaremos un enlace para restablecerla
         </p>
       </div>

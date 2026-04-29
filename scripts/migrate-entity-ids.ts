@@ -9,7 +9,8 @@ const pool = new pg.Pool({
   max: 3,
 });
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface Entity {
   id: string;
@@ -21,7 +22,7 @@ async function migrate() {
   const client = await pool.connect();
   try {
     const { rows: registries } = await client.query(
-      "SELECT id, entities_json FROM registries WHERE entities_json IS NOT NULL"
+      "SELECT id, entities_json FROM registries WHERE entities_json IS NOT NULL",
     );
 
     let totalEntities = 0;
@@ -32,7 +33,9 @@ async function migrate() {
       const raw = reg.entities_json;
       if (!raw) continue;
 
-      const entities: Entity[] = typeof raw === "string" ? JSON.parse(raw) : raw;
+      const entities: Entity[] = typeof raw === "string"
+        ? JSON.parse(raw)
+        : raw;
       const needsMigration = entities.some((e) => !UUID_RE.test(e.id));
       if (!needsMigration) continue;
 
@@ -46,7 +49,9 @@ async function migrate() {
       if (idMap.size === 0) continue;
 
       console.log(
-        `[registry ${registryId}] Mapping ${idMap.size} entity ID(s): ${[...idMap.entries()].map(([o, n]) => `${o} -> ${n}`).join(", ")}`
+        `[registry ${registryId}] Mapping ${idMap.size} entity ID(s): ${
+          [...idMap.entries()].map(([o, n]) => `${o} -> ${n}`).join(", ")
+        }`,
       );
 
       await client.query("BEGIN");
@@ -58,12 +63,12 @@ async function migrate() {
         }));
         await client.query(
           "UPDATE registries SET entities_json = $1 WHERE id = $2",
-          [JSON.stringify(updatedEntities), registryId]
+          [JSON.stringify(updatedEntities), registryId],
         );
 
         const { rows: txRows } = await client.query(
           "SELECT id, user_paid, split_json FROM transactions WHERE registry_id = $1",
-          [registryId]
+          [registryId],
         );
 
         for (const tx of txRows) {
@@ -101,7 +106,7 @@ async function migrate() {
           if (needsUpdate) {
             await client.query(
               "UPDATE transactions SET user_paid = $1, split_json = $2 WHERE id = $3",
-              [newUserPaid, newSplitJson, txId]
+              [newUserPaid, newSplitJson, txId],
             );
             totalTransactions++;
           }
@@ -110,17 +115,22 @@ async function migrate() {
         await client.query("COMMIT");
         totalEntities += idMap.size;
         console.log(
-          `[registry ${registryId}] Committed: ${idMap.size} entities, ${totalTransactions} transactions updated`
+          `[registry ${registryId}] Committed: ${idMap.size} entities, ${totalTransactions} transactions updated`,
         );
         totalTransactions = 0;
       } catch (err) {
         await client.query("ROLLBACK");
-        console.error(`[registry ${registryId}] ROLLED BACK due to error:`, err);
+        console.error(
+          `[registry ${registryId}] ROLLED BACK due to error:`,
+          err,
+        );
         throw err;
       }
     }
 
-    console.log(`\nDone. Migrated ${totalEntities} entity ID(s) across all registries.`);
+    console.log(
+      `\nDone. Migrated ${totalEntities} entity ID(s) across all registries.`,
+    );
   } finally {
     client.release();
     await pool.end();

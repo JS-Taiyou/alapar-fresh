@@ -61,7 +61,10 @@ export default function AuthCallback(props: AuthCallbackProps) {
               <pre class="text-xs text-slate-500 bg-slate-900 p-3 rounded overflow-auto text-left whitespace-pre-wrap break-all">
                 {debug.value}
               </pre>
-              <a href="/login" class="text-primary hover:underline text-sm mt-4 inline-block">
+              <a
+                href="/login"
+                class="text-primary hover:underline text-sm mt-4 inline-block"
+              >
                 Volver a iniciar sesión
               </a>
             </>

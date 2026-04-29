@@ -162,7 +162,7 @@ export default function EntityManager(props: EntityManagerProps) {
             <header class="px-6 py-4 border-b border-border-custom flex justify-between items-center">
               <div>
                 <h2 class="text-xl font-bold text-white">Terceros</h2>
-                <p class="text-sm text-slate-400 mt-1">
+                <p class="text-sm text-zinc-400 mt-1">
                   Personas o entidades que participan en gastos
                 </p>
               </div>
@@ -191,11 +191,11 @@ export default function EntityManager(props: EntityManagerProps) {
             </header>
 
             <div class="p-6 space-y-4 overflow-y-auto max-h-[60vh]">
-              {error.value && <p class="text-sm text-red-400">{error.value}</p>}
+              {error.value && <p class="text-sm text-red-300">{error.value}</p>}
 
               <div class="flex gap-2">
                 <input
-                  class="flex-1 px-3 py-2 bg-background border border-border-custom rounded-custom text-white text-sm focus:ring-primary focus:border-primary"
+                  class="flex-1 px-2 py-1 bg-transparent border border-white/20 rounded text-white text-sm focus:ring-primary"
                   type="text"
                   placeholder="Nombre del tercero"
                   value={newName.value}
@@ -235,7 +235,7 @@ export default function EntityManager(props: EntityManagerProps) {
 
               {entities.value.length === 0
                 ? (
-                  <p class="text-sm text-slate-500 text-center py-4">
+                  <p class="text-sm text-zinc-400 text-center py-4">
                     No hay terceros agregados
                   </p>
                 )
@@ -265,7 +265,7 @@ export default function EntityManager(props: EntityManagerProps) {
                                 ))}
                               </div>
                               <input
-                                class="flex-1 px-2 py-1 bg-transparent border border-border-custom rounded text-white text-sm focus:ring-primary"
+                                class="flex-1 px-2 py-1 bg-transparent border border-white/20 rounded text-white text-sm focus:ring-primary"
                                 type="text"
                                 value={editName.value}
                                 onInput={(e) =>
@@ -285,7 +285,7 @@ export default function EntityManager(props: EntityManagerProps) {
                               <button
                                 type="button"
                                 onClick={() => editingId.value = null}
-                                class="text-xs text-slate-500 hover:text-white"
+                                class="text-xs text-zinc-400 hover:text-white"
                               >
                                 X
                               </button>
@@ -304,13 +304,13 @@ export default function EntityManager(props: EntityManagerProps) {
                               <span class="flex-1 text-sm font-medium text-white">
                                 {entity.name}
                               </span>
-                              <span class="text-xs px-2 py-0.5 rounded bg-slate-700 text-slate-300">
+                              <span class="text-xs px-2 py-0.5 rounded bg-white/10 text-zinc-300">
                                 Tercero
                               </span>
                               <button
                                 type="button"
                                 onClick={() => startEdit(entity)}
-                                class="text-slate-400 hover:text-white transition-colors"
+                                class="text-zinc-400 hover:text-white transition-colors"
                               >
                                 <svg
                                   class="w-4 h-4"
@@ -329,7 +329,7 @@ export default function EntityManager(props: EntityManagerProps) {
                               <button
                                 type="button"
                                 onClick={() => handleDelete(entity.id)}
-                                class="text-slate-400 hover:text-red-400 transition-colors"
+                                class="text-zinc-400 hover:text-red-400 transition-colors"
                               >
                                 <svg
                                   class="w-4 h-4"
@@ -353,14 +353,14 @@ export default function EntityManager(props: EntityManagerProps) {
                 )}
             </div>
 
-            <footer class="px-6 py-4 border-t border-border-custom bg-slate-800/20 flex justify-end">
+            <footer class="px-6 py-4 border-t border-border-custom bg-white/5 flex justify-end">
               <button
                 type="button"
                 onClick={() => {
                   isOpen.value = false;
                   editingId.value = null;
                 }}
-                class="px-6 py-2 text-sm font-semibold text-slate-300 hover:text-white transition-colors"
+                class="px-6 py-2 text-sm font-semibold text-zinc-300 hover:text-white transition-colors"
               >
                 Cerrar
               </button>

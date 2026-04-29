@@ -30,8 +30,10 @@ const REGISTRY_COLORS = [
 export default function Sidebar(props: SidebarProps) {
   const registries = useSignal(props.registries);
   const activeRegistryId = useSignal(props.activeRegistryId);
+  const switchGen = useSignal(0);
 
-  if (typeof globalThis.indexedDB !== "undefined") {
+  useSignalEffect(() => {
+    if (typeof globalThis.indexedDB === "undefined") return;
     cache.cleanOrphanedEntries(props.registries.map((r) => r.id)).catch(
       () => {},
     );
@@ -43,7 +45,7 @@ export default function Sidebar(props: SidebarProps) {
         switchRegistry(cachedId);
       }
     });
-  }
+  });
 
   useSignalEffect(() => {
     const onEntitiesChanged = async (e: Event) => {
@@ -88,7 +90,6 @@ export default function Sidebar(props: SidebarProps) {
   const dragOffset = useSignal<number | null>(null);
   const SIDEBAR_WIDTH = 288;
   const $entities = useSignal<Entity[]>([...props.entities]);
-  let switchGen = 0;
   const inviteLoading = useSignal(false);
   const inviteCode = useSignal("");
   const inviteError = useSignal("");
@@ -249,11 +250,11 @@ export default function Sidebar(props: SidebarProps) {
   async function switchRegistry(id: string) {
     if (id === activeRegistryId.value) return;
 
-    const gen = ++switchGen;
+    const gen = ++switchGen.value;
     cache.setLastActiveRegistry(id).catch(() => {});
 
     const cached = await cache.getRegistrySnapshot(id);
-    if (gen !== switchGen) return;
+    if (gen !== switchGen.value) return;
     activeRegistryId.value = id;
 
     if (cached && cached.transactions && cached.entities) {
@@ -283,7 +284,7 @@ export default function Sidebar(props: SidebarProps) {
 
     try {
       const res = await fetch(`/api/dashboard?registryId=${id}`);
-      if (gen !== switchGen) return;
+      if (gen !== switchGen.value) return;
       if (!res.ok) throw new Error();
       const data = await res.json() as {
         transactions: unknown[];
@@ -315,7 +316,7 @@ export default function Sidebar(props: SidebarProps) {
         }),
       );
     } catch {
-      if (gen !== switchGen) return;
+      if (gen !== switchGen.value) return;
       globalThis.location.href = "/dashboard";
     }
   }
@@ -327,7 +328,7 @@ export default function Sidebar(props: SidebarProps) {
   ) {
     try {
       const stampRes = await fetch(`/api/stamp/${registryId}`);
-      if (gen !== switchGen) return;
+      if (gen !== switchGen.value) return;
       if (!stampRes.ok) return;
       const { lastModified } = await stampRes.json() as {
         lastModified: string | null;
@@ -336,7 +337,7 @@ export default function Sidebar(props: SidebarProps) {
       if (lastModified === cachedLastModified) return;
 
       const dashRes = await fetch(`/api/dashboard?registryId=${registryId}`);
-      if (gen !== switchGen) return;
+      if (gen !== switchGen.value) return;
       if (!dashRes.ok) return;
       const data = await dashRes.json() as {
         transactions: unknown[];
@@ -510,6 +511,7 @@ export default function Sidebar(props: SidebarProps) {
       cache.setRegistrySnapshot({
         registryId: registry.id,
         transactions: [],
+        transactionPayments: [],
         balance: 0,
         balanceEntries: [],
         users: [],
@@ -550,7 +552,7 @@ export default function Sidebar(props: SidebarProps) {
             <span class="text-sm font-semibold text-white truncate">
               {props.userName}
             </span>
-            <span class="text-xs text-gray-500">A la par</span>
+            <span class="text-xs text-zinc-400">A la par</span>
           </div>
         </div>
         <button
@@ -566,7 +568,7 @@ export default function Sidebar(props: SidebarProps) {
                 };samesite=lax`;
             }
           }}
-          class={`hover:bg-white/10 rounded-custom text-gray-400 hover:text-white transition-all duration-300 shrink-0 hidden md:flex items-center justify-center bg-white/5 border border-white/10 ${
+          class={`hover:bg-white/10 rounded-custom text-zinc-400 hover:text-white transition-all duration-300 shrink-0 hidden md:flex items-center justify-center bg-white/5 border border-white/10 ${
             collapsed.value && !mobileOpen.value ? "p-2.5 w-full" : "p-2.5"
           }`}
         >
@@ -604,7 +606,7 @@ export default function Sidebar(props: SidebarProps) {
         }`}
       >
         <h3
-          class={`px-2 text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 whitespace-nowrap transition-opacity duration-200 ${
+          class={`px-2 text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4 whitespace-nowrap transition-opacity duration-200 ${
             collapsed.value && !mobileOpen.value
               ? "opacity-0 h-0"
               : "opacity-100"
@@ -674,7 +676,7 @@ export default function Sidebar(props: SidebarProps) {
                         ? ""
                         : r.id === activeRegistryId.value
                         ? "bg-white/5 border border-white/10 text-white"
-                        : "border border-transparent hover:bg-white/5 hover:border-white/10 text-gray-400 hover:text-white"
+                        : "border border-transparent hover:bg-white/5 hover:border-white/10 text-zinc-300 hover:text-white"
                     }`}
                     style={collapsed.value && !mobileOpen.value && !isPending
                       ? `background-color: ${
@@ -742,7 +744,7 @@ export default function Sidebar(props: SidebarProps) {
                             e.stopPropagation();
                             startRename(r.id, r.name);
                           }}
-                          class="p-2 hover:bg-white/10 rounded text-slate-500 hover:text-white transition-colors"
+                          class="p-2 hover:bg-white/10 rounded text-zinc-400 hover:text-white transition-colors"
                           title="Renombrar"
                         >
                           <svg
@@ -767,7 +769,7 @@ export default function Sidebar(props: SidebarProps) {
                             e.stopPropagation();
                             showSplitConfig.value = r.id;
                           }}
-                          class="p-2 hover:bg-white/10 rounded text-slate-500 hover:text-white transition-colors text-sm font-bold"
+                          class="p-2 hover:bg-white/10 rounded text-zinc-400 hover:text-white transition-colors text-sm font-bold"
                           title="División Default"
                         >
                           %
@@ -780,7 +782,7 @@ export default function Sidebar(props: SidebarProps) {
                             e.stopPropagation();
                             handleDeleteRegistry(r.id);
                           }}
-                          class="p-2 hover:bg-red-500/20 rounded text-slate-500 hover:text-red-400 transition-colors"
+                          class="p-2 hover:bg-red-500/20 rounded text-zinc-400 hover:text-red-400 transition-colors"
                           title="Eliminar"
                         >
                           <svg
@@ -938,7 +940,7 @@ export default function Sidebar(props: SidebarProps) {
         <button
           type="button"
           onClick={handleLogout}
-          class={`w-full flex items-center bg-white/5 hover:bg-white/10 border border-white/10 rounded-custom text-sm font-semibold text-slate-400 hover:text-red-400 transition-all duration-300 ${
+          class={`w-full flex items-center bg-white/5 hover:bg-white/10 border border-white/10 rounded-custom text-sm font-semibold text-zinc-400 hover:text-red-400 transition-all duration-300 ${
             collapsed.value && !mobileOpen.value
               ? "justify-center p-2.5"
               : "justify-center gap-2 py-2.5 px-4"
@@ -1037,7 +1039,7 @@ export default function Sidebar(props: SidebarProps) {
           <button
             type="button"
             onClick={() => mobileOpen.value = false}
-            class="p-2 hover:bg-white/5 rounded-custom text-gray-400"
+            class="p-2 hover:bg-white/5 rounded-custom text-zinc-400"
           >
             <svg
               class="w-5 h-5"
@@ -1067,7 +1069,7 @@ export default function Sidebar(props: SidebarProps) {
           <div class="bg-surface border border-border-custom w-full max-w-md rounded-custom shadow-2xl flex flex-col overflow-hidden">
             <header class="px-6 py-4 border-b border-border-custom">
               <h2 class="text-xl font-bold text-white">Invitar al Registro</h2>
-              <p class="text-sm text-slate-400 mt-1">
+              <p class="text-sm text-zinc-400 mt-1">
                 Genera un código para invitar a alguien
               </p>
             </header>
@@ -1088,7 +1090,7 @@ export default function Sidebar(props: SidebarProps) {
                 : (
                   <div class="space-y-3">
                     <div class="text-center">
-                      <p class="text-sm text-slate-400 mb-2">
+                      <p class="text-sm text-zinc-400 mb-2">
                         Código de invitación:
                       </p>
                       <div class="flex items-center justify-center gap-2">
@@ -1120,21 +1122,21 @@ export default function Sidebar(props: SidebarProps) {
                         <p class="text-xs text-emerald-400 mt-1">Copiado!</p>
                       )}
                     </div>
-                    <p class="text-xs text-slate-500 text-center">
+                    <p class="text-xs text-zinc-500 text-center">
                       Comparte este código o el enlace:{" "}
                       {globalThis.location.origin}/join/{inviteCode.value}
                     </p>
                   </div>
                 )}
               {inviteError.value && (
-                <p class="text-sm text-red-400">{inviteError.value}</p>
+                <p class="text-sm text-red-300">{inviteError.value}</p>
               )}
             </div>
-            <footer class="px-6 py-4 border-t border-border-custom bg-slate-800/20 flex justify-end">
+            <footer class="px-6 py-4 border-t border-border-custom bg-white/5 flex justify-end">
               <button
                 type="button"
                 onClick={closeInviteModal}
-                class="px-6 py-2 text-sm font-semibold text-slate-300 hover:text-white transition-colors"
+                class="px-6 py-2 text-sm font-semibold text-zinc-300 hover:text-white transition-colors"
               >
                 Cerrar
               </button>
@@ -1153,7 +1155,7 @@ export default function Sidebar(props: SidebarProps) {
           <div class="bg-surface border border-border-custom w-full max-w-md rounded-custom shadow-2xl flex flex-col overflow-hidden">
             <header class="px-6 py-4 border-b border-border-custom">
               <h2 class="text-xl font-bold text-white">Nuevo Registro</h2>
-              <p class="text-sm text-slate-400 mt-1">
+              <p class="text-sm text-zinc-400 mt-1">
                 Crea un grupo para gestionar gastos compartidos
               </p>
             </header>
@@ -1174,11 +1176,11 @@ export default function Sidebar(props: SidebarProps) {
                 autofocus
               />
             </form>
-            <footer class="px-6 py-4 border-t border-border-custom bg-slate-800/20 flex justify-end items-center gap-3">
+            <footer class="px-6 py-4 border-t border-border-custom bg-white/5 flex justify-end items-center gap-3">
               <button
                 type="button"
                 onClick={() => showNewRegistry.value = false}
-                class="px-6 py-2 text-sm font-semibold text-slate-300 hover:text-white transition-colors"
+                class="px-6 py-2 text-sm font-semibold text-zinc-300 hover:text-white transition-colors"
               >
                 Cancelar
               </button>

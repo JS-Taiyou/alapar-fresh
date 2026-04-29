@@ -25,7 +25,9 @@ export async function query(text: string, params?: unknown[]) {
   try {
     const result = await pool.query(text, params);
     if (isDev) {
-      console.log(`[DB] << OK (${Date.now() - start}ms, ${result.rows.length} rows)`);
+      console.log(
+        `[DB] << OK (${Date.now() - start}ms, ${result.rows.length} rows)`,
+      );
     }
     return result;
   } catch (err) {

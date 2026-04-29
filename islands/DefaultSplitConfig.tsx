@@ -176,14 +176,14 @@ export default function DefaultSplitConfig(props: DefaultSplitConfigProps) {
             <header class="px-6 py-4 border-b border-border-custom flex justify-between items-center">
               <div>
                 <h2 class="text-xl font-bold text-white">División Default</h2>
-                <p class="text-sm text-slate-400 mt-1">
+                <p class="text-sm text-zinc-400 mt-1">
                   Porcentajes predefinidos para nuevos gastos
                 </p>
               </div>
               <button
                 type="button"
                 onClick={closeModal}
-                class="text-slate-400 hover:text-white transition-colors"
+                class="text-zinc-400 hover:text-white transition-colors"
               >
                 <svg
                   class="h-6 w-6"
@@ -202,19 +202,19 @@ export default function DefaultSplitConfig(props: DefaultSplitConfigProps) {
             </header>
 
             <div class="p-6 space-y-4 overflow-y-auto max-h-[60vh]">
-              {error.value && <p class="text-sm text-red-400">{error.value}</p>}
+              {error.value && <p class="text-sm text-red-300">{error.value}</p>}
               {success.value && (
-                <p class="text-sm text-emerald-400">Guardado exitosamente</p>
+                <p class="text-sm text-emerald-300">Guardado exitosamente</p>
               )}
 
-              <div class="border border-border-custom rounded-custom overflow-hidden">
+              <div class="border border-white/10 rounded-custom overflow-hidden">
                 <table class="w-full text-left border-collapse">
-                  <thead class="bg-slate-800/50">
+                  <thead class="bg-white/5">
                     <tr>
-                      <th class="px-4 py-3 text-xs font-semibold text-slate-400">
+                      <th class="px-4 py-3 text-xs font-semibold text-zinc-400">
                         MIEMBRO
                       </th>
-                      <th class="px-4 py-3 text-xs font-semibold text-slate-400 w-32 text-right">
+                      <th class="px-4 py-3 text-xs font-semibold text-zinc-400 w-32 text-right">
                         %
                       </th>
                     </tr>
@@ -259,16 +259,16 @@ export default function DefaultSplitConfig(props: DefaultSplitConfigProps) {
                                   autoComplement(user.id);
                                 }}
                               />
-                              <span class="ml-1 text-slate-500">%</span>
+                              <span class="ml-1 text-zinc-500">%</span>
                             </div>
                           </td>
                         </tr>
                       );
                     })}
                   </tbody>
-                  <tfoot class="bg-slate-800/30">
+                  <tfoot class="bg-white/5">
                     <tr>
-                      <td class="px-4 py-2 text-xs font-bold text-slate-400 italic">
+                      <td class="px-4 py-2 text-xs font-bold text-zinc-400 italic">
                         TOTAL
                       </td>
                       <td
@@ -286,13 +286,13 @@ export default function DefaultSplitConfig(props: DefaultSplitConfigProps) {
               <button
                 type="button"
                 onClick={resetToEqual}
-                class="text-xs text-slate-400 hover:text-white transition-colors"
+                class="text-xs text-zinc-400 hover:text-white transition-colors"
               >
                 Restablecer a equitativo
               </button>
             </div>
 
-            <footer class="px-6 py-4 border-t border-border-custom bg-slate-800/20 flex justify-between items-center gap-3">
+            <footer class="px-6 py-4 border-t border-border-custom bg-white/5 flex justify-between items-center gap-3">
               <div>
                 {props.defaultSplit && (
                   <button
@@ -309,7 +309,7 @@ export default function DefaultSplitConfig(props: DefaultSplitConfigProps) {
                 <button
                   type="button"
                   onClick={closeModal}
-                  class="px-6 py-2 text-sm font-semibold text-slate-300 hover:text-white transition-colors"
+                  class="px-6 py-2 text-sm font-semibold text-zinc-300 hover:text-white transition-colors"
                 >
                   Cancelar
                 </button>

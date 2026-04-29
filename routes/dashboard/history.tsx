@@ -91,7 +91,7 @@ export default define.page(function HistoryPage(ctx) {
           <header class="mb-8 flex items-center justify-between">
             <div class="flex items-center gap-4">
               <a
-                class="p-2 hover:bg-slate-800 rounded-custom text-slate-400 hover:text-white transition-colors"
+                class="p-2 hover:bg-white/5 rounded-custom text-zinc-400 hover:text-white transition-colors"
                 href="/dashboard"
               >
                 <svg
@@ -112,7 +112,7 @@ export default define.page(function HistoryPage(ctx) {
                 <h1 class="text-2xl font-bold tracking-tight">
                   Histórico de Cortes
                 </h1>
-                <p class="text-slate-400 text-sm">
+                <p class="text-zinc-400 text-sm">
                   Consulta cierres de meses anteriores
                 </p>
               </div>
@@ -134,12 +134,15 @@ export default define.page(function HistoryPage(ctx) {
             </div>
           </header>
 
-          <SearchBar />
+          <SearchBar
+            placeholder="Buscar corte por mes o año..."
+            filterSelector="[data-exercise-card]"
+          />
 
           <section class="space-y-4 mt-6">
             {data.years.map((year) => (
               <div key={year} class="space-y-2">
-                <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-widest px-2 py-1">
+                <h2 class="text-xs font-semibold text-zinc-500 uppercase tracking-widest px-2 py-1">
                   {year}
                 </h2>
                 {data.grouped[year].map((ex) => (
@@ -157,9 +160,9 @@ export default define.page(function HistoryPage(ctx) {
 
           {data.exercises.length === 0 && (
             <div class="flex flex-col items-center justify-center py-20 text-center">
-              <div class="bg-slate-800 p-4 rounded-full mb-4">
+              <div class="bg-white/5 p-4 rounded-full mb-4">
                 <svg
-                  class="h-12 w-12 text-slate-600"
+                  class="h-12 w-12 text-zinc-500"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -172,17 +175,17 @@ export default define.page(function HistoryPage(ctx) {
                   />
                 </svg>
               </div>
-              <h3 class="text-lg font-medium text-slate-300">
+              <h3 class="text-lg font-medium text-zinc-300">
                 No hay cortes registrados
               </h3>
-              <p class="text-slate-500 mt-2 max-w-xs mx-auto">
+              <p class="text-zinc-400 mt-2 max-w-xs mx-auto">
                 Cuando realices un cierre de gastos aparecerán aquí.
               </p>
             </div>
           )}
 
-          <footer class="mt-12 text-center border-t border-slate-800 pt-6">
-            <p class="text-slate-500 text-xs italic">
+          <footer class="mt-12 text-center border-t border-white/10 pt-6">
+            <p class="text-zinc-500 text-xs italic">
               * Los cortes incluyen liquidaciones definitivas y facturas
               archivadas.
             </p>

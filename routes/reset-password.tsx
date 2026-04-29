@@ -23,7 +23,7 @@ export default define.page(function ResetPasswordPage() {
           </svg>
         </div>
         <h1 class="text-2xl font-bold text-white">Nueva Contraseña</h1>
-        <p class="text-slate-400 text-sm mt-2">
+        <p class="text-zinc-400 text-sm mt-2">
           Ingresa tu nueva contraseña
         </p>
       </div>

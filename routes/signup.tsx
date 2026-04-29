@@ -23,7 +23,7 @@ export default define.page(function Signup() {
           </svg>
         </div>
         <h1 class="text-2xl font-bold text-white">Crear Cuenta</h1>
-        <p class="text-slate-400 text-sm mt-2">
+        <p class="text-zinc-400 text-sm mt-2">
           Regístrate para empezar a dividir gastos
         </p>
       </div>

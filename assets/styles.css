@@ -1,6 +1,8 @@
 @import "tailwindcss";
+@plugin "daisyui";
 
 @theme {
+  --font-sans: "Sora", sans-serif;
   --color-primary: #093eaa;
   --color-primary-light: #1e5cd9;
   --color-primary-dark: #062d7c;
@@ -8,13 +10,54 @@
   --color-surface: #16161a;
   --color-card: #1a1a1a;
   --color-border-custom: #2d2d33;
-  --font-sans: "Inter", sans-serif;
   --radius-custom: 8px;
+}
+
+/* DaisyUI dark theme overrides */
+@layer base {
+  :root {
+    --rounded-box: var(--radius-custom);
+    --rounded-btn: var(--radius-custom);
+    --rounded-badge: var(--radius-custom);
+  }
+  [data-theme="dark"] {
+    --p: 217 91% 40%; /* primary - blue #093eaa */
+    --pf: 217 91% 35%;
+    --pc: 0 0% 100%;
+    --s: 174 62% 40%; /* secondary - teal */
+    --a: 142 71% 45%; /* accent - emerald */
+    --n: 240 6% 10%; /* neutral - near-black */
+    --b1: 240 6% 5%; /* base - background */
+    --b2: 240 6% 9%; /* surface */
+    --b3: 240 6% 14%; /* card */
+    --in: 198 93% 60%;
+    --su: 142 71% 45%;
+    --wa: 45 93% 55%;
+    --er: 0 84% 60%;
+    --bc: 0 0% 95%;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary hover:bg-primary-light text-white font-semibold;
+  }
+  .btn-ghost-variant {
+    @apply bg-white/5 hover:bg-white/10 border border-white/10 text-white;
+  }
+  .card-surface {
+    @apply bg-surface border border-white/10 rounded-custom;
+  }
+  .input-surface {
+    @apply bg-background border border-white/20 text-white focus:border-primary
+      focus:ring-primary;
+  }
 }
 
 html, body {
   background-color: var(--color-background);
   color: #f8fafc;
+  font-family: var(--font-sans);
 }
 
 .bg-pattern {
@@ -62,8 +105,8 @@ input[type="number"] {
 }
 
 .modal-overlay {
-  background-color: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(4px);
+  background-color: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(6px);
 }
 
 @keyframes highlight-pulse {
@@ -72,20 +115,20 @@ input[type="number"] {
     box-shadow: none;
   }
   15% {
-    background-color: rgba(168, 85, 247, 0.15);
-    box-shadow: inset 0 0 30px rgba(168, 85, 247, 0.1);
+    background-color: rgba(9, 62, 170, 0.15);
+    box-shadow: inset 0 0 30px rgba(9, 62, 170, 0.1);
   }
   30% {
-    background-color: rgba(168, 85, 247, 0.25);
-    box-shadow: inset 0 0 40px rgba(168, 85, 247, 0.15);
+    background-color: rgba(9, 62, 170, 0.25);
+    box-shadow: inset 0 0 40px rgba(9, 62, 170, 0.15);
   }
   50% {
-    background-color: rgba(168, 85, 247, 0.12);
-    box-shadow: inset 0 0 20px rgba(168, 85, 247, 0.08);
+    background-color: rgba(9, 62, 170, 0.12);
+    box-shadow: inset 0 0 20px rgba(9, 62, 170, 0.08);
   }
   70% {
-    background-color: rgba(168, 85, 247, 0.2);
-    box-shadow: inset 0 0 35px rgba(168, 85, 247, 0.12);
+    background-color: rgba(9, 62, 170, 0.2);
+    box-shadow: inset 0 0 35px rgba(9, 62, 170, 0.12);
   }
   100% {
     background-color: transparent;
@@ -96,4 +139,67 @@ input[type="number"] {
 .highlight-pulse > :first-child {
   animation: highlight-pulse 2s ease-out forwards;
   border-radius: var(--radius-custom);
+}
+
+/* Animation utilities */
+@keyframes fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slide-in-left {
+  0% {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.4s ease-out forwards;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.2s ease-out forwards;
+}
+
+.animate-slide-in-left {
+  animation: slide-in-left 0.3s ease-out forwards;
+}
+
+/* Stagger delays */
+.stagger-1 {
+  animation-delay: 80ms;
+}
+.stagger-2 {
+  animation-delay: 160ms;
+}
+.stagger-3 {
+  animation-delay: 240ms;
+}
+.stagger-4 {
+  animation-delay: 320ms;
+}
+.stagger-5 {
+  animation-delay: 400ms;
 }

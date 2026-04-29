@@ -44,7 +44,7 @@ export default function ForgotPassword(props: ForgotPasswordProps) {
 
   if (success.value) {
     return (
-      <div class="text-sm text-blue-300 bg-blue-400/10 border border-blue-400/20 rounded-custom px-4 py-3 text-center">
+      <div class="text-sm text-blue-200 bg-blue-500/20 border border-blue-500/30 rounded-custom px-4 py-3 text-center">
         Te enviamos un email con el enlace para restablecer tu contraseña.
       </div>
     );
@@ -54,13 +54,13 @@ export default function ForgotPassword(props: ForgotPasswordProps) {
     <form onSubmit={handleSubmit} class="space-y-5">
       <div>
         <label
-          class="block text-sm font-medium text-slate-300 mb-1.5"
+          class="block text-sm font-medium text-zinc-300 mb-1.5"
           for="forgot-email"
         >
           Email
         </label>
         <input
-          class="block w-full px-4 py-2.5 bg-background border border-border-custom rounded-custom text-white focus:ring-primary focus:border-primary"
+          class="block w-full px-4 py-2.5 bg-background border border-white/20 rounded-custom text-white focus:ring-primary focus:border-primary"
           id="forgot-email"
           type="email"
           placeholder="tu@email.com"
@@ -71,7 +71,7 @@ export default function ForgotPassword(props: ForgotPasswordProps) {
       </div>
 
       {error.value && (
-        <div class="text-sm text-red-400 bg-red-400/10 border border-red-400/20 rounded-custom px-4 py-2">
+        <div class="text-sm text-red-300 bg-red-500/20 border border-red-500/30 rounded-custom px-4 py-2">
           {error.value}
         </div>
       )}
@@ -84,7 +84,7 @@ export default function ForgotPassword(props: ForgotPasswordProps) {
         {loading.value ? "Enviando..." : "Enviar enlace de recuperación"}
       </button>
 
-      <p class="text-center text-sm text-slate-400">
+      <p class="text-center text-sm text-zinc-400">
         <a href="/login" class="text-primary hover:underline">
           Volver a iniciar sesión
         </a>

@@ -41,7 +41,7 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
         }`}
       >
         <div class="flex items-center gap-2">
-          <span class="text-xs sm:text-sm font-medium text-gray-400 uppercase tracking-wider">
+          <span class="text-xs sm:text-sm font-medium text-zinc-400 uppercase tracking-wider">
             Balance Total
           </span>
           {canShowPopover && (
@@ -49,7 +49,7 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
               class={`w-4 h-4 transition-all duration-200 ${
                 showPopover.value
                   ? "text-primary rotate-180"
-                  : "text-gray-600 group-hover:text-gray-400"
+                  : "text-zinc-500 group-hover:text-zinc-400"
               }`}
               fill="none"
               stroke="currentColor"
@@ -80,11 +80,11 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
             onClick={close}
           />
           <div class="absolute top-full left-0 mt-3 z-50 w-80 bg-surface border border-border-custom rounded-custom shadow-2xl overflow-hidden animate-fade-in">
-            <div class="px-4 py-3 border-b border-border-custom bg-slate-800/30">
+            <div class="px-4 py-3 border-b border-border-custom bg-white/5">
               <h3 class="text-sm font-semibold text-white">
                 Desglose por persona
               </h3>
-              <p class="text-xs text-slate-500 mt-0.5">
+              <p class="text-xs text-zinc-400 mt-0.5">
                 Detalle de saldos con cada miembro
               </p>
             </div>
@@ -105,7 +105,7 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
                       stroke-width="2"
                     />
                   </svg>
-                  <p class="text-sm text-slate-400">
+                  <p class="text-sm text-zinc-400">
                     Todos est&aacute;n balanceados
                   </p>
                 </div>
@@ -136,7 +136,7 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
                               >
                                 {initials}
                               </div>
-                              <span class="text-sm text-slate-300">
+                              <span class="text-sm text-zinc-300">
                                 {entry.userName}
                               </span>
                             </div>
@@ -181,7 +181,7 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
                               >
                                 {initials}
                               </div>
-                              <span class="text-sm text-slate-300">
+                              <span class="text-sm text-zinc-300">
                                 {entry.userName}
                               </span>
                             </div>

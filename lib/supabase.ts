@@ -41,7 +41,10 @@ export async function getUserFromRequest(
   const cookieHeader = req.headers.get("cookie") ?? "";
   const accessToken = getCookie(cookieHeader, "sb-access-token");
   const refreshToken = getCookie(cookieHeader, "sb-refresh-token");
-  devLog("Cookies present:", { access: !!accessToken, refresh: !!refreshToken });
+  devLog("Cookies present:", {
+    access: !!accessToken,
+    refresh: !!refreshToken,
+  });
 
   if (!accessToken) return null;
 

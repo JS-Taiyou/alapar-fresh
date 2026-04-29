@@ -26,26 +26,27 @@ export default function ExerciseCard(props: ExerciseCardProps) {
   return (
     <a
       href={`/dashboard/history/${exercise.id}`}
-      class="w-full flex items-center justify-between p-4 bg-[#1e293b] border border-slate-700 rounded-custom hover:bg-slate-700/50 hover:translate-x-1 transition-all group text-left"
+      data-exercise-card
+      class="w-full flex items-center justify-between p-4 bg-surface border border-white/10 rounded-custom hover:bg-white/5 hover:translate-x-1 transition-all group text-left"
     >
       <div class="flex items-center gap-4">
-        <div class="h-10 w-10 bg-slate-700 rounded-custom flex items-center justify-center text-slate-300 font-bold text-xs">
+        <div class="h-10 w-10 bg-white/10 rounded-custom flex items-center justify-center text-zinc-300 font-bold text-xs">
           {monthName}
         </div>
         <div>
-          <p class="font-medium text-slate-100 leading-tight">
+          <p class="font-medium text-zinc-100 leading-tight">
             Corte {exercise.startDate.toLocaleDateString("es-MX", {
               month: "long",
               year: "numeric",
             })}
           </p>
-          <p class="text-xs text-slate-500">
+          <p class="text-xs text-zinc-400">
             {exercise.transactionCount} Gastos &bull; Total: {totalDisplay}
           </p>
         </div>
       </div>
       <svg
-        class="h-5 w-5 text-slate-600 group-hover:text-primary-light"
+        class="h-5 w-5 text-zinc-500 group-hover:text-primary-light"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"

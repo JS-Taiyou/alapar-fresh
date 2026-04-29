@@ -29,7 +29,7 @@ export default define.page(function Home() {
           <h1 class="text-4xl font-bold tracking-tight text-white mb-2">
             A la par
           </h1>
-          <p class="text-slate-400 text-lg max-w-md mx-auto">
+          <p class="text-zinc-400 text-lg max-w-md mx-auto">
             La forma más sencilla de dividir gastos con amigos, familiares o
             compañeros de viaje.
           </p>
@@ -37,7 +37,7 @@ export default define.page(function Home() {
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl z-10">
           <a
             href="/registries/new"
-            class="group relative bg-surface p-8 border border-slate-700 rounded-custom hover:border-primary transition-all duration-300 hover:shadow-2xl hover:shadow-primary/10 text-left"
+            class="group relative bg-surface p-8 border border-white/10 rounded-custom hover:border-primary transition-all duration-300 hover:shadow-2xl hover:shadow-primary/10 text-left"
           >
             <div class="mb-6 inline-block p-4 bg-primary/10 rounded-full text-primary group-hover:bg-primary group-hover:text-white transition-colors duration-300">
               <svg
@@ -57,7 +57,7 @@ export default define.page(function Home() {
             <h2 class="text-2xl font-semibold text-white mb-2">
               Nuevo registro
             </h2>
-            <p class="text-slate-400">
+            <p class="text-zinc-400">
               Crea un nuevo grupo de gastos para tu próximo viaje o evento.
             </p>
             <div class="mt-6 flex items-center text-primary font-medium">
@@ -77,7 +77,7 @@ export default define.page(function Home() {
               </svg>
             </div>
           </a>
-          <div class="group relative bg-surface p-8 border border-slate-700 rounded-custom hover:border-emerald-500/50 transition-all duration-300 hover:shadow-2xl hover:shadow-emerald-500/10 text-left">
+          <div class="group relative bg-surface p-8 border border-white/10 rounded-custom hover:border-emerald-500/50 transition-all duration-300 hover:shadow-2xl hover:shadow-emerald-500/10 text-left">
             <div class="mb-6 inline-block p-4 bg-emerald-500/10 rounded-full text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-colors duration-300">
               <svg
                 class="h-8 w-8"
@@ -96,14 +96,14 @@ export default define.page(function Home() {
             <h2 class="text-2xl font-semibold text-white mb-2">
               Unirme a registro
             </h2>
-            <p class="text-slate-400 mb-4">
+            <p class="text-zinc-400 mb-4">
               Introduce un código de invitación para unirte a un grupo
               existente.
             </p>
             <JoinCodeForm />
           </div>
         </div>
-        <footer class="absolute bottom-8 text-slate-500 text-sm">
+        <footer class="absolute bottom-8 text-zinc-500 text-sm">
           <p>&copy; 2024 A la par. Finanzas transparentes.</p>
         </footer>
       </main>
