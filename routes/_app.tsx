@@ -31,14 +31,6 @@ export default define.page(function App({ Component }) {
           {`
 html,body{background-color:#0a0a0c;color:#f8fafc;margin:0;touch-action:manipulation}
 .font-sans{font-family:"Inter",sans-serif}
-.bg-background{background-color:#0a0a0c}
-.min-h-screen{min-height:100vh}
-.text-slate-100{color:#f1f5f9}
-.modal-overlay{background-color:rgba(0,0,0,0.8);backdrop-filter:blur(4px)}
-.custom-scrollbar::-webkit-scrollbar{width:4px}
-.custom-scrollbar::-webkit-scrollbar-track{background:transparent}
-.custom-scrollbar::-webkit-scrollbar-thumb{background:#333;border-radius:10px}
-.group:hover .sidebar-action-btns{opacity:1!important}
 `}
         </style>
         <title>A la par</title>
