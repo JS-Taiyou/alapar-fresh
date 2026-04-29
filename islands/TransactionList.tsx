@@ -399,7 +399,6 @@ export default function TransactionList(props: TransactionListProps) {
   const balance = props.balance;
   const balanceEntries = props.balanceEntries;
   const showTerceroPopover = useSignal(false);
-  const mobileAddExpanded = useSignal(false);
 
   const isOpen = useSignal(false);
   const editingId = useSignal<string | null>(null);
@@ -829,14 +828,12 @@ export default function TransactionList(props: TransactionListProps) {
   function openNew() {
     modalMode.value = "expense";
     editingId.value = null;
-    mobileAddExpanded.value = false;
     isOpen.value = true;
   }
 
   function openNewPago() {
     modalMode.value = "payment";
     editingId.value = null;
-    mobileAddExpanded.value = false;
     isOpen.value = true;
   }
 
@@ -959,80 +956,47 @@ export default function TransactionList(props: TransactionListProps) {
           </div>
         )}
 
-        <div class="sm:hidden">
-          {!mobileAddExpanded.value
-            ? (
-              <button
-                type="button"
-                onClick={() => mobileAddExpanded.value = true}
-                class="w-full py-3 bg-yellow-500 hover:bg-yellow-600 text-white font-bold text-base rounded-custom active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-              >
-                <svg
-                  class="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    d="M12 4v16m8-8H4"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                  />
-                </svg>
-                Agregar
-              </button>
-            )
-            : (
-              <div class="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    mobileAddExpanded.value = false;
-                    openNewPago();
-                  }}
-                  class="flex-1 py-3 bg-green-700 hover:bg-green-800 text-white font-bold text-base rounded-custom active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-                >
-                  <svg
-                    class="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                    />
-                  </svg>
-                  Pago
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    mobileAddExpanded.value = false;
-                    openNew();
-                  }}
-                  class="flex-1 py-3 bg-yellow-500 hover:bg-yellow-600 text-white font-bold text-base rounded-custom active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-                >
-                  <svg
-                    class="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                    />
-                  </svg>
-                  Gasto
-                </button>
-              </div>
-            )}
+        <div class="sm:hidden flex gap-2">
+          <button
+            type="button"
+            onClick={openNewPago}
+            class="flex-1 py-3 bg-green-700 hover:bg-green-800 text-white font-bold text-base rounded-custom active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+          >
+            <svg
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+              />
+            </svg>
+            Pago
+          </button>
+          <button
+            type="button"
+            onClick={openNew}
+            class="flex-1 py-3 bg-yellow-500 hover:bg-yellow-600 text-white font-bold text-base rounded-custom active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+          >
+            <svg
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+              />
+            </svg>
+            Gasto
+          </button>
         </div>
 
         {transactions.value.length === 0
