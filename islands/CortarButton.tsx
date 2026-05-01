@@ -2,6 +2,7 @@ import { useSignal } from "@preact/signals";
 
 interface CortarButtonProps {
   hasTransactions: boolean;
+  registryId: string;
 }
 
 export default function CortarButton(props: CortarButtonProps) {
@@ -13,7 +14,11 @@ export default function CortarButton(props: CortarButtonProps) {
     if (!canCut || loading.value) return;
     loading.value = true;
     try {
-      await fetch("/api/exercises", { method: "POST" });
+      await fetch("/api/exercises", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ registryId: props.registryId }),
+      });
       globalThis.location.reload();
     } catch {
       globalThis.location.reload();

@@ -230,7 +230,10 @@ export default define.page(function DashboardIndex(ctx) {
                 />
               </svg>
             </a>
-            <CortarButton hasTransactions={hasTransactions} />
+            <CortarButton
+              hasTransactions={hasTransactions}
+              registryId={$registryId.value}
+            />
           </div>
         </header>
       )}
