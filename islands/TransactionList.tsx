@@ -461,8 +461,34 @@ export default function TransactionList(props: TransactionListProps) {
             t.id === payload.new.id
           );
           if (!existing) {
-            transactions.value = [mapRow(payload.new), ...transactions.value];
             const creator = payload.new.creator_id as string;
+            const desc = payload.new.description as string;
+            const amt = typeof payload.new.amount === "string"
+              ? parseFloat(payload.new.amount)
+              : (payload.new.amount as number);
+            const type = payload.new.type as string;
+
+            if (creator === currentUserId.value) {
+              const optimisticIndex = transactions.value.findIndex((t) =>
+                t.creatorId === creator &&
+                t.description === desc &&
+                t.amount === amt &&
+                t.type === type &&
+                t.id !== payload.new.id
+              );
+              if (optimisticIndex !== -1) {
+                const updated = [...transactions.value];
+                updated[optimisticIndex] = mapRow(payload.new);
+                transactions.value = updated;
+              } else {
+                transactions.value = [
+                  mapRow(payload.new),
+                  ...transactions.value,
+                ];
+              }
+            } else {
+              transactions.value = [mapRow(payload.new), ...transactions.value];
+            }
             if (creator !== currentUserId.value) {
               const now = Date.now();
               if (
