@@ -22,8 +22,9 @@ export const handler = define.handlers({
   },
   async POST(ctx) {
     let body: { registryId?: unknown } = {};
-    const hasJsonBody =
-      (ctx.req.headers.get("content-type") ?? "").includes("application/json");
+    const hasJsonBody = (ctx.req.headers.get("content-type") ?? "").includes(
+      "application/json",
+    );
     if (hasJsonBody) {
       try {
         body = await ctx.req.json();
