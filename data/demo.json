@@ -1,0 +1,209 @@
+{
+  "registry": {
+    "id": "demo-registry-0001",
+    "name": "Demo: Departamento Compartido",
+    "defaultSplit": null
+  },
+  "users": [
+    {
+      "id": "demo-user-0001",
+      "email": "ana@demo.alapar.app",
+      "name": "Ana",
+      "color": "#ec4899"
+    },
+    {
+      "id": "demo-user-0002",
+      "email": "carlos@demo.alapar.app",
+      "name": "Carlos",
+      "color": "#3b82f6"
+    },
+    {
+      "id": "demo-user-0003",
+      "email": "maria@demo.alapar.app",
+      "name": "María",
+      "color": "#22c55e"
+    }
+  ],
+  "transactions": [
+    {
+      "id": "demo-tx-0001",
+      "registry_id": "demo-registry-0001",
+      "description": "Supermercado semanal",
+      "amount": -1200,
+      "originalAmount": 1200,
+      "type": "unico",
+      "exerciseId": null,
+      "installmentCurrent": null,
+      "installmentTotal": null,
+      "recurringDisabled": false,
+      "recurringGroupId": "demo-tx-0001",
+      "notes": "",
+      "splitJson": {
+        "splits": [
+          { "userId": "demo-user-0001", "percentage": 33.33, "amount": 400 },
+          { "userId": "demo-user-0002", "percentage": 33.33, "amount": 400 },
+          { "userId": "demo-user-0003", "percentage": 33.34, "amount": 400 }
+        ]
+      },
+      "relatedTransactionId": null,
+      "creatorId": "demo-user-0001",
+      "userPaid": "demo-user-0001",
+      "createdAt": "2024-01-15T10:30:00Z"
+    },
+    {
+      "id": "demo-tx-0002",
+      "registry_id": "demo-registry-0001",
+      "description": "Renta enero",
+      "amount": -15000,
+      "originalAmount": 15000,
+      "type": "unico",
+      "exerciseId": null,
+      "installmentCurrent": null,
+      "installmentTotal": null,
+      "recurringDisabled": false,
+      "recurringGroupId": "demo-tx-0002",
+      "notes": "",
+      "splitJson": {
+        "splits": [
+          { "userId": "demo-user-0001", "percentage": 33.33, "amount": 5000 },
+          { "userId": "demo-user-0002", "percentage": 33.33, "amount": 5000 },
+          { "userId": "demo-user-0003", "percentage": 33.34, "amount": 5000 }
+        ]
+      },
+      "relatedTransactionId": null,
+      "creatorId": "demo-user-0002",
+      "userPaid": "demo-user-0002",
+      "createdAt": "2024-01-10T09:00:00Z"
+    },
+    {
+      "id": "demo-tx-0003",
+      "registry_id": "demo-registry-0001",
+      "description": "Internet y cable",
+      "amount": -750,
+      "originalAmount": 750,
+      "type": "unico",
+      "exerciseId": null,
+      "installmentCurrent": null,
+      "installmentTotal": null,
+      "recurringDisabled": false,
+      "recurringGroupId": "demo-tx-0003",
+      "notes": "",
+      "splitJson": {
+        "splits": [
+          { "userId": "demo-user-0001", "percentage": 33.33, "amount": 250 },
+          { "userId": "demo-user-0002", "percentage": 33.33, "amount": 250 },
+          { "userId": "demo-user-0003", "percentage": 33.34, "amount": 250 }
+        ]
+      },
+      "relatedTransactionId": null,
+      "creatorId": "demo-user-0003",
+      "userPaid": "demo-user-0003",
+      "createdAt": "2024-01-12T14:00:00Z"
+    },
+    {
+      "id": "demo-tx-0004",
+      "registry_id": "demo-registry-0001",
+      "description": "Pago a Carlos",
+      "amount": 5000,
+      "originalAmount": 5000,
+      "type": "pago",
+      "exerciseId": null,
+      "installmentCurrent": null,
+      "installmentTotal": null,
+      "recurringDisabled": false,
+      "recurringGroupId": "demo-tx-0004",
+      "notes": "",
+      "splitJson": {
+        "splits": [
+          { "userId": "demo-user-0002", "percentage": 100, "amount": 5000 }
+        ]
+      },
+      "relatedTransactionId": null,
+      "creatorId": "demo-user-0001",
+      "userPaid": "demo-user-0001",
+      "createdAt": "2024-01-16T11:00:00Z"
+    },
+    {
+      "id": "demo-tx-0005",
+      "registry_id": "demo-registry-0001",
+      "description": "Netflix anual",
+      "amount": -250,
+      "originalAmount": 250,
+      "type": "parcialidad",
+      "exerciseId": null,
+      "installmentCurrent": 3,
+      "installmentTotal": 12,
+      "recurringDisabled": false,
+      "recurringGroupId": "demo-tx-0005",
+      "notes": "Suscripción anual",
+      "splitJson": {
+        "splits": [
+          { "userId": "demo-user-0001", "percentage": 60, "amount": 150 },
+          { "userId": "demo-user-0002", "percentage": 40, "amount": 100 }
+        ]
+      },
+      "relatedTransactionId": null,
+      "creatorId": "demo-user-0001",
+      "userPaid": "demo-user-0001",
+      "createdAt": "2024-01-05T08:00:00Z"
+    },
+    {
+      "id": "demo-tx-0006",
+      "registry_id": "demo-registry-0001",
+      "description": "Cena de viernes",
+      "amount": -1800,
+      "originalAmount": 1800,
+      "type": "unico",
+      "exerciseId": null,
+      "installmentCurrent": null,
+      "installmentTotal": null,
+      "recurringDisabled": false,
+      "recurringGroupId": "demo-tx-0006",
+      "notes": "",
+      "splitJson": {
+        "splits": [
+          { "userId": "demo-user-0001", "percentage": 33.33, "amount": 600 },
+          { "userId": "demo-user-0002", "percentage": 33.33, "amount": 600 },
+          { "userId": "demo-user-0003", "percentage": 33.34, "amount": 600 }
+        ]
+      },
+      "relatedTransactionId": null,
+      "creatorId": "demo-user-0002",
+      "userPaid": "demo-user-0002",
+      "createdAt": "2024-01-14T21:30:00Z"
+    },
+    {
+      "id": "demo-tx-0007",
+      "registry_id": "demo-registry-0001",
+      "description": "Limpieza",
+      "amount": -600,
+      "originalAmount": 600,
+      "type": "unico",
+      "exerciseId": null,
+      "installmentCurrent": null,
+      "installmentTotal": null,
+      "recurringDisabled": false,
+      "recurringGroupId": "demo-tx-0007",
+      "notes": "",
+      "splitJson": {
+        "splits": [
+          { "userId": "demo-user-0001", "percentage": 50, "amount": 300 },
+          { "userId": "demo-user-0003", "percentage": 50, "amount": 300 }
+        ]
+      },
+      "relatedTransactionId": null,
+      "creatorId": "demo-user-0003",
+      "userPaid": "demo-user-0003",
+      "createdAt": "2024-01-13T16:00:00Z"
+    }
+  ],
+  "transactionPayments": [
+    {
+      "id": "demo-tp-0001",
+      "pagoId": "demo-tx-0004",
+      "expenseId": "demo-tx-0002",
+      "amount": 5000,
+      "createdAt": "2024-01-16T11:00:00Z"
+    }
+  ]
+}

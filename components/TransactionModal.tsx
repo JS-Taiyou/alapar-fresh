@@ -31,6 +31,7 @@ interface TransactionModalProps {
   entities: Signal<{ id: string; name: string; color: string }[]>;
   transactionPayments: Signal<TransactionPayment[]>;
   onRecalculate: () => void;
+  isDemo?: boolean;
 }
 
 type SplitMode = "auto" | "percentage" | "fixed";
@@ -555,6 +556,24 @@ export default function TransactionModal(props: TransactionModalProps) {
     props.editingId.value = null;
     props.onRecalculate();
 
+    if (props.isDemo) {
+      if (!wasEditing) {
+        const serverId = crypto.randomUUID();
+        transactions.value = transactions.value.map((t) =>
+          t.id === optimisticId
+            ? { ...optimistic, id: serverId, createdAt: new Date() }
+            : t
+        );
+        if (optimisticTpEntries.length > 0) {
+          transactionPayments.value = transactionPayments.value.map((tp) =>
+            tp.pagoId === optimisticId ? { ...tp, pagoId: serverId } : tp
+          );
+        }
+        props.onRecalculate();
+      }
+      return;
+    }
+
     const form = new FormData();
     form.append("description", optimistic.description);
     form.append("amount", optimistic.amount.toString());
@@ -647,6 +666,7 @@ export default function TransactionModal(props: TransactionModalProps) {
     props.isOpen.value = false;
     props.editingId.value = null;
     props.onRecalculate();
+    if (props.isDemo) return;
     fetch(`/api/transactions/${id}`, { method: "DELETE" }).catch(() => {});
   }
 

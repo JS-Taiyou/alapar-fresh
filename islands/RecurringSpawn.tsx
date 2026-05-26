@@ -11,6 +11,7 @@ interface SpawnCandidate {
 
 interface RecurringSpawnProps {
   candidates: Signal<SpawnCandidate[]>;
+  isDemo?: boolean;
 }
 
 export default function RecurringSpawn(props: RecurringSpawnProps) {
@@ -38,11 +39,13 @@ export default function RecurringSpawn(props: RecurringSpawnProps) {
   }
 
   async function handleDisableRecurring(id: string) {
-    await fetch("/api/transactions/disable-recurring", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
+    if (!props.isDemo) {
+      await fetch("/api/transactions/disable-recurring", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+    }
     const next = new Set(disabledIds.value);
     next.add(id);
     disabledIds.value = next;
@@ -60,6 +63,10 @@ export default function RecurringSpawn(props: RecurringSpawnProps) {
   }
 
   async function handleSpawn() {
+    if (props.isDemo) {
+      showModal.value = false;
+      return;
+    }
     loading.value = true;
     const items = [...checkedIds.value]
       .filter((id) => !disabledIds.value.has(id))

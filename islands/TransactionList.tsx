@@ -65,6 +65,7 @@ interface TransactionListProps {
   supabaseUrl?: string;
   supabaseAnonKey?: string;
   accessToken?: string;
+  isDemo?: boolean;
 }
 
 function TransactionCardClickable(props: {
@@ -573,6 +574,7 @@ export default function TransactionList(props: TransactionListProps) {
     const ents = props.entities.value;
     const tps = transactionPayments.value;
     if (!rid || txs.length === 0 && lm === null) return;
+    if (props.isDemo) return;
     cache.setRegistrySnapshot({
       registryId: rid,
       transactions: txs.map((t) => ({
@@ -657,6 +659,7 @@ export default function TransactionList(props: TransactionListProps) {
       }
       const rid = registryId.value;
       if (!rid) return;
+      if (props.isDemo) return;
       try {
         const res = await fetch(`/api/entities?registryId=${rid}`);
         if (rid !== registryId.value) return;
@@ -685,6 +688,7 @@ export default function TransactionList(props: TransactionListProps) {
     }
 
     async function wokeUp() {
+      if (props.isDemo) return;
       const rid = registryId.value;
       if (!rid) return;
       const elapsed = Date.now() - lastActive;
@@ -1150,6 +1154,7 @@ export default function TransactionList(props: TransactionListProps) {
         entities={props.entities}
         transactionPayments={transactionPayments}
         onRecalculate={recalculate}
+        isDemo={props.isDemo}
       />
     </>
   );

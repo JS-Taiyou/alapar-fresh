@@ -3,12 +3,15 @@ import { useSignal } from "@preact/signals";
 interface CortarButtonProps {
   hasTransactions: boolean;
   registryId: string;
+  isDemo?: boolean;
 }
 
 export default function CortarButton(props: CortarButtonProps) {
   const loading = useSignal(false);
   const showModal = useSignal(false);
   const canCut = props.hasTransactions;
+
+  if (props.isDemo) return null;
 
   async function handleCortar() {
     if (!canCut || loading.value) return;
