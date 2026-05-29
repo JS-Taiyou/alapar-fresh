@@ -768,6 +768,25 @@ export default function TransactionModal(props: TransactionModalProps) {
   const splits = useComputed(() => getSplits());
 
   const isPago = props.modalMode.value === "payment";
+
+  const debtToRecipient = isPago
+    ? (() => {
+      if (userPaid.value === currentUserId.value) {
+        const entry = props.balanceEntries.value.find((b) =>
+          b.userId === paymentRecipient.value
+        );
+        return entry && entry.amount < -0.005 ? Math.abs(entry.amount) : 0;
+      }
+      if (paymentRecipient.value === currentUserId.value) {
+        const entry = props.balanceEntries.value.find((b) =>
+          b.userId === userPaid.value
+        );
+        return entry && entry.amount > 0.005 ? entry.amount : 0;
+      }
+      return 0;
+    })()
+    : 0;
+
   const modalTitle = isPago
     ? (isEditing.value ? "Editar Pago" : "Nuevo Pago")
     : (isEditing.value ? "Editar Gasto" : "Nuevo Gasto");
@@ -921,6 +940,40 @@ export default function TransactionModal(props: TransactionModalProps) {
                     maximumFractionDigits: 2,
                   })} ({installmentTotal.value} parcialidades)
                 </p>
+              )}
+              {isPago && debtToRecipient > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const formatted = debtToRecipient.toLocaleString("en-US", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    });
+                    amount.value = debtToRecipient;
+                    amountDisplay.value = formatted;
+                  }}
+                  class="flex items-center gap-2 mt-1.5 px-3 py-1.5 rounded-custom border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors cursor-pointer group"
+                >
+                  <svg
+                    class="h-3.5 w-3.5 text-emerald-400 shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      d="M5 13l4 4L19 7"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                    />
+                  </svg>
+                  <span class="text-xs font-medium text-emerald-300">
+                    Los ${debtToRecipient.toLocaleString("en-US", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })} pendientes
+                  </span>
+                </button>
               )}
             </div>
             {!isPago && (
