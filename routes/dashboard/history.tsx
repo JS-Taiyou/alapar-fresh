@@ -68,7 +68,7 @@ export const handler = define.handlers({
 
     const grouped: Record<number, typeof exercises> = {};
     for (const ex of exercises) {
-      const year = ex.startDate.getFullYear();
+      const year = ex.endDate.getFullYear();
       if (!grouped[year]) grouped[year] = [];
       grouped[year].push(ex);
     }
@@ -149,7 +149,7 @@ export default define.page(function HistoryPage(ctx) {
                   <ExerciseCard
                     key={ex.id}
                     exercise={ex}
-                    monthName={getMonthNameEs(ex.startDate).toUpperCase()
+                    monthName={getMonthNameEs(ex.endDate).toUpperCase()
                       .substring(0, 3)}
                     personalTotal={data.personalTotals.get(ex.id)}
                   />

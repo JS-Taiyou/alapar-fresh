@@ -113,8 +113,8 @@ export default define.page(function ExerciseDetail(ctx) {
     <>
       <Head>
         <title>
-          A la par - Corte {monthNames[exercise.startDate.getMonth()]}{" "}
-          {exercise.startDate.getFullYear()}
+          A la par - Corte {monthNames[exercise.endDate.getMonth()]}{" "}
+          {exercise.endDate.getFullYear()}
         </title>
       </Head>
       <main class="flex-1 overflow-y-auto custom-scrollbar">
@@ -140,8 +140,8 @@ export default define.page(function ExerciseDetail(ctx) {
             </a>
             <div>
               <h1 class="text-2xl font-bold tracking-tight">
-                Corte {monthNames[exercise.startDate.getMonth()]}{" "}
-                {exercise.startDate.getFullYear()}
+                Corte {monthNames[exercise.endDate.getMonth()]}{" "}
+                {exercise.endDate.getFullYear()}
               </h1>
               <p class="text-slate-400 text-sm">
                 {exercise.transactionCount} movimientos &bull; Total:{" "}

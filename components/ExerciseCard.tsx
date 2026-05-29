@@ -35,13 +35,17 @@ export default function ExerciseCard(props: ExerciseCardProps) {
         </div>
         <div>
           <p class="font-medium text-zinc-100 leading-tight">
-            Corte {exercise.startDate.toLocaleDateString("es-MX", {
+            Corte {exercise.endDate.toLocaleDateString("es-MX", {
               month: "long",
               year: "numeric",
             })}
           </p>
           <p class="text-xs text-zinc-400">
-            {exercise.transactionCount} Gastos &bull; Total: {totalDisplay}
+            {exercise.transactionCount} Gastos &bull; Total: {totalDisplay} &bull; {exercise.endDate.toLocaleDateString("es-MX", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            })}
           </p>
         </div>
       </div>
