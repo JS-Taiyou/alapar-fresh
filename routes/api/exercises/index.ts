@@ -83,40 +83,47 @@ export const handler = define.handlers({
     ];
     const debts = calculateFullPairwiseBalances(active, participants);
 
-    const exercise = await createExercise(registryId);
+    const totalPending = debts.reduce((sum, d) => sum + d.amount, 0);
+    const maxRoundingError = 0.01 * active.length;
 
+    const exercise = await createExercise(registryId);
     invalidateRegistry(registryId);
 
-    for (const debt of debts) {
-      await createTransaction({
-        registry_id: registryId,
-        description:
-          `Pendiente de ${debt.fromUserName} a favor de ${debt.toUserName}`,
-        amount: debt.amount,
-        originalAmount: debt.amount,
-        type: "ajuste" as const,
-        relatedTransactionId: null,
-        exerciseId: null,
-        installmentCurrent: null,
-        installmentTotal: null,
-        recurringDisabled: false,
-        recurringGroupId: crypto.randomUUID(),
-        notes: "Ajuste de balance pendiente del ejercicio anterior",
-        splitJson: {
-          splits: [{
-            userId: debt.fromUserId,
-            percentage: 100,
-            amount: debt.amount,
-          }],
-        },
-        creatorId: debt.toUserId,
-        userPaid: debt.toUserId,
-      }, userId);
+    if (totalPending > maxRoundingError) {
+      for (const debt of debts) {
+        await createTransaction({
+          registry_id: registryId,
+          description:
+            `Pendiente de ${debt.fromUserName} a favor de ${debt.toUserName}`,
+          amount: debt.amount,
+          originalAmount: debt.amount,
+          type: "ajuste" as const,
+          relatedTransactionId: null,
+          exerciseId: null,
+          installmentCurrent: null,
+          installmentTotal: null,
+          recurringDisabled: false,
+          recurringGroupId: crypto.randomUUID(),
+          notes: "Ajuste de balance pendiente del ejercicio anterior",
+          splitJson: {
+            splits: [{
+              userId: debt.fromUserId,
+              percentage: 100,
+              amount: debt.amount,
+            }],
+          },
+          creatorId: debt.toUserId,
+          userPaid: debt.toUserId,
+        }, userId);
+      }
     }
 
     const accept = ctx.req.headers.get("Accept") ?? "";
     if (accept.includes("application/json")) {
-      return Response.json({ exercise, transactions: debts });
+      return Response.json({
+        exercise,
+        transactions: totalPending > maxRoundingError ? debts : [],
+      });
     }
     return ctx.redirect("/dashboard");
   },
