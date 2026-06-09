@@ -1,5 +1,5 @@
 import { define } from "../../../utils.ts";
-import { setAuthCookies } from "../../../lib/supabase.ts";
+import { getSupabaseUrl, setAuthCookies } from "../../../lib/supabase.ts";
 
 export const handler = define.handlers({
   async POST(ctx) {
@@ -7,6 +7,9 @@ export const handler = define.handlers({
     const accessToken = body.accessToken as string;
     const refreshToken = body.refreshToken as string;
 
+    console.log("[AUTH-CB] server config:", {
+      supabaseUrl: getSupabaseUrl(),
+    });
     console.log("[AUTH-CB] POST received", {
       hasAccess: !!accessToken,
       hasRefresh: !!refreshToken,

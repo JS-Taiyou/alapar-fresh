@@ -39,6 +39,10 @@ export async function getUserFromRequest(
   const cookieHeader = req.headers.get("cookie") ?? "";
   const accessToken = getCookie(cookieHeader, "sb-access-token");
   const refreshToken = getCookie(cookieHeader, "sb-refresh-token");
+  devLog("server config:", {
+    supabaseUrl,
+    serviceRoleKeyHead: supabaseServiceRoleKey.substring(0, 30),
+  });
   devLog("Cookies present:", {
     access: !!accessToken,
     refresh: !!refreshToken,
