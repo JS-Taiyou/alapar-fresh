@@ -2,9 +2,9 @@ const CACHE_NAME = "alapar-v1";
 
 const _PRECACHE_URLS = ["/", "/dashboard"];
 
-const BUILD_CACHE = "alapar-build-v1";
-const API_CACHE = "alapar-api-v1";
-const HTML_CACHE = "alapar-html-v1";
+const BUILD_CACHE = "alapar-build-v2";
+const API_CACHE = "alapar-api-v2";
+const HTML_CACHE = "alapar-html-v2";
 
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -74,21 +74,36 @@ async function cacheFirst(request, cacheName) {
 }
 
 async function networkFirst(request, cacheName) {
+  const url = new URL(request.url);
+  console.log("[SW] networkFirst start", request.method, url.pathname + url.search, "cache:", cacheName);
   try {
     const response = await fetch(request);
+    console.log("[SW] networkFirst fetch ok", url.pathname, response.status, response.type);
     if (response.ok) {
       const cache = await caches.open(cacheName);
-      cache.put(request, response.clone()).catch(() => {});
+      cache.put(request, response.clone()).catch((err) => {
+        console.log("[SW] cache.put failed", url.pathname, String(err));
+      });
     }
     return response;
-  } catch {
+  } catch (err) {
+    console.log("[SW] networkFirst FETCH FAILED", request.method, url.pathname + url.search, "err:", String(err), "err.name:", err?.name);
     const cached = await caches.match(request);
-    if (cached) return cached;
+    if (cached) {
+      console.log("[SW] networkFirst serving exact cache hit for", url.pathname);
+      return cached;
+    }
     if (request.headers.get("Accept")?.includes("text/html")) {
+      console.log("[SW] networkFirst HTML fallback to /dashboard for", url.pathname);
       const cache = await caches.open(HTML_CACHE);
       const fallback = await cache.match("/dashboard");
-      if (fallback) return fallback;
+      if (fallback) {
+        console.log("[SW] networkFirst returning cached /dashboard");
+        return fallback;
+      }
+      console.log("[SW] networkFirst no cached /dashboard available");
     }
+    console.log("[SW] networkFirst returning 503 Offline");
     return new Response("Offline", { status: 503 });
   }
 }
