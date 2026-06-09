@@ -42,6 +42,10 @@ export async function getUserFromRequest(
   devLog("Cookies present:", {
     access: !!accessToken,
     refresh: !!refreshToken,
+    accessLen: accessToken?.length ?? 0,
+    refreshLen: refreshToken?.length ?? 0,
+    accessHead: accessToken?.substring(0, 30),
+    refreshHead: refreshToken?.substring(0, 30),
   });
 
   if (!accessToken) return null;
