@@ -29,10 +29,8 @@ export interface AuthResult {
   refreshedTokens?: { accessToken: string; refreshToken: string };
 }
 
-const isDev = !Deno.env.get("DENO_DEPLOYMENT_ID");
-
 function devLog(...args: unknown[]) {
-  if (isDev) console.log("[AUTH]", ...args);
+  console.log("[AUTH]", ...args);
 }
 
 export async function getUserFromRequest(
