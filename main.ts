@@ -12,7 +12,13 @@ function devLog(...args: unknown[]) {
 export const app = new App<State>();
 
 app.use(staticFiles());
-app.use(csrf());
+app.use(csrf({
+  origin: (origin, ctx) => {
+    if (ctx.url.pathname === "/api/auth/callback") return true;
+    if (ctx.url.pathname === "/api/auth/check-email") return true;
+    return origin === ctx.url.origin;
+  },
+}));
 
 app.use(define.middleware(async (ctx) => {
   const path = new URL(ctx.req.url).pathname;
