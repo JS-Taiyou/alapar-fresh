@@ -39,6 +39,8 @@ export async function getUserFromRequest(
   const cookieHeader = req.headers.get("cookie") ?? "";
   const accessToken = getCookie(cookieHeader, "sb-access-token");
   const refreshToken = getCookie(cookieHeader, "sb-refresh-token");
+  // Dump the raw cookie header so we can see exactly what the browser sent
+  devLog("RAW cookie header:", cookieHeader.substring(0, 200) + (cookieHeader.length > 200 ? `... [+${cookieHeader.length - 200} chars]` : ""));
   devLog("server config:", {
     supabaseUrl,
     serviceRoleKeyHead: supabaseServiceRoleKey.substring(0, 30),
