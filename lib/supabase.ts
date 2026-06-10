@@ -40,7 +40,12 @@ export async function getUserFromRequest(
   const accessToken = getCookie(cookieHeader, "sb-access-token");
   const refreshToken = getCookie(cookieHeader, "sb-refresh-token");
   // Dump the raw cookie header so we can see exactly what the browser sent
-  devLog("RAW cookie header:", cookieHeader.substring(0, 200) + (cookieHeader.length > 200 ? `... [+${cookieHeader.length - 200} chars]` : ""));
+  if (accessToken) {
+    devLog("accessToken FULL length:", accessToken.length);
+    devLog("accessToken FIRST 60:", accessToken.substring(0, 60));
+    devLog("accessToken LAST 60:", accessToken.substring(accessToken.length - 60));
+    devLog("accessToken char codes around 1374:", Array.from(accessToken.substring(1370, 1400)).map(c => c.charCodeAt(0)));
+  }
   devLog("server config:", {
     supabaseUrl,
     serviceRoleKeyHead: supabaseServiceRoleKey.substring(0, 30),
