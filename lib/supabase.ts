@@ -29,8 +29,10 @@ export interface AuthResult {
   refreshedTokens?: { accessToken: string; refreshToken: string };
 }
 
+const isDev = !Deno.env.get("DENO_DEPLOYMENT_ID");
+
 function devLog(...args: unknown[]) {
-  console.log("[AUTH]", ...args);
+  if (isDev) console.log("[AUTH]", ...args);
 }
 
 export async function getUserFromRequest(
@@ -39,24 +41,9 @@ export async function getUserFromRequest(
   const cookieHeader = req.headers.get("cookie") ?? "";
   const accessToken = getCookie(cookieHeader, "sb-access-token");
   const refreshToken = getCookie(cookieHeader, "sb-refresh-token");
-  // Dump the raw cookie header so we can see exactly what the browser sent
-  if (accessToken) {
-    devLog("accessToken FULL length:", accessToken.length);
-    devLog("accessToken FIRST 60:", accessToken.substring(0, 60));
-    devLog("accessToken LAST 60:", accessToken.substring(accessToken.length - 60));
-    devLog("accessToken char codes around 1374:", Array.from(accessToken.substring(1370, 1400)).map(c => c.charCodeAt(0)));
-  }
-  devLog("server config:", {
-    supabaseUrl,
-    serviceRoleKeyHead: supabaseServiceRoleKey.substring(0, 30),
-  });
   devLog("Cookies present:", {
     access: !!accessToken,
     refresh: !!refreshToken,
-    accessLen: accessToken?.length ?? 0,
-    refreshLen: refreshToken?.length ?? 0,
-    accessHead: accessToken?.substring(0, 30),
-    refreshHead: refreshToken?.substring(0, 30),
   });
 
   if (!accessToken) return null;

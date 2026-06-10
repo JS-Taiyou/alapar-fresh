@@ -45,5 +45,9 @@
     ],
     "types": ["vite/client"],
     "skipLibCheck": true
+  },
+  "deploy": {
+    "org": "itzayanos",
+    "app": "alapar"
   }
 }

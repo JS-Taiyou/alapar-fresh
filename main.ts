@@ -4,8 +4,9 @@ import { createUserFromSupabase, resolveUserState } from "./lib/store.ts";
 import { getUserFromRequest, setAuthCookies } from "./lib/supabase.ts";
 import { query } from "./lib/db.ts";
 
+const isDev = !Deno.env.get("DENO_DEPLOYMENT_ID");
 function devLog(...args: unknown[]) {
-  console.log("[MW]", ...args);
+  if (isDev) console.log("[MW]", ...args);
 }
 
 export const app = new App<State>();
