@@ -136,7 +136,10 @@ export function clearAuthCookies(headers: Headers): void {
 }
 
 function getCookie(cookieHeader: string, name: string): string | null {
-  const cookies = cookieHeader.split(";").map((c) => c.trim());
+  // Split on ; or , — Deno Deploy's edge has been seen to strip the ;
+  // separator from the Cookie request header, mashing all cookies into one.
+  // base64url JWTs use only A-Z a-z 0-9 - _ and . so , and ; are safe separators.
+  const cookies = cookieHeader.split(/[;,]/).map((c) => c.trim()).filter(Boolean);
   for (const cookie of cookies) {
     if (cookie.startsWith(`${name}=`)) {
       return cookie.substring(name.length + 1);
