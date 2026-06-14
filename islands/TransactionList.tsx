@@ -682,6 +682,7 @@ export default function TransactionList(props: TransactionListProps) {
   useSignalEffect(() => {
     let lastActive = Date.now();
     const FRESHNESS_MS = 30_000;
+    const HEARTBEAT_MS = 10_000;
 
     function wentToSleep() {
       lastActive = Date.now();
@@ -765,7 +766,19 @@ export default function TransactionList(props: TransactionListProps) {
     document.addEventListener("resume", wokeUp);
     globalThis.addEventListener("pageshow", wokeUp);
 
+    let lastTick = Date.now();
+    const heartbeat = setInterval(() => {
+      const now = Date.now();
+      const gap = now - lastTick;
+      lastTick = now;
+      if (gap > HEARTBEAT_MS + FRESHNESS_MS) {
+        lastActive = 0;
+        wokeUp();
+      }
+    }, HEARTBEAT_MS);
+
     return () => {
+      clearInterval(heartbeat);
       document.removeEventListener("visibilitychange", onVisibility);
       document.removeEventListener("resume", wokeUp);
       globalThis.removeEventListener("pageshow", wokeUp);

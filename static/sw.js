@@ -2,9 +2,10 @@ const CACHE_NAME = "alapar-v1";
 
 const _PRECACHE_URLS = ["/", "/dashboard"];
 
-const BUILD_CACHE = "alapar-build-v3";
-const API_CACHE = "alapar-api-v3";
-const HTML_CACHE = "alapar-html-v3";
+const BUILD_CACHE = "alapar-build-v4";
+const API_CACHE = "alapar-api-v4";
+const HTML_CACHE = "alapar-html-v4";
+const NETWORK_TIMEOUT_MS = 4000;
 
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -74,14 +75,28 @@ async function cacheFirst(request, cacheName) {
 }
 
 async function networkFirst(request, cacheName) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(
+      () => reject(new Error("network-timeout")),
+      NETWORK_TIMEOUT_MS,
+    );
+  });
   try {
-    const response = await fetch(request);
+    const response = await Promise.race([fetch(request), timeout]);
+    clearTimeout(timeoutId);
     if (response.ok) {
       const cache = await caches.open(cacheName);
       cache.put(request, response.clone()).catch(() => {});
     }
     return response;
   } catch {
+    clearTimeout(timeoutId);
+    fetch(request).then((res) => {
+      if (res.ok) {
+        caches.open(cacheName).then((c) => c.put(request, res)).catch(() => {});
+      }
+    }).catch(() => {});
     const cached = await caches.match(request);
     if (cached) return cached;
     if (request.headers.get("Accept")?.includes("text/html")) {
