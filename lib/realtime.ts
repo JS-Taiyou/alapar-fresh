@@ -16,6 +16,33 @@ type ChangeHandler = (payload: {
 
 let onChange: ChangeHandler | null = null;
 
+// --- Recovery state -------------------------------------------------------
+// When the channel errors (token expiry, network blip, mobile sleep), we
+// attempt to recover by fetching a fresh token and resubscribing.
+let recovering = false;
+let recoveryAttempts = 0;
+
+/** Channel statuses that warrant an automatic recovery attempt. */
+export const RECOVERABLE_STATUSES = new Set([
+  "CHANNEL_ERROR",
+  "TIMED_OUT",
+  "CLOSED",
+]);
+
+/** Maximum recovery attempts before giving up (wake-up path remains as backup). */
+export const MAX_RECOVERY_ATTEMPTS = 3;
+
+/** Backoff delay (ms) before the Nth recovery attempt (1-indexed). */
+export const RECOVERY_BACKOFF_MS = [1000, 2000, 4000];
+
+/**
+ * Pure predicate: should the given channel status trigger a recovery attempt?
+ * Exported for unit testing.
+ */
+export function shouldRecover(status: string): boolean {
+  return RECOVERABLE_STATUSES.has(status);
+}
+
 function getSupabase(): SupabaseClient {
   if (!supabase) {
     const url = (globalThis as Record<string, unknown>)
@@ -70,7 +97,73 @@ export async function subscribeToRegistry(
     )
     .subscribe((status, err) => {
       console.log("[realtime] status:", status, err ?? "");
+
+      if (status === "SUBSCRIBED") {
+        // Successfully connected — reset recovery state.
+        recovering = false;
+        recoveryAttempts = 0;
+        return;
+      }
+
+      if (shouldRecover(status) && !recovering) {
+        recovering = true;
+        void recoverChannel();
+      }
     });
+}
+
+/**
+ * Attempt to recover the realtime channel after an error.
+ *
+ * Tears down the current channel, fetches a fresh access token from
+ * `/api/auth/token` (which triggers a server-side refresh if needed), and
+ * resubscribes. Retries with backoff up to {@link MAX_RECOVERY_ATTEMPTS} times.
+ */
+async function recoverChannel(): Promise<void> {
+  // Tear down the broken channel.
+  unsubscribeAll();
+
+  while (recoveryAttempts < MAX_RECOVERY_ATTEMPTS) {
+    recoveryAttempts++;
+    const delay = RECOVERY_BACKOFF_MS[
+      Math.min(recoveryAttempts - 1, RECOVERY_BACKOFF_MS.length - 1)
+    ];
+    console.log(
+      `[realtime] recovery attempt ${recoveryAttempts}/${MAX_RECOVERY_ATTEMPTS} in ${delay}ms`,
+    );
+    await new Promise((r) => setTimeout(r, delay));
+
+    try {
+      const resp = await fetch("/api/auth/token");
+      if (!resp.ok) {
+        console.log("[realtime] token fetch failed:", resp.status);
+        continue;
+      }
+      const { accessToken } = await resp.json() as { accessToken: string };
+      if (!accessToken) continue;
+
+      // Resubscribe with the fresh token. subscribeToRegistry resets
+      // recovering on SUBSCRIBED; if it errors again, the status callback
+      // will re-enter recovery (but `recovering` is still true, so the loop
+      // here handles it).
+      if (activeRegistryId && onChange) {
+        const rid = activeRegistryId;
+        const handler = onChange;
+        // Reset so subscribeToRegistry doesn't no-op on the id check.
+        activeRegistryId = null;
+        await subscribeToRegistry(rid, handler, accessToken);
+        return; // subscribeToRegistry will set recovering=false on SUBSCRIBED
+      }
+    } catch (err) {
+      console.error("[realtime] recovery attempt failed:", err);
+    }
+  }
+
+  // Exhausted retries — give up. The wake-up/visibilitychange path remains.
+  console.warn(
+    `[realtime] recovery failed after ${MAX_RECOVERY_ATTEMPTS} attempts; waiting for wake-up path`,
+  );
+  recovering = false;
 }
 
 export function unsubscribeAll(): void {
@@ -87,6 +180,8 @@ export async function resubscribe(): Promise<void> {
   const rid = activeRegistryId;
   const handler = onChange;
   activeRegistryId = null;
+  recovering = false;
+  recoveryAttempts = 0;
   await subscribeToRegistry(rid, handler);
 }
 

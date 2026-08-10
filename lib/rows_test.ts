@@ -1,6 +1,7 @@
 import { assertEquals, assertInstanceOf } from "@std/assert";
 import { describe, it } from "@std/testing/bdd";
 import {
+  rowToEnrichedTransaction,
   rowToEntity,
   rowToExercise,
   rowToRegistry,
@@ -87,6 +88,27 @@ describe("rowToTransaction", () => {
     const tx = rowToTransaction(baseRow);
     assertEquals(tx.amount, 100.50);
     assertEquals(tx.originalAmount, 100.50);
+  });
+
+  it("parses amount/originalAmount when they arrive as numbers (Supabase Realtime shape)", () => {
+    // Realtime postgres_changes payloads deliver numerics as JSON numbers.
+    const tx = rowToTransaction({
+      ...baseRow,
+      amount: 100.5,
+      original_amount: 100.5,
+    });
+    assertEquals(tx.amount, 100.5);
+    assertEquals(tx.originalAmount, 100.5);
+  });
+
+  it("parses amount/originalAmount when they arrive as strings (pg shape)", () => {
+    const tx = rowToTransaction({
+      ...baseRow,
+      amount: "42.99",
+      original_amount: "42.99",
+    });
+    assertEquals(tx.amount, 42.99);
+    assertEquals(tx.originalAmount, 42.99);
   });
 
   it("parses split_json when it arrives as a string", () => {
@@ -252,5 +274,56 @@ describe("rowToEntity", () => {
       name: "Landlord",
       color: "#999",
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// rowToEnrichedTransaction
+// ---------------------------------------------------------------------------
+
+describe("rowToEnrichedTransaction", () => {
+  const rawRow = {
+    id: "tx-1",
+    registry_id: "reg-1",
+    description: "Dinner",
+    amount: "100",
+    original_amount: "100",
+    type: "unico",
+    exercise_id: null,
+    installment_current: null,
+    installment_total: null,
+    recurring_disabled: false,
+    recurring_group_id: "grp-1",
+    notes: "",
+    split_json: '{"splits":[]}',
+    related_transaction_id: null,
+    creator_id: "u-1",
+    user_paid: "u-2",
+    created_at: "2024-01-15T10:00:00Z",
+  };
+
+  it("maps the row and resolves paidByUser from the participant map", () => {
+    const bob = { id: "u-2", name: "Bob", color: "#f00" };
+    const participantMap = new Map([["u-2", bob]]);
+    const result = rowToEnrichedTransaction(rawRow, participantMap);
+    assertEquals(result.id, "tx-1");
+    assertEquals(result.amount, 100);
+    assertEquals(result.paidByUser, bob);
+  });
+
+  it("returns null paidByUser when the payer is not in the participant map", () => {
+    const result = rowToEnrichedTransaction(rawRow, new Map());
+    assertEquals(result.paidByUser, null);
+    // the rest of the transaction is still mapped
+    assertEquals(result.userPaid, "u-2");
+  });
+
+  it("works with Realtime-shaped numeric amounts", () => {
+    const result = rowToEnrichedTransaction(
+      { ...rawRow, amount: 50.5, original_amount: 50.5 },
+      new Map(),
+    );
+    assertEquals(result.amount, 50.5);
+    assertEquals(result.originalAmount, 50.5);
   });
 });

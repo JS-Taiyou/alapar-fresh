@@ -9,9 +9,9 @@ import type {
   DefaultSplit,
   Participant,
   TransactionPayment,
-  TransactionSplit,
 } from "../lib/types.ts";
 import { type EnrichedTransaction } from "./shared-signals.ts";
+import { rowToEnrichedTransaction } from "../lib/rows.ts";
 
 function dedupById<T extends { id: string }>(items: T[]): T[] {
   const seen = new Set<string>();
@@ -424,38 +424,8 @@ export default function TransactionList(props: TransactionListProps) {
       (payload) => {
         const participantMap = new Map(users.value.map((u) => [u.id, u]));
 
-        const mapRow = (row: Record<string, unknown>): EnrichedTransaction => ({
-          id: row.id as string,
-          registry_id: row.registry_id as string,
-          description: row.description as string,
-          amount: typeof row.amount === "string"
-            ? parseFloat(row.amount)
-            : (row.amount as number),
-          originalAmount: typeof row.original_amount === "string"
-            ? parseFloat(row.original_amount)
-            : (row.original_amount as number),
-          type: row.type as
-            | "unico"
-            | "parcialidad"
-            | "recurrente"
-            | "pago"
-            | "ajuste",
-          exerciseId: row.exercise_id as string | null,
-          installmentCurrent: row.installment_current as number | null,
-          installmentTotal: row.installment_total as number | null,
-          recurringDisabled: (row.recurring_disabled as boolean) ?? false,
-          recurringGroupId: (row.recurring_group_id as string) ??
-            row.id as string,
-          notes: row.notes as string,
-          splitJson: typeof row.split_json === "string"
-            ? JSON.parse(row.split_json)
-            : row.split_json as TransactionSplit,
-          relatedTransactionId: (row.related_transaction_id as string) ?? null,
-          creatorId: row.creator_id as string,
-          userPaid: row.user_paid as string,
-          createdAt: new Date(row.created_at as string),
-          paidByUser: participantMap.get(row.user_paid as string) ?? null,
-        });
+        const mapRow = (row: Record<string, unknown>): EnrichedTransaction =>
+          rowToEnrichedTransaction(row, participantMap);
 
         if (payload.eventType === "INSERT" && payload.new?.id) {
           const existing = transactions.value.find((t) =>

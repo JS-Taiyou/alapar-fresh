@@ -1,10 +1,16 @@
 /**
  * Pure row-mapping helpers.
  *
- * Each function converts a raw `pg` result row (`Record<string, unknown>`,
+ * Each function converts a raw result row (`Record<string, unknown>`,
  * snake_case columns, numerics as strings) into the app's typed model. They
  * have no I/O and no side effects — extracted from `lib/store.ts` so they can
  * be unit-tested without a database.
+ *
+ * Rows arrive from two sources with slightly different numeric shapes:
+ *   - `pg` returns NUMERIC columns as **strings** (e.g. `"100.50"`).
+ *   - Supabase Realtime `postgres_changes` payloads deliver them as **numbers**
+ *     (JSON), e.g. `100.5`.
+ * The numeric parsers below use {@link num} to handle both shapes defensively.
  *
  * Branches worth knowing (locked down by `rows_test.ts`):
  *   - `rowToTransaction.splitJson`: parsed from string when the driver returns
@@ -18,12 +24,23 @@ import type {
   DefaultSplit,
   Entity,
   Exercise,
+  Participant,
   Registry,
   Transaction,
   TransactionPayment,
   TransactionSplit,
   User,
 } from "./types.ts";
+
+/**
+ * Parse a numeric column that may arrive as a string (from `pg`) or a number
+ * (from Supabase Realtime). Falls back to `0` if absent/unparseable.
+ */
+function num(value: unknown): number {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") return parseFloat(value);
+  return 0;
+}
 
 export function rowToUser(row: Record<string, unknown>): User {
   return {
@@ -43,8 +60,8 @@ export function rowToTransaction(
     id: row.id as string,
     registry_id: row.registry_id as string,
     description: row.description as string,
-    amount: parseFloat(row.amount as string),
-    originalAmount: parseFloat(row.original_amount as string),
+    amount: num(row.amount),
+    originalAmount: num(row.original_amount),
     type: row.type as
       | "unico"
       | "parcialidad"
@@ -75,7 +92,7 @@ export function rowToTransactionPayment(
     id: row.id as string,
     pagoId: row.pago_id as string,
     expenseId: row.expense_id as string,
-    amount: parseFloat(row.amount as string),
+    amount: num(row.amount),
     createdAt: new Date(row.created_at as string),
   };
 }
@@ -89,7 +106,7 @@ export function rowToExercise(
     startDate: new Date(row.start_date as string),
     endDate: new Date(row.end_date as string),
     transactionCount: row.transaction_count as number,
-    totalAmount: parseFloat(row.total_amount as string),
+    totalAmount: num(row.total_amount),
   };
 }
 
@@ -119,5 +136,31 @@ export function rowToEntity(row: Record<string, unknown>): Entity {
     id: row.id as string,
     name: row.name as string,
     color: row.color as string,
+  };
+}
+
+/**
+ * A transaction plus the resolved `paidByUser` participant. This is the shape
+ * the transactions GET endpoint and the client TransactionList island both
+ * consume. Defined here (rather than in `islands/shared-signals.ts`) so the
+ * shared enrichment helper has no island dependency.
+ */
+export type EnrichedTransaction = Transaction & {
+  paidByUser: Participant | null;
+};
+
+/**
+ * Map a raw row to an {@link EnrichedTransaction}, resolving `paidByUser`
+ * against the supplied participant map (keyed by participant id). Used by both
+ * the server (transactions GET) and the client (Supabase Realtime payloads) so
+ * the two enrichment paths can never drift.
+ */
+export function rowToEnrichedTransaction(
+  row: Record<string, unknown>,
+  participantMap: Map<string, Participant>,
+): EnrichedTransaction {
+  return {
+    ...rowToTransaction(row),
+    paidByUser: participantMap.get(row.user_paid as string) ?? null,
   };
 }
