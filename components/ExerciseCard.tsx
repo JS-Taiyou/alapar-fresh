@@ -41,7 +41,8 @@ export default function ExerciseCard(props: ExerciseCardProps) {
             })}
           </p>
           <p class="text-xs text-zinc-400">
-            {exercise.transactionCount} Gastos &bull; Total: {totalDisplay} &bull; {exercise.endDate.toLocaleDateString("es-MX", {
+            {exercise.transactionCount} Gastos &bull; Total: {totalDisplay}{" "}
+            &bull; {exercise.endDate.toLocaleDateString("es-MX", {
               day: "numeric",
               month: "short",
               year: "numeric",

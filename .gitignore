@@ -17,3 +17,4 @@ mockups/*
 .playwright-mcp
 db/backups
 AGENTS.md
+.zcode

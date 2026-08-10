@@ -39,13 +39,20 @@ export const handler = define.handlers({
 
     const participantMap = new Map(users.map((u) => [u.id, u]));
 
-    const transactions: EnrichedTransaction[] = demoData.transactions.map((t) => ({
+    const transactions: EnrichedTransaction[] = demoData.transactions.map((
+      t,
+    ) => ({
       id: t.id,
       registry_id: t.registry_id,
       description: t.description,
       amount: t.amount,
       originalAmount: t.originalAmount,
-      type: t.type as "unico" | "parcialidad" | "recurrente" | "pago" | "ajuste",
+      type: t.type as
+        | "unico"
+        | "parcialidad"
+        | "recurrente"
+        | "pago"
+        | "ajuste",
       exerciseId: t.exerciseId,
       installmentCurrent: t.installmentCurrent,
       installmentTotal: t.installmentTotal,
@@ -60,13 +67,14 @@ export const handler = define.handlers({
       paidByUser: participantMap.get(t.userPaid) ?? null,
     }));
 
-    const transactionPayments: TransactionPayment[] = demoData.transactionPayments.map((tp) => ({
-      id: tp.id,
-      pagoId: tp.pagoId,
-      expenseId: tp.expenseId,
-      amount: tp.amount,
-      createdAt: new Date(tp.createdAt),
-    }));
+    const transactionPayments: TransactionPayment[] = demoData
+      .transactionPayments.map((tp) => ({
+        id: tp.id,
+        pagoId: tp.pagoId,
+        expenseId: tp.expenseId,
+        amount: tp.amount,
+        createdAt: new Date(tp.createdAt),
+      }));
 
     const balance = calculateBalance(transactions, DEMO_USER_ID);
     const balanceBreakdown = calculatePairwiseBreakdown(
