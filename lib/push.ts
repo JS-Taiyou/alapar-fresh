@@ -1,4 +1,10 @@
 import { query } from "./db.ts";
+import {
+  base64url,
+  base64urlToBytes,
+  concatUint8Arrays,
+  encodeLength,
+} from "./encoding.ts";
 
 interface PushSubscription {
   id: string;
@@ -273,35 +279,4 @@ async function hkdf(
     length * 8,
   );
   return new Uint8Array(bits);
-}
-
-function concatUint8Arrays(...arrays: Uint8Array[]): Uint8Array {
-  const total = arrays.reduce((sum, arr) => sum + arr.length, 0);
-  const result = new Uint8Array(total);
-  let offset = 0;
-  for (const arr of arrays) {
-    result.set(arr, offset);
-    offset += arr.length;
-  }
-  return result;
-}
-
-function encodeLength(data: Uint8Array): Uint8Array {
-  const len = new Uint8Array(2 + data.length);
-  len[0] = 0;
-  len[1] = data.length;
-  len.set(data, 2);
-  return len;
-}
-
-function base64url(input: string | Uint8Array): string {
-  const str = typeof input === "string" ? input : String.fromCharCode(...input);
-  return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-function base64urlToBytes(base64: string): Uint8Array {
-  const padding = "=".repeat((4 - base64.length % 4) % 4);
-  const b64 = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const binary = atob(b64);
-  return Uint8Array.from(binary.split("").map((c) => c.charCodeAt(0)));
 }

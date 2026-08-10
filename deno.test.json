@@ -1,17 +1,14 @@
 {
   "nodeModulesDir": "manual",
-  "tasks": {
-    "test": "deno test --config deno.test.json --allow-env",
-    "check": "deno fmt --check . && deno lint . && deno check && deno test",
-    "dev": "vite",
-    "build": "vite build",
-    "start": "deno serve -A _fresh/server.js",
-    "update": "deno run -A -r jsr:@fresh/update ."
-  },
   "lint": { "rules": { "tags": ["fresh", "recommended"] } },
-  "exclude": ["**/_fresh/*"],
+  "exclude": [
+    "**/_fresh/*",
+    "node_modules/",
+    "vendor/"
+  ],
   "imports": {
     "@/": "./",
+    "./lib/db.ts": "./test/fixtures/db_stub.ts",
     "@types/pg": "npm:@types/pg@^8.20.0",
     "fresh": "jsr:@fresh/core@^2.3.3",
     "pg": "npm:pg@^8.20.0",
@@ -48,9 +45,5 @@
     ],
     "types": ["vite/client"],
     "skipLibCheck": true
-  },
-  "deploy": {
-    "org": "itzayanos",
-    "app": "alapar"
   }
 }

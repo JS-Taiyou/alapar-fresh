@@ -1,13 +1,11 @@
 import { query } from "./db.ts";
 import type {
-  DefaultSplit,
   Entity,
   Exercise,
   Participant,
   Registry,
   Transaction,
   TransactionPayment,
-  TransactionSplit,
   User,
 } from "./types.ts";
 import {
@@ -19,6 +17,14 @@ import {
   calculatePairwiseBreakdown as calcPairwiseBreakdownPure,
 } from "./calculations.ts";
 import { getUserActiveRegistry } from "./server-cache.ts";
+import {
+  rowToExercise,
+  rowToRegistry,
+  rowToTransaction,
+  rowToTransactionPayment,
+  rowToUser,
+} from "./rows.ts";
+import { filterSpawnCandidates, generateInviteCode } from "./invite.ts";
 
 export {
   buildEqualSplit,
@@ -27,6 +33,7 @@ export {
   calcFullPairwisePure as calculateFullPairwiseBalances,
   calcPairwiseBreakdownPure as calculatePairwiseBreakdown,
 };
+export { generateInviteCode };
 
 const MONTHS_ES = [
   "Ene",
@@ -42,87 +49,6 @@ const MONTHS_ES = [
   "Nov",
   "Dic",
 ];
-
-function rowToUser(row: Record<string, unknown>): User {
-  return {
-    id: row.id as string,
-    name: row.name as string,
-    color: row.color as string,
-    email: row.email as string,
-    supabaseAuthId: (row.supabase_auth_id as string) ?? null,
-    createdAt: new Date(row.created_at as string),
-  };
-}
-
-function rowToTransaction(row: Record<string, unknown>): Transaction {
-  return {
-    id: row.id as string,
-    registry_id: row.registry_id as string,
-    description: row.description as string,
-    amount: parseFloat(row.amount as string),
-    originalAmount: parseFloat(row.original_amount as string),
-    type: row.type as
-      | "unico"
-      | "parcialidad"
-      | "recurrente"
-      | "pago"
-      | "ajuste",
-    exerciseId: row.exercise_id as string | null,
-    installmentCurrent: row.installment_current as number | null,
-    installmentTotal: row.installment_total as number | null,
-    recurringDisabled: (row.recurring_disabled as boolean) ?? false,
-    recurringGroupId: (row.recurring_group_id as string) ?? row.id as string,
-    notes: row.notes as string,
-    splitJson: typeof row.split_json === "string"
-      ? JSON.parse(row.split_json)
-      : row.split_json as TransactionSplit,
-    relatedTransactionId: (row.related_transaction_id as string) ?? null,
-    creatorId: row.creator_id as string,
-    userPaid: row.user_paid as string,
-    createdAt: new Date(row.created_at as string),
-  };
-}
-
-function rowToTransactionPayment(
-  row: Record<string, unknown>,
-): TransactionPayment {
-  return {
-    id: row.id as string,
-    pagoId: row.pago_id as string,
-    expenseId: row.expense_id as string,
-    amount: parseFloat(row.amount as string),
-    createdAt: new Date(row.created_at as string),
-  };
-}
-
-function rowToExercise(row: Record<string, unknown>): Exercise {
-  return {
-    id: row.id as string,
-    registry_id: row.registry_id as string,
-    startDate: new Date(row.start_date as string),
-    endDate: new Date(row.end_date as string),
-    transactionCount: row.transaction_count as number,
-    totalAmount: parseFloat(row.total_amount as string),
-  };
-}
-
-function rowToRegistry(row: Record<string, unknown>): Registry {
-  return {
-    id: row.id as string,
-    name: row.name as string,
-    isDefault: row.is_default as boolean,
-    latestAccessed: new Date(row.latest_accessed as string),
-    defaultSplit: row.default_split_json
-      ? (typeof row.default_split_json === "string"
-        ? JSON.parse(row.default_split_json)
-        : row.default_split_json as DefaultSplit)
-      : null,
-    defaultSplitMemberCount: (row.default_split_member_count as number) ?? null,
-    lastModified: row.last_modified
-      ? new Date(row.last_modified as string)
-      : null,
-  };
-}
 
 export async function getUserBySupabaseId(
   supabaseAuthId: string,
@@ -652,35 +578,7 @@ export async function getSpawnCandidates(
     [registryId],
   );
   const all = result.rows.map(rowToTransaction);
-
-  const disabledGroups = new Set<string>();
-  for (const t of all) {
-    if (t.recurringDisabled) disabledGroups.add(t.recurringGroupId);
-  }
-
-  const latestPerGroup = new Map<string, Transaction>();
-  for (const t of all) {
-    const existing = latestPerGroup.get(t.recurringGroupId);
-    if (!existing || t.createdAt > existing.createdAt) {
-      latestPerGroup.set(t.recurringGroupId, t);
-    }
-  }
-
-  const candidates: Transaction[] = [];
-  for (const t of latestPerGroup.values()) {
-    if (disabledGroups.has(t.recurringGroupId)) continue;
-    if (t.type === "recurrente") {
-      if (t.exerciseId !== null) candidates.push(t);
-    } else if (t.type === "parcialidad") {
-      if (
-        t.installmentCurrent !== null && t.installmentTotal !== null &&
-        t.installmentCurrent < t.installmentTotal
-      ) {
-        candidates.push(t);
-      }
-    }
-  }
-  return candidates;
+  return filterSpawnCandidates(all);
 }
 
 export async function cloneTransactionForNextPeriod(
@@ -899,15 +797,6 @@ export async function invalidateDefaultSplitIfNeeded(
   if (currentCount !== savedCount) {
     await clearDefaultSplit(registryId);
   }
-}
-
-export function generateInviteCode(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code = "";
-  for (let i = 0; i < 8; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return code;
 }
 
 export async function createInvitation(

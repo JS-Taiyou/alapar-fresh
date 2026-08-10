@@ -1,3 +1,5 @@
+import { urlBase64ToUint8Array } from "./encoding.ts";
+
 export async function requestNotificationPermission(): Promise<boolean> {
   if (!("Notification" in window)) return false;
   if (Notification.permission === "granted") return true;
@@ -65,11 +67,4 @@ export async function unsubscribeFromPush(): Promise<void> {
   });
 
   await subscription.unsubscribe();
-}
-
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
-  const padding = "=".repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const rawData = atob(base64);
-  return Uint8Array.from(rawData.split("").map((char) => char.charCodeAt(0)));
 }

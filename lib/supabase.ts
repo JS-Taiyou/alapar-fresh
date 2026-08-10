@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { getCookie } from "./auth-cookies.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
@@ -120,19 +121,4 @@ export function clearAuthCookies(headers: Headers): void {
     "Set-Cookie",
     `sb-refresh-token=; HttpOnly${cookieSecure}; SameSite=Lax; Path=/; Max-Age=0`,
   );
-}
-
-function getCookie(cookieHeader: string, name: string): string | null {
-  // Split on ; or , — Deno Deploy's edge has been seen to strip the ;
-  // separator from the Cookie request header, mashing all cookies into one.
-  // base64url JWTs use only A-Z a-z 0-9 - _ and . so , and ; are safe separators.
-  const cookies = cookieHeader.split(/[;,]/).map((c) => c.trim()).filter(
-    Boolean,
-  );
-  for (const cookie of cookies) {
-    if (cookie.startsWith(`${name}=`)) {
-      return cookie.substring(name.length + 1);
-    }
-  }
-  return null;
 }
