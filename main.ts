@@ -3,6 +3,7 @@ import { define, type State } from "./utils.ts";
 import { createUserFromSupabase, resolveUserState } from "./lib/store.ts";
 import { getUserFromRequest, setAuthCookies } from "./lib/supabase.ts";
 import { query } from "./lib/db.ts";
+import { needsFullState, routeGuard } from "./lib/routing.ts";
 
 const isDev = !Deno.env.get("DENO_DEPLOYMENT_ID");
 function devLog(...args: unknown[]) {
@@ -49,17 +50,9 @@ app.use(define.middleware(async (ctx) => {
   ctx.state.supabaseAuthId = authUser.id;
   devLog(`  Authed user: ${authUser.email}`);
 
-  const needsFullState = path === "/" ||
-    path.startsWith("/dashboard") ||
-    path.startsWith("/api/registries") ||
-    path.startsWith("/api/transactions") ||
-    path.startsWith("/api/entities") ||
-    path.startsWith("/api/invitations") ||
-    path.startsWith("/api/exercises") ||
-    path.startsWith("/api/default-split") ||
-    path.startsWith("/api/dashboard");
+  const fullStateNeeded = needsFullState(path);
 
-  if (!needsFullState) {
+  if (!fullStateNeeded) {
     devLog("  Lightweight path, querying user...");
     const userResult = await query(
       `SELECT u.*, ae.id IS NOT NULL as is_email_allowed
@@ -182,43 +175,10 @@ app.use(define.middleware(async (ctx) => {
     `>> ROUTING ${ctx.req.method} ${path2} hasUser=${hasUser} hasRegistry=${hasRegistry}`,
   );
 
-  const publicPaths = [
-    "/login",
-    "/signup",
-    "/join",
-    "/forgot-password",
-    "/reset-password",
-    "/auth/callback",
-    "/api/auth/callback",
-    "/api/auth/logout",
-    "/api/auth/check-email",
-    "/demo",
-  ];
-  const isPublic = publicPaths.some((p) => path2.startsWith(p));
-
-  if (!hasUser && !isPublic) {
-    devLog(`<< ROUTING redirect to login (no user, not public)`);
-    return ctx.redirect(`/login?redirect=${encodeURIComponent(path2)}`);
-  }
-
-  if (
-    hasUser &&
-    (path2 === "/login" || path2 === "/signup" || path2 === "/forgot-password")
-  ) {
-    devLog(`<< ROUTING redirect to / (has user on auth page)`);
-    return ctx.redirect("/");
-  }
-
-  if (hasUser && !hasRegistry) {
-    if (path2.startsWith("/dashboard")) {
-      devLog(`<< ROUTING redirect to / (no registry)`);
-      return ctx.redirect("/");
-    }
-  }
-
-  if (hasUser && hasRegistry && path2 === "/") {
-    devLog(`<< ROUTING redirect to /dashboard (has registry)`);
-    return ctx.redirect("/dashboard");
+  const redirect = routeGuard(path2, { hasUser, hasRegistry });
+  if (redirect) {
+    devLog(`<< ROUTING redirect to ${redirect}`);
+    return ctx.redirect(redirect);
   }
 
   devLog(`<< ROUTING ${ctx.req.method} ${path2} continuing to handler`);
