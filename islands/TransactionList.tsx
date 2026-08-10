@@ -858,7 +858,10 @@ export default function TransactionList(props: TransactionListProps) {
 
   return (
     <>
-      <main class="flex-1 overflow-y-auto custom-scrollbar p-2 sm:p-6 space-y-4 relative">
+      <main
+        class="flex-1 overflow-y-auto custom-scrollbar p-2 sm:p-6 space-y-4 relative"
+        data-tour="transaction-list"
+      >
         <div class="flex justify-between items-center mb-2">
           <h2 class="text-lg font-semibold text-zinc-200">
             {filterUserId.value
@@ -938,6 +941,7 @@ export default function TransactionList(props: TransactionListProps) {
               </span>
               <input
                 type="text"
+                data-tour="search-bar"
                 placeholder="Buscar transacción..."
                 value={searchQuery.value}
                 onInput={(e) =>
@@ -973,6 +977,7 @@ export default function TransactionList(props: TransactionListProps) {
           <button
             type="button"
             onClick={openNewPago}
+            data-tour="add-payment"
             class="flex-1 py-3 bg-green-700 hover:bg-green-800 text-white font-bold text-base rounded-custom active:scale-[0.98] transition-all flex items-center justify-center gap-2"
           >
             <svg
@@ -993,6 +998,7 @@ export default function TransactionList(props: TransactionListProps) {
           <button
             type="button"
             onClick={openNew}
+            data-tour="add-expense"
             class="flex-1 py-3 bg-yellow-500 hover:bg-yellow-600 text-white font-bold text-base rounded-custom active:scale-[0.98] transition-all flex items-center justify-center gap-2"
           >
             <svg
@@ -1057,7 +1063,7 @@ export default function TransactionList(props: TransactionListProps) {
             </div>
           )
           : filteredTransactions.value.map((tx) => (
-            <div key={tx.id} id={`tx-${tx.id}`}>
+            <div key={tx.id} id={`tx-${tx.id}`} data-tour="transaction-card">
               <TransactionCardClickable
                 tx={tx}
                 users={users.value}
@@ -1080,6 +1086,7 @@ export default function TransactionList(props: TransactionListProps) {
           <button
             type="button"
             onClick={openNewPago}
+            data-tour="add-payment"
             class="w-16 h-16 bg-green-700 text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all"
           >
             <svg
@@ -1104,6 +1111,7 @@ export default function TransactionList(props: TransactionListProps) {
           <button
             type="button"
             onClick={openNew}
+            data-tour="add-expense"
             class="w-16 h-16 bg-yellow-500 text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all"
           >
             <svg

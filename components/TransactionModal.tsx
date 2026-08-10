@@ -944,6 +944,7 @@ export default function TransactionModal(props: TransactionModalProps) {
               {isPago && debtToRecipient > 0 && (
                 <button
                   type="button"
+                  data-tour="pay-debt"
                   onClick={() => {
                     const formatted = debtToRecipient.toLocaleString("en-US", {
                       minimumFractionDigits: 2,
@@ -981,7 +982,10 @@ export default function TransactionModal(props: TransactionModalProps) {
                 <label class="block text-sm font-medium text-zinc-300">
                   Tipo
                 </label>
-                <div class="flex gap-1 p-1 bg-background border border-white/20 rounded-custom">
+                <div
+                  class="flex gap-1 p-1 bg-background border border-white/20 rounded-custom"
+                  data-tour="expense-type"
+                >
                   {([
                     "unico",
                     "parcialidad",
@@ -1696,7 +1700,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                   <h3 class="text-sm font-bold uppercase tracking-wider text-zinc-400">
                     División
                   </h3>
-                  <div class="flex gap-2">
+                  <div class="flex gap-2" data-tour="split-mode">
                     <button
                       type="button"
                       onClick={setAutoSplit}

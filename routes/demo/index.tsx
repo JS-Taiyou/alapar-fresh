@@ -7,6 +7,7 @@ import {
 import { Head } from "fresh/runtime";
 import TransactionList from "../../islands/TransactionList.tsx";
 import BalanceBreakdown from "../../islands/BalanceBreakdown.tsx";
+import DemoTour from "../../islands/DemoTour.tsx";
 import type {
   BalanceBreakdownEntry,
   DefaultSplit,
@@ -170,6 +171,7 @@ export default define.page(function DemoPage(ctx) {
         transactionPayments={$transactionPayments}
         isDemo
       />
+      <DemoTour />
     </>
   );
 });

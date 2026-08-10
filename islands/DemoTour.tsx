@@ -1,0 +1,349 @@
+import { useEffect, useState } from "preact/hooks";
+import { useSignal } from "@preact/signals";
+
+/**
+ * Guided tour island for the /demo page, powered by driver.js (MIT, zero deps).
+ *
+ * Offers two tours the user can choose from via a floating button (bottom-left,
+ * so it doesn't clash with the FABs at bottom-right):
+ *
+ * - **Tour Rápido** (5 steps): main-page highlights only.
+ * - **Tour Completo** (10 steps): main page + modal walkthrough (type selector,
+ *   split modes, pay-exact-debt button).
+ *
+ * The deep-dive tour programmatically opens the modal by clicking the FABs,
+ * waits for the DOM to render, highlights the internal elements, then closes
+ * the modal via Escape before continuing. This coordination is handled via
+ * driver.js per-step lifecycle hooks (`onPopoverRender`, `onDestroyStarted`).
+ *
+ * A `localStorage` flag suppresses auto-prompt after the first visit, but the
+ * floating button is always visible so users can replay.
+ */
+
+// driver.js is client-side only; lazy-import inside useEffect to avoid SSR.
+export default function DemoTour() {
+  const showMenu = useSignal(false);
+  const [tourActive, setTourActive] = useState(false);
+
+  useEffect(() => {
+    // Auto-prompt on first visit (only if never seen).
+    const seen = localStorage.getItem("demo-tour-seen");
+    if (!seen) {
+      // Small delay so the page finishes rendering.
+      const timer = setTimeout(() => showMenu.value = true, 800);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  function markSeen() {
+    localStorage.setItem("demo-tour-seen", "true");
+  }
+
+  function closeModals() {
+    // Close any open modal by pressing Escape (the modal listens for it).
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+  }
+
+  function openExpenseModal(): Promise<void> {
+    return new Promise((resolve) => {
+      const fab = document.querySelector<HTMLElement>(
+        '[data-tour="add-expense"]',
+      );
+      fab?.click();
+      // Wait for Preact to render the modal.
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+  }
+
+  function openPaymentModal(): Promise<void> {
+    return new Promise((resolve) => {
+      const fab = document.querySelector<HTMLElement>(
+        '[data-tour="add-payment"]',
+      );
+      fab?.click();
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+  }
+
+  async function startQuickTour() {
+    showMenu.value = false;
+    setTourActive(true);
+    markSeen();
+
+    const { driver } = await import("driver.js");
+    await import("driver.js/dist/driver.css");
+
+    const driverObj = driver({
+      showProgress: true,
+      nextBtnText: "Siguiente →",
+      prevBtnText: "← Anterior",
+      doneBtnText: "Listo ✓",
+      steps: [
+        {
+          element: '[data-tour="balance-total"]',
+          popover: {
+            title: "💰 Balance Total",
+            description:
+              "Este es tu balance neto. Verde = te deben, rojo = debes. Haz clic para ver el desglose detallado por persona.",
+            side: "bottom",
+            align: "start",
+          },
+        },
+        {
+          element: '[data-tour="transaction-list"]',
+          popover: {
+            title: "📋 Transacciones",
+            description:
+              "Aquí verás todos los gastos y pagos del registro actual, ordenados por fecha.",
+            side: "top",
+            align: "center",
+          },
+        },
+        {
+          element: '[data-tour="add-expense"]',
+          popover: {
+            title: "➕ Agregar Gasto",
+            description:
+              "Usa este botón para registrar un gasto. Puedes dividirlo entre todos en partes iguales, por porcentaje, o con montos fijos.",
+            side: "left",
+            align: "center",
+          },
+        },
+        {
+          element: '[data-tour="add-payment"]',
+          popover: {
+            title: "💸 Agregar Pago",
+            description:
+              "Usa este botón para registrar un pago entre personas y saldar deudas.",
+            side: "left",
+            align: "center",
+          },
+        },
+        {
+          element: '[data-tour="transaction-card"]',
+          popover: {
+            title: "✏️ Editar Transacciones",
+            description:
+              "Haz clic en cualquier transacción para ver sus detalles, editarla o eliminarla.",
+            side: "top",
+            align: "center",
+          },
+        },
+      ],
+    });
+
+    driverObj.drive();
+    // Detect tour completion/dismissal.
+    const checkInterval = setInterval(() => {
+      if (!driverObj.isActive()) {
+        clearInterval(checkInterval);
+        setTourActive(false);
+      }
+    }, 500);
+  }
+
+  async function startFullTour() {
+    showMenu.value = false;
+    setTourActive(true);
+    markSeen();
+
+    const { driver } = await import("driver.js");
+    await import("driver.js/dist/driver.css");
+
+    let modalStepReached = false;
+
+    const driverObj = driver({
+      showProgress: true,
+      nextBtnText: "Siguiente →",
+      prevBtnText: "← Anterior",
+      doneBtnText: "Listo ✓",
+      steps: [
+        // --- Main page (same as quick tour) ---
+        {
+          element: '[data-tour="balance-total"]',
+          popover: {
+            title: "💰 Balance Total",
+            description:
+              "Este es tu balance neto. Verde = te deben, rojo = debes. Haz clic para ver el desglose detallado por persona.",
+            side: "bottom",
+            align: "start",
+          },
+        },
+        {
+          element: '[data-tour="search-bar"]',
+          popover: {
+            title: "🔍 Buscar y Filtrar",
+            description:
+              "Busca transacciones por nombre o filtra por persona con los botones de arriba.",
+            side: "bottom",
+            align: "center",
+          },
+        },
+        {
+          element: '[data-tour="transaction-list"]',
+          popover: {
+            title: "📋 Transacciones",
+            description:
+              "Todos los gastos y pagos del registro. Cada tarjeta muestra quién pagó y cómo se dividió.",
+            side: "top",
+            align: "center",
+          },
+        },
+        {
+          element: '[data-tour="add-expense"]',
+          popover: {
+            title: "➕ Agregar Gasto",
+            description:
+              "Vamos a abrir el formulario para crear un gasto y ver las opciones disponibles.",
+            side: "left",
+            align: "center",
+          },
+          onNextClick: async () => {
+            modalStepReached = true;
+            await openExpenseModal();
+            driverObj.moveNext();
+          },
+        },
+        // --- Inside expense modal ---
+        {
+          element: '[data-tour="expense-type"]',
+          popover: {
+            title: "🏷️ Tipo de Gasto",
+            description:
+              "Elige el tipo: Único (pago una sola vez), Parcialidad (pagos en partes, ej. un laptop a meses), o Recurrente (se repite cada periodo, ej. la renta).",
+            side: "bottom",
+            align: "center",
+          },
+        },
+        {
+          element: '[data-tour="split-mode"]',
+          popover: {
+            title: "🔀 Modo de División",
+            description:
+              "Decide cómo dividir el gasto: Automático (partes iguales), Porcentaje (ej. 60%/40%), o Monto Fijo (cantidades específicas por persona).",
+            side: "bottom",
+            align: "end",
+          },
+          onPrevClick: () => driverObj.movePrevious(),
+          onNextClick: () => {
+            closeModals();
+            // Wait for modal to close before moving to payment step.
+            setTimeout(() => {
+              openPaymentModal().then(() => driverObj.moveNext());
+            }, 200);
+          },
+        },
+        // --- Inside payment modal ---
+        {
+          element: '[data-tour="pay-debt"]',
+          popover: {
+            title: "✅ Saldar Deuda",
+            description:
+              "Cuando alguien te debe, este botón calcula automáticamente el monto exacto. Un clic y el pago queda registrado por la cantidad correcta.",
+            side: "bottom",
+            align: "center",
+          },
+          onPrevClick: async () => {
+            closeModals();
+            await openExpenseModal();
+            driverObj.movePrevious();
+          },
+        },
+        {
+          popover: {
+            title: "🎉 ¡Eso es todo!",
+            description:
+              "Ya conoces las funciones principales de A la Par. Explora el demo libremente — todos los cambios son temporales y se reinician al recargar.",
+            side: "top",
+            align: "center",
+          },
+          onNextClick: () => {
+            closeModals();
+            driverObj.destroy();
+            setTourActive(false);
+          },
+        },
+      ],
+    });
+
+    driverObj.drive();
+
+    const checkInterval = setInterval(() => {
+      if (!driverObj.isActive()) {
+        clearInterval(checkInterval);
+        closeModals();
+        setTourActive(false);
+      }
+    }, 500);
+  }
+
+  if (tourActive) return null;
+
+  return (
+    <>
+      {/* Floating tour button */}
+      <button
+        type="button"
+        onClick={() => showMenu.value = !showMenu.value}
+        class="fixed bottom-8 left-8 z-50 w-14 h-14 bg-primary hover:bg-primary-light text-white rounded-full shadow-2xl flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+        title="Tour guiado"
+      >
+        <svg
+          class="w-6 h-6"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+          />
+        </svg>
+      </button>
+
+      {/* Tour selection menu */}
+      {showMenu.value && (
+        <>
+          {/* Backdrop */}
+          <div
+            class="fixed inset-0 z-40"
+            onClick={() => showMenu.value = false}
+          />
+          {/* Menu card */}
+          <div class="fixed bottom-24 left-8 z-50 bg-surface border border-border-custom rounded-custom shadow-2xl p-4 w-72 animate-fade-up">
+            <h3 class="text-sm font-bold text-zinc-200 mb-3">
+              🎓 Tour Guiado
+            </h3>
+            <p class="text-xs text-zinc-400 mb-4">
+              Conoce las funciones de A la Par en pocos minutos.
+            </p>
+            <button
+              type="button"
+              onClick={startQuickTour}
+              class="w-full mb-2 px-4 py-3 bg-primary hover:bg-primary-light text-white text-sm font-semibold rounded-custom transition-all active:scale-95 text-left"
+            >
+              <span class="block font-bold">Tour Rápido</span>
+              <span class="block text-xs opacity-80 mt-0.5">
+                Lo esencial en 5 pasos
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={startFullTour}
+              class="w-full px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-white text-sm font-semibold rounded-custom transition-all active:scale-95 text-left"
+            >
+              <span class="block font-bold">Tour Completo</span>
+              <span class="block text-xs opacity-60 mt-0.5">
+                Incluye el modal de gastos y pagos
+              </span>
+            </button>
+          </div>
+        </>
+      )}
+    </>
+  );
+}

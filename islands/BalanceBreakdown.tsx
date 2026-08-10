@@ -39,6 +39,7 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
       <button
         type="button"
         onClick={toggle}
+        data-tour="balance-total"
         class={`text-left min-w-0 ${
           canShowPopover ? "cursor-pointer group" : "cursor-default"
         }`}
