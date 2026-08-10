@@ -95,6 +95,7 @@ export default function DemoTour() {
       nextBtnText: "Siguiente →",
       prevBtnText: "← Anterior",
       doneBtnText: "Listo ✓",
+      popoverClass: "alapar-popover",
       steps: [
         {
           element: '[data-tour="balance-total"]',
@@ -171,6 +172,7 @@ export default function DemoTour() {
       nextBtnText: "Siguiente →",
       prevBtnText: "← Anterior",
       doneBtnText: "Listo ✓",
+      popoverClass: "alapar-popover",
       steps: [
         // --- Main page (same as quick tour) ---
         {

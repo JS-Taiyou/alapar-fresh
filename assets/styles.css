@@ -60,6 +60,69 @@ html, body {
   font-family: var(--font-sans);
 }
 
+/* driver.js dark-theme overrides for demo tour popovers */
+.driver-popover.alapar-popover {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-custom);
+  border-radius: var(--radius-custom);
+  color: #e2e8f0;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+  font-family: var(--font-sans);
+}
+.driver-popover.alapar-popover .driver-popover-title {
+  color: #f8fafc;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.driver-popover.alapar-popover .driver-popover-description {
+  color: #94a3b8;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+.driver-popover.alapar-popover .driver-popover-close-btn {
+  color: #475569;
+}
+.driver-popover.alapar-popover .driver-popover-close-btn:hover,
+.driver-popover.alapar-popover .driver-popover-close-btn:focus {
+  color: #94a3b8;
+}
+.driver-popover.alapar-popover .driver-popover-progress-text {
+  color: #475569;
+  font-size: 0.75rem;
+}
+.driver-popover.alapar-popover .driver-popover-footer-btn {
+  background-color: transparent;
+  border: 1px solid var(--color-border-custom);
+  color: #94a3b8;
+  border-radius: var(--radius-custom);
+  padding: 5px 14px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+.driver-popover.alapar-popover .driver-popover-footer-btn:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-color: var(--color-primary);
+  color: #f8fafc;
+}
+/* Style the "next/done" button as primary */
+.driver-popover.alapar-popover
+  .driver-popover-navigation-btns
+  button:last-child {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+.driver-popover.alapar-popover
+  .driver-popover-navigation-btns
+  button:last-child:hover {
+  background-color: var(--color-primary-light);
+  border-color: var(--color-primary-light);
+}
+.driver-popover.alapar-popover .driver-popover-arrow {
+  border-color: var(--color-surface);
+}
+
 .bg-pattern {
   background-image: radial-gradient(
     circle at 2px 2px,
