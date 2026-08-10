@@ -977,7 +977,7 @@ export default function TransactionList(props: TransactionListProps) {
           <button
             type="button"
             onClick={openNewPago}
-            data-tour="add-payment"
+            data-tour="add-payment-mobile"
             class="flex-1 py-3 bg-green-700 hover:bg-green-800 text-white font-bold text-base rounded-custom active:scale-[0.98] transition-all flex items-center justify-center gap-2"
           >
             <svg
@@ -998,7 +998,7 @@ export default function TransactionList(props: TransactionListProps) {
           <button
             type="button"
             onClick={openNew}
-            data-tour="add-expense"
+            data-tour="add-expense-mobile"
             class="flex-1 py-3 bg-yellow-500 hover:bg-yellow-600 text-white font-bold text-base rounded-custom active:scale-[0.98] transition-all flex items-center justify-center gap-2"
           >
             <svg

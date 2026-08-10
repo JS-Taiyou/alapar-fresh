@@ -37,6 +37,26 @@ export default function DemoTour() {
     }
   }, []);
 
+  /**
+   * Find the visible add-expense or add-payment button. On desktop the FABs
+   * carry data-tour="add-expense"/"add-payment"; on mobile the inline buttons
+   * carry the "-mobile" suffix. Return whichever is currently displayed.
+   */
+  function visibleFab(base: "add-expense" | "add-payment"): Element {
+    const desktop = document.querySelector(`[data-tour="${base}"]`);
+    if (desktop && desktop.checkVisibility?.()) return desktop;
+    const mobile = document.querySelector(`[data-tour="${base}-mobile"]`);
+    if (mobile && mobile.checkVisibility?.()) return mobile;
+    // Fallback: offsetParent is non-null for visible elements.
+    const all = document.querySelectorAll(
+      `[data-tour="${base}"], [data-tour="${base}-mobile"]`,
+    );
+    for (const el of all) {
+      if ((el as HTMLElement).offsetParent !== null) return el;
+    }
+    return desktop ?? mobile ?? document.body;
+  }
+
   function markSeen() {
     localStorage.setItem("demo-tour-seen", "true");
   }
@@ -50,9 +70,7 @@ export default function DemoTour() {
 
   function openExpenseModal(): Promise<void> {
     return new Promise((resolve) => {
-      const fab = document.querySelector<HTMLElement>(
-        '[data-tour="add-expense"]',
-      );
+      const fab = visibleFab("add-expense") as HTMLElement | null;
       fab?.click();
       // Wait for Preact to render the modal.
       requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
@@ -61,9 +79,7 @@ export default function DemoTour() {
 
   function openPaymentModal(): Promise<void> {
     return new Promise((resolve) => {
-      const fab = document.querySelector<HTMLElement>(
-        '[data-tour="add-payment"]',
-      );
+      const fab = visibleFab("add-payment") as HTMLElement | null;
       fab?.click();
       requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
     });
@@ -101,7 +117,7 @@ export default function DemoTour() {
           },
         },
         {
-          element: '[data-tour="add-expense"]',
+          element: () => visibleFab("add-expense"),
           popover: {
             title: "➕ Agregar Gasto",
             description:
@@ -111,7 +127,7 @@ export default function DemoTour() {
           },
         },
         {
-          element: '[data-tour="add-payment"]',
+          element: () => visibleFab("add-payment"),
           popover: {
             title: "💸 Agregar Pago",
             description:
@@ -188,7 +204,7 @@ export default function DemoTour() {
           },
         },
         {
-          element: '[data-tour="add-expense"]',
+          element: () => visibleFab("add-expense"),
           popover: {
             title: "➕ Agregar Gasto",
             description:
