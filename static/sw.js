@@ -26,6 +26,42 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+/**
+ * A styled fallback shown when both the network and cache are unavailable.
+ * Replaces the bare "Offline" string so users see a sensible screen instead of
+ * raw text if the app ever goes unreachable (dev timeout, prod outage, etc.).
+ */
+function offlineResponse(request) {
+  const isHtml = (request.headers.get("Accept") ?? "").includes("text/html");
+  const body = isHtml
+    ? "<!DOCTYPE html><html lang=\"es\"><head><meta charset=\"utf-8\">" +
+      "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
+      "<title>Sin conexión — A la Par</title><style>" +
+      ":root{color-scheme:dark}" +
+      "body{display:flex;align-items:center;justify-content:center;" +
+      "min-height:100vh;margin:0;background:#0f172a;color:#e2e8f0;" +
+      "font-family:system-ui,-apple-system,sans-serif;text-align:center}" +
+      ".card{max-width:24rem;padding:2rem}" +
+      "h1{font-size:1.25rem;margin:0 0 .5rem}" +
+      "p{color:#94a3b8;margin:0 0 1.5rem;line-height:1.5}" +
+      "button{background:#3b82f6;color:#fff;border:0;border-radius:.5rem;" +
+      "padding:.6rem 1.25rem;font-size:1rem;cursor:pointer}" +
+      "</style></head><body><div class=\"card\">" +
+      "<h1>No hay conexión</h1>" +
+      "<p>No se pudo cargar esta página. Revisa tu conexión a internet e " +
+      "inténtalo de nuevo.</p>" +
+      "<button onclick=\"location.reload()\">Reintentar</button>" +
+      "</div></body></html>"
+    : "";
+  return new Response(body, {
+    status: 503,
+    statusText: "Service Unavailable",
+    headers: isHtml
+      ? { "Content-Type": "text/html; charset=utf-8" }
+      : { "Content-Type": "text/plain; charset=utf-8" },
+  });
+}
+
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   const sameOrigin = url.origin === self.location.origin;
@@ -70,7 +106,7 @@ async function cacheFirst(request, cacheName) {
     }
     return response;
   } catch {
-    return new Response("Offline", { status: 503 });
+    return offlineResponse(request);
   }
 }
 
@@ -104,7 +140,7 @@ async function networkFirst(request, cacheName) {
       const fallback = await cache.match("/dashboard");
       if (fallback) return fallback;
     }
-    return new Response("Offline", { status: 503 });
+    return offlineResponse(request);
   }
 }
 
