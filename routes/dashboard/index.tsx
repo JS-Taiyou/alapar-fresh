@@ -12,6 +12,7 @@ import {
   getCachedTransactions,
 } from "../../lib/server-cache.ts";
 import { getSupabaseAnonKey, getSupabaseUrl } from "../../lib/supabase.ts";
+import { getCookie } from "../../lib/auth-cookies.ts";
 import { Head } from "fresh/runtime";
 import TransactionList from "../../islands/TransactionList.tsx";
 import CortarButton from "../../islands/CortarButton.tsx";
@@ -147,7 +148,9 @@ export const handler = define.handlers({
         spawnCandidates,
         balanceBreakdown,
         usersCount: ctx.state.participants.length,
-        accessToken: getAccessToken(ctx.req.headers.get("cookie") ?? ""),
+        accessToken:
+          getCookie(ctx.req.headers.get("cookie") ?? "", "sb-access-token") ??
+            "",
         supabaseUrl: getSupabaseUrl(),
         supabaseAnonKey: getSupabaseAnonKey(),
         lastModified: ctx.state.activeRegistry?.lastModified?.toISOString() ??
@@ -156,16 +159,6 @@ export const handler = define.handlers({
     };
   },
 });
-
-function getAccessToken(cookieHeader: string): string {
-  const cookies = cookieHeader.split(";").map((c) => c.trim());
-  for (const cookie of cookies) {
-    if (cookie.startsWith("sb-access-token=")) {
-      return cookie.substring("sb-access-token=".length);
-    }
-  }
-  return "";
-}
 
 export default define.page(function DashboardIndex(ctx) {
   const data = ctx.data as DashboardData;

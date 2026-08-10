@@ -170,7 +170,19 @@ app.use(define.middleware(async (ctx) => {
 app.use(define.middleware(async (ctx) => {
   const path2 = new URL(ctx.req.url).pathname;
   const hasUser = ctx.state.user !== null;
-  const hasRegistry = ctx.state.activeRegistry !== null;
+  let hasRegistry = ctx.state.activeRegistry !== null;
+
+  // On the lightweight path (e.g. "/"), activeRegistry isn't resolved. Do a
+  // single cheap existence check so we can still redirect authed users with a
+  // registry to /dashboard without the full 4-query resolveUserState.
+  if (hasUser && !hasRegistry && path2 === "/") {
+    const membership = await query(
+      "SELECT 1 FROM registry_members WHERE user_id = $1 LIMIT 1",
+      [ctx.state.user!.id],
+    );
+    hasRegistry = membership.rows.length > 0;
+  }
+
   devLog(
     `>> ROUTING ${ctx.req.method} ${path2} hasUser=${hasUser} hasRegistry=${hasRegistry}`,
   );

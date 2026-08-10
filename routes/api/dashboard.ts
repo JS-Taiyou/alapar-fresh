@@ -11,6 +11,7 @@ import {
 import {
   getCachedSpawnCandidates,
   getCachedTransactions,
+  getStamp,
 } from "../../lib/server-cache.ts";
 import { generateETag } from "../../lib/etag.ts";
 
@@ -65,9 +66,14 @@ export const handler = define.handlers({
 
     const isActiveRegistry = registryId === ctx.state.activeRegistry?.id;
 
+    // Fetch the registry stamp once and share it between both cache lookups
+    // (avoids a redundant SELECT last_modified query).
+    const stamp = await getStamp(registryId);
+
     const { transactions } = await getCachedTransactions(
       registryId,
       () => getActiveTransactions(registryId),
+      stamp,
     );
     const transactionPayments = await getTransactionPaymentsForRegistry(
       registryId,
@@ -76,6 +82,7 @@ export const handler = define.handlers({
     const candidates = await getCachedSpawnCandidates(
       registryId,
       () => getSpawnCandidates(registryId),
+      stamp,
     );
 
     let participants: { id: string; name: string; color: string }[];

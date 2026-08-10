@@ -62,8 +62,11 @@ export async function getStamp(registryId: string): Promise<string | null> {
 export async function getCachedTransactions(
   registryId: string,
   fetcher: () => Promise<Transaction[]>,
+  prefetchedStamp?: string | null,
 ): Promise<{ transactions: Transaction[]; hit: boolean }> {
-  const stamp = await getStamp(registryId);
+  const stamp = prefetchedStamp !== undefined
+    ? prefetchedStamp
+    : await getStamp(registryId);
   const entry = cache.get(registryId);
 
   if (
@@ -89,8 +92,11 @@ export async function getCachedTransactions(
 export async function getCachedSpawnCandidates(
   registryId: string,
   fetcher: () => Promise<Transaction[]>,
+  prefetchedStamp?: string | null,
 ): Promise<Transaction[]> {
-  const stamp = await getStamp(registryId);
+  const stamp = prefetchedStamp !== undefined
+    ? prefetchedStamp
+    : await getStamp(registryId);
   const entry = cache.get(registryId);
 
   if (

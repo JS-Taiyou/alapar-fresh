@@ -9,7 +9,6 @@ import { isPublicPath, needsFullState, routeGuard } from "./routing.ts";
 describe("needsFullState", () => {
   describe("full-state paths (true)", () => {
     const fullStatePaths = [
-      "/",
       "/dashboard",
       "/dashboard/history",
       "/dashboard/history/abc-123",
@@ -38,6 +37,7 @@ describe("needsFullState", () => {
 
   describe("lightweight paths (false)", () => {
     const lightweightPaths = [
+      "/",
       "/api/stamp/abc-123",
       "/api/push/public-key",
       "/api/push/subscribe",
@@ -58,9 +58,14 @@ describe("needsFullState", () => {
     }
   });
 
-  it("requires an EXACT match for '/' (not a prefix)", () => {
-    // A path that merely starts with "/" but isn't the landing page is not
-    // automatically full-state — it depends on the other prefixes.
+  it("treats '/' as lightweight (avoids full-state resolution before redirect)", () => {
+    // "/" is excluded from needsFullState so it doesn't run the 4-query
+    // resolveUserState just to redirect to /dashboard. The middleware does a
+    // single cheap membership-existence check instead.
+    assertEquals(needsFullState("/"), false);
+  });
+
+  it("does not treat arbitrary paths starting with '/' as full-state", () => {
     assertEquals(needsFullState("/something-random"), false);
   });
 

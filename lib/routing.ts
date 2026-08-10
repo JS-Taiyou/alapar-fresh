@@ -53,11 +53,15 @@ const AUTH_PAGES: readonly string[] = ["/login", "/signup", "/forgot-password"];
 
 /**
  * Returns `true` when `path` must run through {@link resolveUserState}
- * (the expensive full-state path). `"/"` is an exact match; every other entry
- * is a `startsWith` prefix match.
+ * (the expensive full-state path: user + all registries + active registry
+ * members + entities). Every entry is a `startsWith` prefix match.
+ *
+ * Note: `"/"` is intentionally **excluded**. The landing page only needs to
+ * know whether the user has any registry (to redirect to `/dashboard`) — the
+ * middleware resolves that with a single lightweight membership-existence
+ * query rather than the full 4-query state resolution.
  */
 export function needsFullState(path: string): boolean {
-  if (path === "/") return true;
   return FULL_STATE_PREFIXES.some((prefix) => path.startsWith(prefix));
 }
 
