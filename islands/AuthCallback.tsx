@@ -1,5 +1,6 @@
 import { useEffect } from "preact/hooks";
 import { useSignal } from "@preact/signals";
+import AuthCardLayout from "../components/AuthCardLayout.tsx";
 
 interface AuthCallbackProps {
   redirectPath: string;
@@ -52,30 +53,53 @@ export default function AuthCallback(props: AuthCallbackProps) {
   }, []);
 
   return (
-    <div class="min-h-screen flex items-center justify-center p-6">
-      <div class="text-center max-w-lg">
-        {error.value
-          ? (
-            <>
-              <div class="text-red-400 text-sm mb-4">{error.value}</div>
-              <pre class="text-xs text-slate-500 bg-slate-900 p-3 rounded overflow-auto text-left whitespace-pre-wrap break-all">
+    <AuthCardLayout pageTitle="A la par - Autenticando" centered>
+      {error.value
+        ? (
+          <>
+            <div class="text-red-300 bg-red-500/20 border border-red-500/30 rounded-custom px-4 py-3 text-sm text-center mb-4">
+              {error.value}
+            </div>
+            <details class="mb-6">
+              <summary class="text-xs text-zinc-500 cursor-pointer hover:text-zinc-400 transition-colors">
+                Detalles técnicos
+              </summary>
+              <pre class="text-xs text-zinc-500 bg-background mt-2 p-3 rounded-custom overflow-auto text-left whitespace-pre-wrap break-all">
                 {debug.value}
               </pre>
-              <a
-                href="/login"
-                class="text-primary hover:underline text-sm mt-4 inline-block"
-              >
-                Volver a iniciar sesión
-              </a>
-            </>
-          )
-          : (
-            <div class="text-slate-400 text-sm">
-              Autenticando...
-              <pre class="text-xs text-slate-600 mt-2">{debug.value}</pre>
-            </div>
-          )}
-      </div>
-    </div>
+            </details>
+            <a
+              href="/login"
+              class="block w-full py-3 btn-primary rounded-custom text-center transition-all shadow-lg active:scale-95"
+            >
+              Volver a iniciar sesión
+            </a>
+          </>
+        )
+        : (
+          <div class="flex flex-col items-center gap-4 py-4">
+            <svg
+              class="w-10 h-10 text-primary animate-spin"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                class="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                stroke-width="4"
+              />
+              <path
+                class="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              />
+            </svg>
+            <p class="text-zinc-300 text-sm font-medium">Autenticando...</p>
+          </div>
+        )}
+    </AuthCardLayout>
   );
 }
