@@ -35,6 +35,16 @@ app.use(define.middleware(async (ctx) => {
   ctx.state.isOwner = false;
   ctx.state.ownerRegistryIds = new Set<string>();
 
+  // /demo renders entirely from static JSON — skip auth + DB entirely.
+  if (path === "/demo") {
+    devLog("  Demo page, skipping auth");
+    const response = await ctx.next();
+    devLog(
+      `<< RESPONSE ${ctx.req.method} ${path} (demo, status=${response?.status})`,
+    );
+    return response;
+  }
+
   devLog("  Getting user from request...");
   const authResult = await getUserFromRequest(ctx.req);
   if (!authResult) {
