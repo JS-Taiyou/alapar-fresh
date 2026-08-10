@@ -62,7 +62,10 @@ export function query(
   text: string,
   params?: unknown[],
 ): Promise<{
-  rows: Record<string, unknown>[];
+  // rows is `any[]` to match the real `pg` QueryResult, where callers assign
+  // result.rows directly to typed arrays (e.g. `const subs: PushSubscription[] = result.rows`).
+  // deno-lint-ignore no-explicit-any
+  rows: any[];
   rowCount: number;
 }> {
   __queryLog.push({ text, params: params ?? [] });
