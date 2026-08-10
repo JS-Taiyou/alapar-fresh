@@ -26,7 +26,7 @@ CREATE INDEX IF NOT EXISTS idx_tb_user ON transaction_balances(user_id);
 INSERT INTO transaction_balances (transaction_id, user_id, amount)
 SELECT
   t.id,
-  u.user_id,
+  u.user_id::uuid,
   u.amount
 FROM transactions t
 CROSS JOIN LATERAL (
