@@ -4,6 +4,8 @@ import {
   filterSpawnCandidates,
   generateInviteCode,
   INVITE_ALPHABET_CHARS,
+  type ResolvedInvitation,
+  validateInvitation,
 } from "./invite.ts";
 import type { Transaction } from "./types.ts";
 
@@ -210,5 +212,82 @@ describe("filterSpawnCandidates", () => {
     const result = filterSpawnCandidates([a, b]);
     assertEquals(result.length, 2);
     assertEquals(new Set(result.map((t) => t.id)), new Set(["a", "b"]));
+  });
+});
+
+// ===========================================================================
+// validateInvitation
+// ===========================================================================
+
+describe("validateInvitation", () => {
+  const now = new Date("2024-06-15T12:00:00Z");
+  const future = new Date("2024-12-31T00:00:00Z");
+  const past = new Date("2024-01-01T00:00:00Z");
+
+  const valid: ResolvedInvitation = {
+    revokedAt: null,
+    expiresAt: future,
+    maxUses: null,
+    currentUses: 0,
+  };
+
+  it("returns not-found when invitation is null", () => {
+    assertEquals(validateInvitation(null, now), {
+      ok: false,
+      reason: "not-found",
+    });
+  });
+
+  it("returns ok for a valid, unexpired, unlimited-use invitation", () => {
+    assertEquals(validateInvitation(valid, now), { ok: true });
+  });
+
+  it("returns revoked when revokedAt is set", () => {
+    assertEquals(
+      validateInvitation({ ...valid, revokedAt: past }, now),
+      { ok: false, reason: "revoked" },
+    );
+  });
+
+  it("returns expired when expiresAt is in the past", () => {
+    assertEquals(
+      validateInvitation({ ...valid, expiresAt: past }, now),
+      { ok: false, reason: "expired" },
+    );
+  });
+
+  it("returns ok when expiresAt equals now (boundary: not strictly less)", () => {
+    assertEquals(
+      validateInvitation({ ...valid, expiresAt: now }, now),
+      { ok: true },
+    );
+  });
+
+  it("returns ok when expiresAt is null (no expiry)", () => {
+    assertEquals(
+      validateInvitation({ ...valid, expiresAt: null }, now),
+      { ok: true },
+    );
+  });
+
+  it("returns max-uses when currentUses >= maxUses", () => {
+    assertEquals(
+      validateInvitation({ ...valid, maxUses: 5, currentUses: 5 }, now),
+      { ok: false, reason: "max-uses" },
+    );
+  });
+
+  it("returns ok when currentUses is one below maxUses", () => {
+    assertEquals(
+      validateInvitation({ ...valid, maxUses: 5, currentUses: 4 }, now),
+      { ok: true },
+    );
+  });
+
+  it("returns ok when maxUses is null (unlimited) regardless of currentUses", () => {
+    assertEquals(
+      validateInvitation({ ...valid, maxUses: null, currentUses: 1000 }, now),
+      { ok: true },
+    );
   });
 });

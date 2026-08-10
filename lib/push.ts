@@ -23,7 +23,25 @@ interface PushPayload {
 }
 
 const lastPushAt = new Map<string, number>();
-const PUSH_COOLDOWN = 15_000;
+export const PUSH_COOLDOWN = 15_000;
+
+/**
+ * Cooldown gate for push notifications: returns `true` when a push is allowed
+ * (enough time has elapsed since the last push for this key), `false` when the
+ * cooldown is still active. Extracted from `sendPushToRegistry` so the
+ * threshold logic is unit-testable without the map.
+ *
+ * @param now      current epoch millis
+ * @param lastPush epoch millis of the last push for this key (0 if never)
+ * @param cooldown cooldown window in millis
+ */
+export function shouldSendPush(
+  now: number,
+  lastPush: number,
+  cooldown: number = PUSH_COOLDOWN,
+): boolean {
+  return now - lastPush >= cooldown;
+}
 
 export async function sendPushToRegistry(
   registryId: string,
@@ -39,7 +57,7 @@ export async function sendPushToRegistry(
   const key = `${registryId}:${excludeUserId ?? ""}`;
   const now = Date.now();
   const last = lastPushAt.get(key) ?? 0;
-  if (now - last < PUSH_COOLDOWN) {
+  if (!shouldSendPush(now, last)) {
     console.log(
       "[push] Cooldown active, skipping. Last push was",
       now - last,

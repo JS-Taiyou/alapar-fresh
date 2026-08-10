@@ -25,6 +25,10 @@ import {
   rowToUser,
 } from "./rows.ts";
 import { filterSpawnCandidates, generateInviteCode } from "./invite.ts";
+import {
+  buildBatchPlaceholders,
+  buildTransactionUpdateSets,
+} from "./sql-builders.ts";
 
 export {
   buildEqualSplit,
@@ -318,54 +322,9 @@ export async function updateTransaction(
   userId: string,
   transactionPaymentEntries?: { expenseId: string; amount: number }[],
 ): Promise<Transaction | undefined> {
-  const sets: string[] = [];
-  const values: unknown[] = [];
-  let idx = 1;
-  if (data.description !== undefined) {
-    sets.push(`description = $${idx++}`);
-    values.push(data.description);
-  }
-  if (data.amount !== undefined) {
-    sets.push(`amount = $${idx++}`);
-    values.push(data.amount);
-  }
-  if (data.originalAmount !== undefined) {
-    sets.push(`original_amount = $${idx++}`);
-    values.push(data.originalAmount);
-  }
-  if (data.type !== undefined) {
-    sets.push(`type = $${idx++}`);
-    values.push(data.type);
-  }
-  if (data.notes !== undefined) {
-    sets.push(`notes = $${idx++}`);
-    values.push(data.notes);
-  }
-  if (data.splitJson !== undefined) {
-    sets.push(`split_json = $${idx++}`);
-    values.push(JSON.stringify(data.splitJson));
-  }
-  if (data.userPaid !== undefined) {
-    sets.push(`user_paid = $${idx++}`);
-    values.push(data.userPaid);
-  }
-  if (data.installmentCurrent !== undefined) {
-    sets.push(`installment_current = $${idx++}`);
-    values.push(data.installmentCurrent);
-  }
-  if (data.installmentTotal !== undefined) {
-    sets.push(`installment_total = $${idx++}`);
-    values.push(data.installmentTotal);
-  }
-  if (data.recurringDisabled !== undefined) {
-    sets.push(`recurring_disabled = $${idx++}`);
-    values.push(data.recurringDisabled);
-  }
-  if (data.relatedTransactionId !== undefined) {
-    sets.push(`related_transaction_id = $${idx++}`);
-    values.push(data.relatedTransactionId);
-  }
+  const { sets, values } = buildTransactionUpdateSets(data);
   if (sets.length === 0) return getTransactionById(id);
+  const idx = values.length + 1;
   values.push(id);
   values.push(userId);
   const result = await query(
@@ -657,13 +616,7 @@ export async function batchCloneTransactions(
   if (rows.length === 0) return [];
 
   const cols = 14;
-  const placeholders = rows.map((_, rowIdx) =>
-    `(${
-      Array.from({ length: cols }, (_, c) => `$${rowIdx * cols + c + 1}`).join(
-        ", ",
-      )
-    })`
-  ).join(", ");
+  const placeholders = buildBatchPlaceholders(rows.length, cols);
   const flatValues = rows.flat();
 
   const insertResult = await query(

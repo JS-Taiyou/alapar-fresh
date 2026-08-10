@@ -11,8 +11,60 @@
  *   `recurrente` is a candidate only if it has been archived into an exercise,
  *   and a `parcialidad` is a candidate only if it isn't fully paid off. Any
  *   group with a disabled member is excluded entirely.
+ * - {@link validateInvitation} encodes the invitation-acceptance gate
+ *   (not-found / revoked / expired / max-uses-reached) as a pure function of
+ *   `(invitation, now)`, extracted from `useInvitation`.
  */
 import type { Transaction } from "./types.ts";
+
+/** The resolved invitation shape used by {@link validateInvitation}. */
+export interface ResolvedInvitation {
+  revokedAt: Date | null;
+  expiresAt: Date | null;
+  maxUses: number | null;
+  currentUses: number;
+}
+
+/** Result of {@link validateInvitation}. */
+export type InvitationValidation =
+  | { ok: true }
+  | { ok: false; reason: "not-found" | "revoked" | "expired" | "max-uses" };
+
+/**
+ * Pure invitation-acceptance gate. Returns `{ ok: true }` if the invitation is
+ * usable, or `{ ok: false, reason }` describing why it isn't. Extracted from
+ * `useInvitation`'s throw-chain so the rules can be tested without a DB.
+ *
+ * @param invitation `null` represents "no invitation found for this code".
+ * @param now        The current time (passed in so tests are deterministic).
+ */
+export function validateInvitation(
+  invitation: ResolvedInvitation | null,
+  now: Date,
+): InvitationValidation {
+  if (!invitation) return { ok: false, reason: "not-found" };
+  if (invitation.revokedAt) return { ok: false, reason: "revoked" };
+  if (invitation.expiresAt && invitation.expiresAt < now) {
+    return { ok: false, reason: "expired" };
+  }
+  if (
+    invitation.maxUses !== null && invitation.currentUses >= invitation.maxUses
+  ) {
+    return { ok: false, reason: "max-uses" };
+  }
+  return { ok: true };
+}
+
+/** Map a validation reason back to the user-facing error message. */
+export const INVITATION_ERROR_MESSAGES: Record<
+  Exclude<InvitationValidation, { ok: true }>["reason"],
+  string
+> = {
+  "not-found": "Invitation not found",
+  revoked: "Invitation has been revoked",
+  expired: "Invitation has expired",
+  "max-uses": "Invitation has reached max uses",
+};
 
 const INVITE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
