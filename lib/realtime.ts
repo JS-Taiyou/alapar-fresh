@@ -22,11 +22,21 @@ let onChange: ChangeHandler | null = null;
 let recovering = false;
 let recoveryAttempts = 0;
 
-/** Channel statuses that warrant an automatic recovery attempt. */
+/**
+ * Channel statuses that warrant an automatic recovery attempt.
+ *
+ * `CHANNEL_ERROR`: a genuine subscription failure — most commonly an expired
+ *   access token failing RLS, which a token refresh fixes.
+ * `TIMED_OUT`: the subscribe attempt didn't get an ack in time — worth a retry.
+ *
+ * `CLOSED` is intentionally **excluded**: the Supabase SDK fires it during
+ * normal lifecycle (including when we call removeChannel ourselves), so
+ * treating it as recoverable causes a fight with the SDK's own reconnection
+ * logic. The SDK auto-reconnects after `CLOSED` on its own.
+ */
 export const RECOVERABLE_STATUSES = new Set([
   "CHANNEL_ERROR",
   "TIMED_OUT",
-  "CLOSED",
 ]);
 
 /** Maximum recovery attempts before giving up (wake-up path remains as backup). */
@@ -98,13 +108,9 @@ export async function subscribeToRegistry(
     .subscribe((status, err) => {
       console.log("[realtime] status:", status, err ?? "");
 
-      if (status === "SUBSCRIBED") {
-        // Successfully connected — reset recovery state.
-        recovering = false;
-        recoveryAttempts = 0;
-        return;
-      }
-
+      // Only trigger recovery if we're not already recovering, and only for
+      // genuine error statuses (CHANNEL_ERROR / TIMED_OUT). CLOSED is excluded
+      // because the SDK fires it during normal lifecycle and auto-reconnects.
       if (shouldRecover(status) && !recovering) {
         recovering = true;
         void recoverChannel();
@@ -113,23 +119,34 @@ export async function subscribeToRegistry(
 }
 
 /**
- * Attempt to recover the realtime channel after an error.
+ * Attempt to recover the realtime channel after a CHANNEL_ERROR / TIMED_OUT.
  *
- * Tears down the current channel, fetches a fresh access token from
- * `/api/auth/token` (which triggers a server-side refresh if needed), and
- * resubscribes. Retries with backoff up to {@link MAX_RECOVERY_ATTEMPTS} times.
+ * Captures the current registry + handler (before teardown nulls them), fetches
+ * a fresh access token from `/api/auth/token` (which triggers a server-side
+ * refresh if needed), and resubscribes. Retries with backoff up to
+ * {@link MAX_RECOVERY_ATTEMPTS} times.
+ *
+ * `recovering` stays true for the entire recovery so concurrent status events
+ * (e.g. CLOSED from our own removeChannel) can't re-trigger the loop.
  */
 async function recoverChannel(): Promise<void> {
+  // Capture state before teardown — unsubscribeAll nulls these.
+  const rid = activeRegistryId;
+  const handler = onChange;
+  if (!rid || !handler) {
+    recovering = false;
+    return;
+  }
+
   // Tear down the broken channel.
   unsubscribeAll();
 
-  while (recoveryAttempts < MAX_RECOVERY_ATTEMPTS) {
-    recoveryAttempts++;
+  for (let attempt = 1; attempt <= MAX_RECOVERY_ATTEMPTS; attempt++) {
     const delay = RECOVERY_BACKOFF_MS[
-      Math.min(recoveryAttempts - 1, RECOVERY_BACKOFF_MS.length - 1)
+      Math.min(attempt - 1, RECOVERY_BACKOFF_MS.length - 1)
     ];
     console.log(
-      `[realtime] recovery attempt ${recoveryAttempts}/${MAX_RECOVERY_ATTEMPTS} in ${delay}ms`,
+      `[realtime] recovery attempt ${attempt}/${MAX_RECOVERY_ATTEMPTS} in ${delay}ms`,
     );
     await new Promise((r) => setTimeout(r, delay));
 
@@ -142,20 +159,18 @@ async function recoverChannel(): Promise<void> {
       const { accessToken } = await resp.json() as { accessToken: string };
       if (!accessToken) continue;
 
-      // Resubscribe with the fresh token. subscribeToRegistry resets
-      // recovering on SUBSCRIBED; if it errors again, the status callback
-      // will re-enter recovery (but `recovering` is still true, so the loop
-      // here handles it).
-      if (activeRegistryId && onChange) {
-        const rid = activeRegistryId;
-        const handler = onChange;
-        // Reset so subscribeToRegistry doesn't no-op on the id check.
-        activeRegistryId = null;
-        await subscribeToRegistry(rid, handler, accessToken);
-        return; // subscribeToRegistry will set recovering=false on SUBSCRIBED
-      }
+      // Resubscribe with the fresh token. We pass a flag so the SUBSCRIBED
+      // handler in subscribeToRegistry doesn't reset `recovering` prematurely —
+      // we clear it here only after a successful resubscribe.
+      await subscribeToRegistry(rid, handler, accessToken);
+      // If we got here, subscribeToRegistry didn't throw. The channel is now
+      // connecting; if it reaches SUBSCRIBED it's healthy.
+      recoveryAttempts = 0;
+      recovering = false;
+      console.log("[realtime] recovery succeeded");
+      return;
     } catch (err) {
-      console.error("[realtime] recovery attempt failed:", err);
+      console.error(`[realtime] recovery attempt ${attempt} failed:`, err);
     }
   }
 

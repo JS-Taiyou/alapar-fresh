@@ -24,8 +24,9 @@ describe("shouldRecover", () => {
     assertEquals(shouldRecover("TIMED_OUT"), true);
   });
 
-  it("returns true for CLOSED", () => {
-    assertEquals(shouldRecover("CLOSED"), true);
+  it("returns false for CLOSED (SDK fires it during normal lifecycle)", () => {
+    // CLOSED is excluded to avoid fighting the SDK's own auto-reconnection.
+    assertEquals(shouldRecover("CLOSED"), false);
   });
 
   it("returns false for SUBSCRIBED (healthy state)", () => {
@@ -40,7 +41,7 @@ describe("shouldRecover", () => {
   it("RECOVERABLE_STATUSES matches the documented set", () => {
     assertEquals(
       RECOVERABLE_STATUSES,
-      new Set(["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"]),
+      new Set(["CHANNEL_ERROR", "TIMED_OUT"]),
     );
   });
 });
