@@ -1,5 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { useSignal } from "@preact/signals";
+import { driver } from "driver.js";
+import "driver.js/dist/driver.css";
 
 /**
  * Guided tour island for the /demo page, powered by driver.js (MIT, zero deps).
@@ -71,9 +73,6 @@ export default function DemoTour() {
     showMenu.value = false;
     setTourActive(true);
     markSeen();
-
-    const { driver } = await import("driver.js");
-    await import("driver.js/dist/driver.css");
 
     const driverObj = driver({
       showProgress: true,
@@ -149,9 +148,6 @@ export default function DemoTour() {
     setTourActive(true);
     markSeen();
 
-    const { driver } = await import("driver.js");
-    await import("driver.js/dist/driver.css");
-
     let modalStepReached = false;
 
     const driverObj = driver({
@@ -199,11 +195,11 @@ export default function DemoTour() {
               "Vamos a abrir el formulario para crear un gasto y ver las opciones disponibles.",
             side: "left",
             align: "center",
-          },
-          onNextClick: async () => {
-            modalStepReached = true;
-            await openExpenseModal();
-            driverObj.moveNext();
+            onNextClick: async () => {
+              modalStepReached = true;
+              await openExpenseModal();
+              driverObj.moveNext();
+            },
           },
         },
         // --- Inside expense modal ---
@@ -225,14 +221,13 @@ export default function DemoTour() {
               "Decide cómo dividir el gasto: Automático (partes iguales), Porcentaje (ej. 60%/40%), o Monto Fijo (cantidades específicas por persona).",
             side: "bottom",
             align: "end",
-          },
-          onPrevClick: () => driverObj.movePrevious(),
-          onNextClick: () => {
-            closeModals();
-            // Wait for modal to close before moving to payment step.
-            setTimeout(() => {
-              openPaymentModal().then(() => driverObj.moveNext());
-            }, 200);
+            onPrevClick: () => driverObj.movePrevious(),
+            onNextClick: () => {
+              closeModals();
+              setTimeout(() => {
+                openPaymentModal().then(() => driverObj.moveNext());
+              }, 200);
+            },
           },
         },
         // --- Inside payment modal ---
@@ -244,11 +239,11 @@ export default function DemoTour() {
               "Cuando alguien te debe, este botón calcula automáticamente el monto exacto. Un clic y el pago queda registrado por la cantidad correcta.",
             side: "bottom",
             align: "center",
-          },
-          onPrevClick: async () => {
-            closeModals();
-            await openExpenseModal();
-            driverObj.movePrevious();
+            onPrevClick: async () => {
+              closeModals();
+              await openExpenseModal();
+              driverObj.movePrevious();
+            },
           },
         },
         {
@@ -258,11 +253,11 @@ export default function DemoTour() {
               "Ya conoces las funciones principales de A la Par. Explora el demo libremente — todos los cambios son temporales y se reinician al recargar.",
             side: "top",
             align: "center",
-          },
-          onNextClick: () => {
-            closeModals();
-            driverObj.destroy();
-            setTourActive(false);
+            onDoneClick: () => {
+              closeModals();
+              driverObj.destroy();
+              setTourActive(false);
+            },
           },
         },
       ],
