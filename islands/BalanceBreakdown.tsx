@@ -26,7 +26,10 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
     showPopover.value = false;
   }
 
-  const balanceStr = Math.abs(balance).toLocaleString("en-US", {
+  // Display waiver: amounts under $0.02 are shown as $0.00 to avoid
+  // showing a meaningless 1-cent remainder after a full payment.
+  const displayBalance = Math.abs(balance) < 0.02 ? 0 : balance;
+  const balanceStr = Math.abs(displayBalance).toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -66,7 +69,7 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
         </div>
         <p
           class={`text-2xl sm:text-3xl lg:text-4xl font-bold mt-1 truncate ${
-            balance >= 0 ? "text-green-500" : "text-red-500"
+            displayBalance >= 0 ? "text-green-500" : "text-red-500"
           }`}
         >
           ${balanceStr}

@@ -3,6 +3,7 @@ import {
   calculateBalance,
   calculatePairwiseBreakdown,
   getActiveTransactions,
+  getBalanceFromDeltas,
   getEntities,
   getSpawnCandidates,
   getTransactionPaymentsForRegistry,
@@ -78,7 +79,15 @@ export const handler = define.handlers({
     const transactionPayments = await getTransactionPaymentsForRegistry(
       registryId,
     );
-    const balance = await calculateBalance(userId, registryId, transactions);
+    // Use persisted deltas for the authoritative balance (exact NUMERIC sum,
+    // no floating-point residue). Falls back to the in-memory calculation if
+    // the deltas table doesn't exist yet (pre-migration).
+    let balance: number;
+    try {
+      balance = await getBalanceFromDeltas(userId, registryId);
+    } catch {
+      balance = await calculateBalance(userId, registryId, transactions);
+    }
     const candidates = await getCachedSpawnCandidates(
       registryId,
       () => getSpawnCandidates(registryId),

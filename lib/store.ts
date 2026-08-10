@@ -29,6 +29,7 @@ import {
   buildBatchPlaceholders,
   buildTransactionUpdateSets,
 } from "./sql-builders.ts";
+import { computeDeltas } from "./balances.ts";
 
 export {
   buildEqualSplit,
@@ -38,6 +39,35 @@ export {
   calcPairwiseBreakdownPure as calculatePairwiseBreakdown,
 };
 export { generateInviteCode };
+
+/**
+ * Write the computed balance deltas for a transaction into the
+ * `transaction_balances` table. Called after every transaction INSERT and on
+ * update (after deleting stale rows). Uses UPSERT to be idempotent.
+ */
+async function writeTransactionBalances(tx: Transaction): Promise<void> {
+  const deltas = computeDeltas(tx);
+  if (deltas.length === 0) return;
+  const values: unknown[] = [];
+  const placeholders = deltas.map((d, i) => {
+    const base = i * 3;
+    values.push(tx.id, d.userId, d.amount);
+    return `($${base + 1}, $${base + 2}, $${base + 3})`;
+  }).join(", ");
+  await query(
+    `INSERT INTO transaction_balances (transaction_id, user_id, amount) VALUES ${placeholders}
+     ON CONFLICT (transaction_id, user_id) DO UPDATE SET amount = EXCLUDED.amount`,
+    values,
+  );
+}
+
+/** Delete persisted balance deltas for a transaction (before re-computing on update). */
+async function deleteTransactionBalances(transactionId: string): Promise<void> {
+  await query(
+    "DELETE FROM transaction_balances WHERE transaction_id = $1",
+    [transactionId],
+  );
+}
 
 const MONTHS_ES = [
   "Ene",
@@ -313,6 +343,7 @@ export async function createTransaction(
   if (transactionPaymentEntries && transactionPaymentEntries.length > 0) {
     await createTransactionPayments(tx.id, transactionPaymentEntries);
   }
+  await writeTransactionBalances(tx);
   return tx;
 }
 
@@ -342,6 +373,18 @@ export async function updateTransaction(
     if (transactionPaymentEntries.length > 0) {
       await createTransactionPayments(id, transactionPaymentEntries);
     }
+  }
+  // Recompute balance deltas if any delta-relevant field changed.
+  const deltaRelevant = data.amount !== undefined ||
+    data.originalAmount !== undefined ||
+    data.type !== undefined ||
+    data.splitJson !== undefined ||
+    data.userPaid !== undefined ||
+    data.installmentCurrent !== undefined ||
+    data.installmentTotal !== undefined;
+  if (deltaRelevant) {
+    await deleteTransactionBalances(id);
+    await writeTransactionBalances(updated);
   }
   return updated;
 }
@@ -521,6 +564,26 @@ export async function calculateBalance(
   return calcBalancePure(active, userId);
 }
 
+/**
+ * Read the authoritative balance from persisted `transaction_balances` deltas.
+ * Uses exact NUMERIC(12,2) arithmetic — no floating-point residue.
+ * Falls back to `calculateBalance` if the deltas table doesn't exist yet
+ * (pre-migration), making the rollout safe.
+ */
+export async function getBalanceFromDeltas(
+  userId: string,
+  registryId: string,
+): Promise<number> {
+  const result = await query(
+    `SELECT COALESCE(SUM(tb.amount), 0) as balance
+     FROM transaction_balances tb
+     JOIN transactions t ON t.id = tb.transaction_id
+     WHERE tb.user_id = $1 AND t.registry_id = $2 AND t.exercise_id IS NULL`,
+    [userId, registryId],
+  );
+  return parseFloat(result.rows[0].balance as string);
+}
+
 export function getMonthNameEs(date: Date): string {
   return MONTHS_ES[date.getMonth()];
 }
@@ -569,7 +632,9 @@ export async function cloneTransactionForNextPeriod(
       source.userPaid,
     ],
   );
-  return rowToTransaction(result.rows[0]);
+  const cloned = rowToTransaction(result.rows[0]);
+  await writeTransactionBalances(cloned);
+  return cloned;
 }
 
 export async function batchCloneTransactions(
@@ -623,7 +688,12 @@ export async function batchCloneTransactions(
     `INSERT INTO transactions (registry_id, description, amount, original_amount, type, exercise_id, installment_current, installment_total, recurring_disabled, recurring_group_id, notes, split_json, creator_id, user_paid) VALUES ${placeholders} RETURNING *`,
     flatValues,
   );
-  return insertResult.rows.map(rowToTransaction);
+  const cloned = insertResult.rows.map(rowToTransaction);
+  // Write balance deltas for each cloned transaction.
+  for (const tx of cloned) {
+    await writeTransactionBalances(tx);
+  }
+  return cloned;
 }
 
 export async function getEntities(registryId: string): Promise<Entity[]> {
