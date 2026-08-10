@@ -31,7 +31,8 @@ SELECT
 FROM transactions t
 CROSS JOIN LATERAL (
   -- For pago/ajuste: payer gets +amount, recipient gets -amount.
-  SELECT t.user_paid AS user_id, ROUND(t.original_amount, 2) AS amount
+  -- Cast all user_id branches to text so the UNION types match.
+  SELECT t.user_paid::text AS user_id, ROUND(t.original_amount, 2) AS amount
   WHERE t.type IN ('pago', 'ajuste')
   UNION ALL
   SELECT
@@ -47,7 +48,7 @@ CROSS JOIN LATERAL (
   UNION ALL
   -- Payer not in split: credited the full per-installment total.
   SELECT
-    t.user_paid AS user_id,
+    t.user_paid::text AS user_id,
     ROUND(t.original_amount / COALESCE(NULLIF(t.installment_total, 0), 1), 2) AS amount
   WHERE t.type NOT IN ('pago', 'ajuste')
     AND NOT EXISTS (
