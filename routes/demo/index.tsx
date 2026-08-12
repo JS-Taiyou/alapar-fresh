@@ -30,6 +30,7 @@ interface DemoData {
   balanceBreakdown: BalanceBreakdownEntry[];
   users: Participant[];
   entities: { id: string; name: string; color: string }[];
+  locale: Locale;
 }
 
 export const handler = define.handlers({
@@ -99,6 +100,7 @@ export const handler = define.handlers({
         balanceBreakdown,
         users,
         entities: [] as { id: string; name: string; color: string }[],
+        locale,
       },
     };
   },
@@ -106,6 +108,7 @@ export const handler = define.handlers({
 
 export default define.page(function DemoPage(ctx) {
   const data = ctx.data as DemoData;
+  const locale = data.locale;
   const $transactions = useSignal<EnrichedTransaction[]>(data.transactions);
   const $users = useSignal<Participant[]>(data.users);
   const $currentUserId = useSignal(data.currentUserId);
