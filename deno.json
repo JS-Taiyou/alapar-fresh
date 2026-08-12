@@ -9,7 +9,7 @@
     "update": "deno run -A -r jsr:@fresh/update ."
   },
   "lint": { "rules": { "tags": ["fresh", "recommended"] } },
-  "exclude": ["**/_fresh/*"],
+  "exclude": ["**/_fresh/*", ".kilo/", ".zcode/"],
   "imports": {
     "@/": "./",
     "@types/pg": "npm:@types/pg@^8.20.0",
