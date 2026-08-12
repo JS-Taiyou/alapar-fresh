@@ -20,7 +20,6 @@ let onChange: ChangeHandler | null = null;
 // When the channel errors (token expiry, network blip, mobile sleep), we
 // attempt to recover by fetching a fresh token and resubscribing.
 let recovering = false;
-let recoveryAttempts = 0;
 
 /**
  * Channel statuses that warrant an automatic recovery attempt.
@@ -165,7 +164,6 @@ async function recoverChannel(): Promise<void> {
       await subscribeToRegistry(rid, handler, accessToken);
       // If we got here, subscribeToRegistry didn't throw. The channel is now
       // connecting; if it reaches SUBSCRIBED it's healthy.
-      recoveryAttempts = 0;
       recovering = false;
       console.log("[realtime] recovery succeeded");
       return;
@@ -196,7 +194,6 @@ export async function resubscribe(): Promise<void> {
   const handler = onChange;
   activeRegistryId = null;
   recovering = false;
-  recoveryAttempts = 0;
   await subscribeToRegistry(rid, handler);
 }
 

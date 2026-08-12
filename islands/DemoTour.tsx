@@ -85,7 +85,7 @@ export default function DemoTour() {
     });
   }
 
-  async function startQuickTour() {
+  function startQuickTour() {
     showMenu.value = false;
     setTourActive(true);
     markSeen();
@@ -160,12 +160,10 @@ export default function DemoTour() {
     }, 500);
   }
 
-  async function startFullTour() {
+  function startFullTour() {
     showMenu.value = false;
     setTourActive(true);
     markSeen();
-
-    let modalStepReached = false;
 
     const driverObj = driver({
       showProgress: true,
@@ -214,7 +212,6 @@ export default function DemoTour() {
             side: "left",
             align: "center",
             onNextClick: async () => {
-              modalStepReached = true;
               await openExpenseModal();
               driverObj.moveNext();
             },
