@@ -1,18 +1,11 @@
 /**
  * Per-transaction balance delta computation.
  *
- * The canonical source of truth for how a single transaction affects each
- * user's balance. Each delta is rounded to the cent (`Math.round(x * 100) / 100`)
- * at computation time, so when these values are persisted as `NUMERIC(12,2)` and
- * later summed, the result is exact — no floating-point residue.
+ * All arithmetic is done in integer cents to eliminate floating-point residue.
+ * Each delta is converted back to dollars only at the return boundary, so when
+ * persisted as `NUMERIC(12,2)` and later summed, the result is exact.
  *
- * This eliminates the historical divergence between {@link calculateBalance}
- * (which accumulated raw floats) and {@link calculatePairwiseBreakdown} (which
- * rounded per-counterparty). Both now sum the same persisted, pre-rounded
- * deltas and will always agree.
- *
- * Formula (mirrors the existing `calculateBalance` loop, generalized to all
- * affected users):
+ * Formula (mirrors `calculateBalance`, generalized to all affected users):
  *
  * For expenses (`unico`, `parcialidad`, `recurrente`):
  *   - payer: `+perInstallmentTotal - ownShare` (or `+perInstallmentTotal` if
@@ -25,17 +18,16 @@
  */
 
 import type { Transaction } from "./types.ts";
+import { fromCents, toCents } from "./splits.ts";
 
 export interface BalanceDelta {
   userId: string;
   amount: number;
 }
 
-const round = (n: number) => Math.round(n * 100) / 100;
-
 /**
- * Compute the signed, rounded-to-cent balance delta for each user affected by
- * a single transaction.
+ * Compute the signed, cent-exact balance delta for each user affected by a
+ * single transaction. All math is in integer cents internally.
  *
  * @returns array of `{ userId, amount }` — one per affected user. Users with a
  * zero delta are excluded. The payer is always included if they have a non-zero
@@ -45,44 +37,42 @@ export function computeDeltas(tx: Transaction): BalanceDelta[] {
   const deltas: BalanceDelta[] = [];
 
   if (tx.type === "pago" || tx.type === "ajuste") {
+    const amountCents = toCents(tx.originalAmount);
     // Payer is credited the full amount.
-    deltas.push({ userId: tx.userPaid, amount: round(tx.originalAmount) });
+    deltas.push({ userId: tx.userPaid, amount: fromCents(amountCents) });
     // Recipient (first split entry) is debited.
-    const recipient = tx.splitJson.splits[0];
+    const recipient = tx.splitJson?.splits?.[0];
     if (recipient && recipient.userId !== tx.userPaid) {
       deltas.push({
         userId: recipient.userId,
-        amount: round(-tx.originalAmount),
+        amount: fromCents(-amountCents),
       });
     }
     return deltas;
   }
 
-  // Expense (unico, parcialidad, recurrente).
+  // Expense (unico, parcialidad, recurrente) — all math in cents.
   const divisor = tx.type === "parcialidad" && tx.installmentTotal
     ? tx.installmentTotal
     : 1;
-  const perTotal = tx.originalAmount / divisor;
+  const perTotalCents = Math.round(toCents(tx.originalAmount) / divisor);
 
-  // Each user in the split owes their per-installment share.
   const splits = tx.splitJson?.splits ?? [];
   for (const split of splits) {
-    const share = split.amount / divisor;
+    const shareCents = Math.round(toCents(split.amount) / divisor);
     if (split.userId === tx.userPaid) {
-      // Payer: credited the full per-installment total, debited their own share.
-      deltas.push({ userId: split.userId, amount: round(perTotal - share) });
+      deltas.push({
+        userId: split.userId,
+        amount: fromCents(perTotalCents - shareCents),
+      });
     } else {
-      deltas.push({ userId: split.userId, amount: round(-share) });
+      deltas.push({ userId: split.userId, amount: fromCents(-shareCents) });
     }
   }
 
-  // If the payer is NOT in the split, they are credited the full per-installment
-  // total (they paid for everyone but owe nothing themselves). This fixes a
-  // latent inconsistency where calculateBalance gave 0 for this case while
-  // calculatePairwiseBreakdown credited the full amount.
   const payerInSplit = splits.some((s) => s.userId === tx.userPaid);
   if (!payerInSplit) {
-    deltas.push({ userId: tx.userPaid, amount: round(perTotal) });
+    deltas.push({ userId: tx.userPaid, amount: fromCents(perTotalCents) });
   }
 
   return deltas;

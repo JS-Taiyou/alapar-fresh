@@ -14,7 +14,12 @@ import type {
   TransactionSplit,
 } from "../lib/types.ts";
 import type { EnrichedTransaction } from "../islands/shared-signals.ts";
-import { computeDefaultPercentages } from "../lib/calculations.ts";
+import {
+  buildEqualSplit,
+  buildFixedSplit,
+  buildPercentageSplit,
+  computeDefaultPercentages,
+} from "../lib/calculations.ts";
 import { sanitizeDecimal, sanitizeInteger } from "../lib/format.ts";
 
 interface TransactionModalProps {
@@ -73,6 +78,7 @@ export default function TransactionModal(props: TransactionModalProps) {
   const installmentAmount = useSignal(0);
   const installmentAmountDisplay = useSignal("");
   const splitMode = useSignal<SplitMode>("auto");
+  const splitSeed = useSignal<string>(crypto.randomUUID());
   const userPaid = useSignal(currentUserId.value);
   const paymentRecipient = useSignal<string>(
     users.value.find((u) => u.id !== currentUserId.value)?.id ?? "",
@@ -285,30 +291,26 @@ export default function TransactionModal(props: TransactionModalProps) {
 
   function getSplits(): SplitEntry[] {
     const total = Math.abs(amount.value);
+    const userIds = users.value.map((u) => u.id);
     if (splitMode.value === "auto") {
-      const count = users.value.length;
-      const perPerson = Math.floor((total / count) * 100) / 100;
-      const remainder = Math.round((total - perPerson * count) * 100) / 100;
-      return users.value.map((u, i) => ({
-        userId: u.id,
-        percentage: Math.round((100 / count) * 100) / 100,
-        amount: perPerson + (i === 0 ? remainder : 0),
-      }));
+      return buildEqualSplit(total, userIds, splitSeed.value).splits;
     }
     if (splitMode.value === "percentage") {
-      return users.value.map((u) => ({
-        userId: u.id,
-        percentage: percentages.value[u.id] ?? 0,
-        amount: Math.round(total * (percentages.value[u.id] ?? 0)) / 100,
-      }));
+      return buildPercentageSplit(
+        total,
+        users.value.map((u) => ({
+          userId: u.id,
+          percentage: percentages.value[u.id] ?? 0,
+        })),
+      ).splits;
     }
-    return users.value.map((u) => ({
-      userId: u.id,
-      percentage: total > 0
-        ? Math.round(((fixedAmounts.value[u.id] ?? 0) / total) * 10000) / 100
-        : 0,
-      amount: fixedAmounts.value[u.id] ?? 0,
-    }));
+    return buildFixedSplit(
+      total,
+      users.value.map((u) => ({
+        userId: u.id,
+        amount: fixedAmounts.value[u.id] ?? 0,
+      })),
+    ).splits;
   }
 
   function computeAllocation(

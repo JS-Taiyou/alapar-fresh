@@ -626,12 +626,13 @@ describe("buildPercentageSplit", () => {
     ]);
   });
 
-  it("rounds fractional cents", () => {
-    // 33.33% of 100 = 33.33
+  it("rounds fractional cents correctly via integer arithmetic", () => {
+    // 33.33% of 100: toCents(100)=10000, 10000 * 33.33 / 100 = 3333 → 33.33
+    // (The old float path produced 33 due to float rounding; integer cents is exact.)
     const result = buildPercentageSplit(100, [
       { userId: "a", percentage: 33.33 },
     ]);
-    assertEquals(result.splits[0].amount, 33);
+    assertEquals(result.splits[0].amount, 33.33);
   });
 
   it("preserves the percentages verbatim", () => {

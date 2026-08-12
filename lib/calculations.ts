@@ -6,6 +6,7 @@ import type {
   Transaction,
   TransactionSplit,
 } from "./types.ts";
+import { fromCents, splitCents, toCents } from "./splits.ts";
 
 export function calculateBalance(
   transactions: Transaction[],
@@ -205,14 +206,14 @@ export function computeDefaultPercentages(
 export function buildEqualSplit(
   total: number,
   userIds: string[],
+  seed: string = "default",
 ): TransactionSplit {
+  const cents = splitCents(toCents(total), userIds, seed);
   const count = userIds.length;
-  const perPerson = Math.floor((total / count) * 100) / 100;
-  const remainder = Math.round((total - perPerson * count) * 100) / 100;
-  const splits: SplitEntry[] = userIds.map((uid, i) => ({
+  const splits: SplitEntry[] = userIds.map((uid) => ({
     userId: uid,
     percentage: Math.round((100 / count) * 100) / 100,
-    amount: perPerson + (i === 0 ? remainder : 0),
+    amount: fromCents(cents.get(uid) ?? 0),
   }));
   return { splits };
 }
@@ -221,10 +222,11 @@ export function buildPercentageSplit(
   total: number,
   percentages: { userId: string; percentage: number }[],
 ): TransactionSplit {
+  const totalCents = toCents(total);
   const splits: SplitEntry[] = percentages.map((p) => ({
     userId: p.userId,
     percentage: p.percentage,
-    amount: Math.round(total * p.percentage / 100),
+    amount: fromCents(Math.round(totalCents * p.percentage / 100)),
   }));
   return { splits };
 }
@@ -233,9 +235,12 @@ export function buildFixedSplit(
   total: number,
   amounts: { userId: string; amount: number }[],
 ): TransactionSplit {
+  const totalCents = toCents(total);
   const splits: SplitEntry[] = amounts.map((a) => ({
     userId: a.userId,
-    percentage: total > 0 ? Math.round((a.amount / total) * 10000) / 100 : 0,
+    percentage: totalCents > 0
+      ? Math.round((toCents(a.amount) / totalCents) * 10000) / 100
+      : 0,
     amount: a.amount,
   }));
   return { splits };
