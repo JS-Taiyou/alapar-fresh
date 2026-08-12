@@ -9,6 +9,7 @@ import { getUserFromRequest, setAuthCookies } from "./lib/supabase.ts";
 import { getCookie } from "./lib/auth-cookies.ts";
 import { query } from "./lib/db.ts";
 import { needsFullState, routeGuard } from "./lib/routing.ts";
+import { type Locale, resolveLocale } from "./lib/i18n.ts";
 
 const isDev = !Deno.env.get("DENO_DEPLOYMENT_ID");
 function devLog(...args: unknown[]) {
@@ -97,6 +98,10 @@ app.use(define.middleware(async (ctx) => {
   ctx.state.accessToken = null;
   ctx.state.isOwner = false;
   ctx.state.ownerRegistryIds = new Set<string>();
+  ctx.state.locale = resolveLocale(
+    getCookie(ctx.req.headers.get("cookie") ?? "", "alapar-locale"),
+    ctx.req.headers.get("accept-language"),
+  );
 
   // /demo renders entirely from static JSON — skip auth + DB entirely.
   if (path === "/demo") {
