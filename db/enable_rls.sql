@@ -131,6 +131,13 @@ CREATE POLICY exercises_update_member ON exercises
 -- transactions (CRITICAL — gates the Supabase Realtime channel)
 -- ===========================================================================
 
+-- Drop pre-existing policies (they inline the auth.uid()→users.id subquery;
+-- our version uses the is_registry_member helper for the same logic).
+DROP POLICY IF EXISTS "Users can read transactions of their registries" ON transactions;
+DROP POLICY IF EXISTS "Users can insert transactions in their registries" ON transactions;
+DROP POLICY IF EXISTS "Users can update transactions in their registries" ON transactions;
+DROP POLICY IF EXISTS "Users can delete transactions in their registries" ON transactions;
+
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transactions FORCE ROW LEVEL SECURITY;
 
@@ -218,6 +225,10 @@ CREATE POLICY audit_log_insert ON audit_log
 -- ===========================================================================
 -- allowed_emails (read-only allowlist)
 -- ===========================================================================
+
+-- Drop the pre-existing permissive policy (allowed anon reads) and replace
+-- with one that requires authentication.
+DROP POLICY IF EXISTS "Enable read access for all users" ON allowed_emails;
 
 ALTER TABLE allowed_emails ENABLE ROW LEVEL SECURITY;
 ALTER TABLE allowed_emails FORCE ROW LEVEL SECURITY;
