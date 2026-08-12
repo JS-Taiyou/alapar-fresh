@@ -278,3 +278,35 @@ Migrations must be run in order:
 7. **`add_registry_last_modified.sql`** — Adds `last_modified` column to
    `registries`, creates `update_registry_last_modified()` function and
    `trg_transactions_registry_modified` trigger
+8. **`add_transaction_balances.sql`** — Adds `transaction_balances` table for
+   persisted per-user balance deltas (see below), with a backfill that computes
+   deltas for all existing transactions
+
+---
+
+## `transaction_balances` — Persisted Balance Deltas
+
+| Column         | Type          | Constraints                             | Description                               |
+| -------------- | ------------- | --------------------------------------- | ----------------------------------------- |
+| transaction_id | UUID          | FK → transactions(id) ON DELETE CASCADE | The transaction this delta belongs to     |
+| user_id        | UUID          | NOT NULL (not FK — may be an entity id) | The user/entity whose balance is affected |
+| amount         | NUMERIC(12,2) | NOT NULL                                | Signed delta, pre-rounded to cents        |
+
+**Primary key**: `(transaction_id, user_id)`
+
+**Indexes**: `idx_tb_transaction(transaction_id)`, `idx_tb_user(user_id)`
+
+**Purpose**: Stores the exact, rounded-to-cent balance impact of each
+transaction on each affected user. Balance is then an exact `NUMERIC` SUM:
+
+```sql
+SELECT COALESCE(SUM(amount), 0) FROM transaction_balances tb
+JOIN transactions t ON t.id = tb.transaction_id
+WHERE tb.user_id = $1 AND t.registry_id = $2 AND t.exercise_id IS NULL
+```
+
+This eliminates the floating-point residue that caused 1-2 cent discrepancies
+between users after a full payment. Deltas are computed by the pure
+`computeDeltas()` function in `lib/balances.ts` and written at transaction
+creation/update time. `ON DELETE CASCADE` handles cleanup when a transaction is
+deleted.

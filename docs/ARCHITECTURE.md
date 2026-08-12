@@ -82,8 +82,9 @@ alapar-fresh/
 │   │   └── history/
 │   │       ├── history.tsx    # Exercise history list
 │   │       └── [id].tsx       # Exercise detail
+│   ├── demo/index.tsx         # Static demo page (no auth/DB, guided tour)
 │   └── api/                   # API endpoints
-│       ├── auth/              # Auth callback + logout
+│       ├── auth/              # Auth callback + logout + token refresh
 │       ├── dashboard.ts       # Dashboard data (ETag support)
 │       ├── entities/          # Entity CRUD (terceros)
 │       ├── exercises/         # Create exercise + carry-forward
@@ -93,27 +94,66 @@ alapar-fresh/
 │       ├── transactions/      # CRUD + disable-recurring
 │       └── push/              # Web Push subscription endpoint
 ├── islands/                   # Interactive client-side Preact components
+│   ├── TransactionList.tsx    # Main list (uses shared rowToEnrichedTransaction)
+│   ├── BalanceBreakdown.tsx   # Balance header + pairwise popover
+│   ├── DemoTour.tsx           # driver.js guided tour (demo page only)
+│   ├── AuthCallback.tsx       # OAuth callback (uses AuthCardLayout)
+│   └── ...                    # Other islands
 ├── components/                # Server-side presentational components
+│   ├── AuthCardLayout.tsx     # Shared auth-screen shell (bg-pattern + card)
+│   └── TransactionModal.tsx   # Create/edit transaction modal
 ├── lib/
 │   ├── db.ts                  # PostgreSQL connection pool
 │   ├── supabase.ts            # Supabase client + auth helpers
 │   ├── store.ts               # Data access layer (queries + business logic)
 │   ├── server-cache.ts        # In-memory server cache (stamp-based invalidation)
 │   ├── cache.ts               # Client-side IndexedDB cache (registry snapshots)
-│   ├── api.ts                 # Client-side API fetch wrapper (ETag support)
-│   ├── realtime.ts            # Supabase Realtime subscriptions + resubscribe
-│   ├── push.ts                # Web Push notification sending (VAPID)
+│   ├── realtime.ts            # Supabase Realtime subscriptions + channel recovery
+│   ├── push.ts                # Web Push notification sending (VAPID) + cooldown
 │   ├── notifications.ts       # Client-side push subscription management
 │   ├── calculations.ts        # Pure balance/split calculation functions
+│   ├── balances.ts            # computeDeltas — per-transaction delta source of truth
+│   ├── rows.ts                # Pure row mappers (rowToUser, rowToTransaction, etc.)
+│   ├── invite.ts              # generateInviteCode + filterSpawnCandidates + validateInvitation
+│   ├── auth-cookies.ts        # getCookie (handles Deno Deploy comma-mashing)
+│   ├── encoding.ts            # base64url, concatUint8Arrays, encodeLength
+│   ├── routing.ts             # needsFullState, isPublicPath, routeGuard (pure)
+│   ├── sql-builders.ts        # buildBatchPlaceholders, buildTransactionUpdateSets
+│   ├── format.ts              # Input sanitizers (sanitizeDecimal, sanitizeInteger)
+│   ├── etag.ts                # generateETag
 │   └── types.ts               # TypeScript interfaces
+├── test/                      # Test infrastructure
+│   ├── fixtures/db_stub.ts    # Controllable query() stub for route/store tests
+│   └── helpers.ts             # makeCtx builder + request helpers
 ├── db/
 │   ├── schema.sql             # Full PostgreSQL schema
 │   ├── seed.sql               # Seed data
-│   ├── migrate_entities_phase1.sql  # Extract entities to JSON
-│   ├── migrate_entities_phase2.sql  # Clean up entity columns
-│   └── migrate_merge_users.sql      # Merge system_users into users
-└── utils.ts                   # Fresh State definition + createDefine
+│   ├── add_registry_last_modified.sql
+│   ├── add_related_transaction_id.sql
+│   ├── add_transaction_payments.sql
+│   ├── add_push_subscriptions.sql
+│   └── add_transaction_balances.sql  # Per-user balance deltas table + backfill
+├── data/demo.json             # Static demo data (3 users, 7 transactions)
+├── deno.json                  # Deno config (imports, tasks, compiler options)
+├── deno.test.json             # Test-only config (remaps lib/db.ts → stub)
+├── utils.ts                   # Fresh State definition + createDefine
+└── CHANGELOG.md               # Record of significant changes
 ```
+
+```
+### Testing
+
+The project has a comprehensive test suite (47 suites, 339 steps) covering pure
+logic, extracted modules, and route-handler validation.
+```
+
+deno task test # run tests (uses deno.test.json with DB stub) deno task check #
+fmt + lint + type-check + tests
+
+````
+Test files live alongside source as `*_test.ts`. The test config
+(`deno.test.json`) remaps `lib/db.ts` to a stub (`test/fixtures/db_stub.ts`)
+so tests run without `DATABASE_URL` or a live database.
 
 ## Authentication Flow
 
@@ -221,7 +261,7 @@ interface State {
   supabaseAuthId: string | null; // Supabase auth UUID
   isOwner: boolean; // Is user owner of active registry
 }
-```
+````
 
 **Key concept — `Participant`**: Both real users and entities share the base
 interface `{ id, name, color }`. Calculations (balance, pairwise breakdown)
