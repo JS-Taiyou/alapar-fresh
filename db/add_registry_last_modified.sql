@@ -1,7 +1,10 @@
 ALTER TABLE registries ADD COLUMN IF NOT EXISTS last_modified TIMESTAMPTZ NOT NULL DEFAULT now();
 
 CREATE OR REPLACE FUNCTION update_registry_last_modified()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
 BEGIN
     IF TG_OP = 'INSERT' THEN
         UPDATE registries SET last_modified = now() WHERE id = NEW.registry_id;
@@ -17,7 +20,7 @@ BEGIN
         RETURN OLD;
     END IF;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 DROP TRIGGER IF EXISTS trg_transactions_registry_modified ON transactions;
 CREATE TRIGGER trg_transactions_registry_modified
