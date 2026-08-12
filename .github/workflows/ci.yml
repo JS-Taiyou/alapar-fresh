@@ -20,7 +20,7 @@ jobs:
           deno-version: v2.5.2
 
       - name: Install dependencies
-        run: deno install
+        run: deno install --frozen
 
       - name: Format check
         run: deno fmt --check .
