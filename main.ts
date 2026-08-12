@@ -9,7 +9,7 @@ import { getUserFromRequest, setAuthCookies } from "./lib/supabase.ts";
 import { getCookie } from "./lib/auth-cookies.ts";
 import { query } from "./lib/db.ts";
 import { needsFullState, routeGuard } from "./lib/routing.ts";
-import { type Locale, resolveLocale } from "./lib/i18n.ts";
+import { resolveLocale } from "./lib/i18n.ts";
 
 const isDev = !Deno.env.get("DENO_DEPLOYMENT_ID");
 function devLog(...args: unknown[]) {
