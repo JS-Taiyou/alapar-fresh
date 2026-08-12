@@ -164,7 +164,7 @@ interface ImportMeta {
 ```html
 <p>Running in %MODE%</p>
 <script>
-  window.API = "%VITE_API_URL%";
+window.API = "%VITE_API_URL%";
 </script>
 ```
 

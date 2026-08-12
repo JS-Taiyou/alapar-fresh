@@ -54,7 +54,8 @@
   }
 }
 
-html, body {
+html,
+body {
   background-color: var(--color-background);
   color: #f8fafc;
   font-family: var(--font-sans);
@@ -106,16 +107,12 @@ html, body {
   color: #f8fafc;
 }
 /* Style the "next/done" button as primary */
-.driver-popover.alapar-popover
-  .driver-popover-navigation-btns
-  button:last-child {
+.driver-popover.alapar-popover .driver-popover-navigation-btns button:last-child {
   background-color: var(--color-primary);
   border-color: var(--color-primary);
   color: #fff;
 }
-.driver-popover.alapar-popover
-  .driver-popover-navigation-btns
-  button:last-child:hover {
+.driver-popover.alapar-popover .driver-popover-navigation-btns button:last-child:hover {
   background-color: var(--color-primary-light);
   border-color: var(--color-primary-light);
 }
