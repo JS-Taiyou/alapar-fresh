@@ -25,7 +25,7 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT id FROM users WHERE supabase_auth_id = auth.uid()
+  SELECT id FROM users WHERE supabase_auth_id = (SELECT auth.uid())
 $$;
 
 -- Check whether the current authenticated user is a member of a registry.
@@ -60,7 +60,7 @@ CREATE POLICY users_select_self_or_comember ON users
   );
 
 CREATE POLICY users_insert_self ON users
-  FOR INSERT WITH CHECK (supabase_auth_id = auth.uid());
+  FOR INSERT WITH CHECK (supabase_auth_id = (SELECT auth.uid()));
 
 CREATE POLICY users_update_self ON users
   FOR UPDATE USING (id = app_user_id()) WITH CHECK (id = app_user_id());
@@ -76,7 +76,7 @@ CREATE POLICY registries_select_member ON registries
   FOR SELECT USING (is_registry_member(id));
 
 CREATE POLICY registries_insert_any ON registries
-  FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+  FOR INSERT WITH CHECK ((SELECT auth.uid()) IS NOT NULL);
 
 CREATE POLICY registries_update_member ON registries
   FOR UPDATE USING (is_registry_member(id)) WITH CHECK (is_registry_member(id));
@@ -202,7 +202,7 @@ ALTER TABLE invitations FORCE ROW LEVEL SECURITY;
 -- can also SELECT (the invitation code is the secret — guessing an 8-char
 -- unambiguous code is infeasible, and the app validates code validity).
 CREATE POLICY invitations_select ON invitations
-  FOR SELECT USING (auth.uid() IS NOT NULL);
+  FOR SELECT USING ((SELECT auth.uid()) IS NOT NULL);
 
 CREATE POLICY invitations_insert_member ON invitations
   FOR INSERT WITH CHECK (is_registry_member(registry_id));
@@ -220,7 +220,7 @@ ALTER TABLE audit_log FORCE ROW LEVEL SECURITY;
 
 -- No SELECT policy → denies all reads from non-superuser roles.
 CREATE POLICY audit_log_insert ON audit_log
-  FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+  FOR INSERT WITH CHECK ((SELECT auth.uid()) IS NOT NULL);
 
 -- ===========================================================================
 -- allowed_emails (read-only allowlist)
@@ -234,7 +234,7 @@ ALTER TABLE allowed_emails ENABLE ROW LEVEL SECURITY;
 ALTER TABLE allowed_emails FORCE ROW LEVEL SECURITY;
 
 CREATE POLICY allowed_emails_select ON allowed_emails
-  FOR SELECT USING (auth.uid() IS NOT NULL);
+  FOR SELECT USING ((SELECT auth.uid()) IS NOT NULL);
 
 -- ===========================================================================
 -- push_subscriptions
