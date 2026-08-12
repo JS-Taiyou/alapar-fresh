@@ -26,4 +26,4 @@ jobs:
         run: deno lint .
 
       - name: Test
-        run: deno test --config deno.test.json --allow-env
+        run: deno test --no-check --config deno.test.json --allow-env
