@@ -27,6 +27,8 @@ SET search_path = public
 AS $$
   SELECT id FROM users WHERE supabase_auth_id = (SELECT auth.uid())
 $$;
+-- Revoke direct access — these are internal RLS helpers, not API endpoints.
+REVOKE EXECUTE ON FUNCTION app_user_id() FROM anon, authenticated;
 
 -- Check whether the current authenticated user is a member of a registry.
 CREATE OR REPLACE FUNCTION is_registry_member(reg_id UUID)
@@ -41,6 +43,12 @@ AS $$
     WHERE registry_id = reg_id AND user_id = app_user_id()
   )
 $$;
+REVOKE EXECUTE ON FUNCTION is_registry_member(UUID) FROM anon, authenticated;
+
+-- Drop the redundant index on users.supabase_auth_id — the UNIQUE constraint
+-- already creates one (users_supabase_auth_id_key), so the explicit index is
+-- a duplicate.
+DROP INDEX IF EXISTS idx_users_supabase_auth_id;
 
 -- ===========================================================================
 -- users
