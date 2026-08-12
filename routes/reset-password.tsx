@@ -1,11 +1,16 @@
 import { define } from "../utils.ts";
 import { getSupabaseAnonKey, getSupabaseUrl } from "../lib/supabase.ts";
+import { type Locale, t as translate } from "../lib/i18n.ts";
 import ResetPassword from "../islands/ResetPassword.tsx";
 import AuthCardLayout from "../components/AuthCardLayout.tsx";
 
-export default define.page(function ResetPasswordPage() {
+export default define.page(function ResetPasswordPage(ctx) {
+  const locale: Locale = ctx.state.locale;
+  const t = (key: string, params?: Record<string, string | number>) =>
+    translate(locale, key, params);
+
   return (
-    <AuthCardLayout pageTitle="A la par - Nueva Contraseña">
+    <AuthCardLayout pageTitle={`A la par - ${t("auth.reset_password")}`}>
       <div class="text-center mb-8">
         <div class="inline-flex items-center justify-center p-3 bg-primary rounded-custom mb-4">
           <svg
@@ -22,13 +27,16 @@ export default define.page(function ResetPasswordPage() {
             />
           </svg>
         </div>
-        <h1 class="text-2xl font-bold text-white">Nueva Contraseña</h1>
+        <h1 class="text-2xl font-bold text-white">
+          {t("auth.reset_password")}
+        </h1>
         <p class="text-zinc-400 text-sm mt-2">
-          Ingresa tu nueva contraseña
+          {t("auth.reset_password_subtitle")}
         </p>
       </div>
 
       <ResetPassword
+        locale={locale}
         supabaseUrl={getSupabaseUrl()}
         supabaseAnonKey={getSupabaseAnonKey()}
       />

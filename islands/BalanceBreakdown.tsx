@@ -1,13 +1,17 @@
 import { type Signal, useSignal } from "@preact/signals";
 import type { BalanceBreakdownEntry, Participant } from "../lib/types.ts";
+import { type Locale, t as translate } from "../lib/i18n.ts";
 
 interface BalanceBreakdownProps {
   balance: Signal<number>;
   entries: Signal<BalanceBreakdownEntry[]>;
   users: Signal<Participant[]>;
+  locale?: Locale;
 }
 
 export default function BalanceBreakdown(props: BalanceBreakdownProps) {
+  const t = (key: string, params?: Record<string, string | number>) =>
+    translate(props.locale ?? "es", key, params);
   const showPopover = useSignal(false);
 
   const balance = props.balance.value;
@@ -46,7 +50,7 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
       >
         <div class="flex items-center gap-2">
           <span class="text-xs sm:text-sm font-medium text-zinc-400 uppercase tracking-wider">
-            Balance Total
+            {t("balance.total")}
           </span>
           {canShowPopover && (
             <svg
@@ -86,10 +90,10 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
           <div class="absolute top-full left-0 mt-3 z-50 w-80 bg-surface border border-border-custom rounded-custom shadow-2xl overflow-hidden animate-fade-in">
             <div class="px-4 py-3 border-b border-border-custom bg-white/5">
               <h3 class="text-sm font-semibold text-white">
-                Desglose por persona
+                {t("balance.breakdown_title")}
               </h3>
               <p class="text-xs text-zinc-400 mt-0.5">
-                Detalle de saldos con cada miembro
+                {t("balance.breakdown_subtitle")}
               </p>
             </div>
 
@@ -110,7 +114,7 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
                     />
                   </svg>
                   <p class="text-sm text-zinc-400">
-                    Todos est&aacute;n balanceados
+                    {t("balance.all_settled")}
                   </p>
                 </div>
               )
@@ -119,7 +123,7 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
                   {owedToMe.length > 0 && (
                     <div class="px-4 py-3 space-y-2.5">
                       <h4 class="text-xs font-semibold uppercase tracking-wider text-green-400/80">
-                        Te deben
+                        {t("balance.owed_to_you")}
                       </h4>
                       {owedToMe.map((entry) => {
                         const initials = entry.userName
@@ -164,7 +168,7 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
                   {owedByMe.length > 0 && (
                     <div class="px-4 py-3 space-y-2.5">
                       <h4 class="text-xs font-semibold uppercase tracking-wider text-red-400/80">
-                        Debes
+                        {t("balance.you_owe")}
                       </h4>
                       {owedByMe.map((entry) => {
                         const initials = entry.userName

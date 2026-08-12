@@ -21,6 +21,7 @@ import {
   computeDefaultPercentages,
 } from "../lib/calculations.ts";
 import { sanitizeDecimal, sanitizeInteger } from "../lib/format.ts";
+import { formatDate, type Locale, t as translate } from "../lib/i18n.ts";
 
 interface TransactionModalProps {
   isOpen: Signal<boolean>;
@@ -37,6 +38,7 @@ interface TransactionModalProps {
   transactionPayments: Signal<TransactionPayment[]>;
   onRecalculate: () => void;
   isDemo?: boolean;
+  locale?: Locale;
 }
 
 type SplitMode = "auto" | "percentage" | "fixed";
@@ -64,6 +66,8 @@ export default function TransactionModal(props: TransactionModalProps) {
   const registryId = props.registryId;
   const defaultSplit = props.defaultSplit;
   const transactionPayments = props.transactionPayments;
+  const t = (key: string, params?: Record<string, string | number>) =>
+    translate(props.locale ?? "es", key, params);
 
   const submitting = useSignal(false);
   const amount = useSignal(0);
@@ -508,7 +512,7 @@ export default function TransactionModal(props: TransactionModalProps) {
     const optimistic: EnrichedTransaction = {
       id: optimisticId,
       registry_id: registryId.value,
-      description: description.value || "Pago",
+      description: description.value || t("modal.default_payment_desc"),
       amount: amount.value,
       originalAmount: Math.abs(amount.value),
       type: props.modalMode.value === "payment" ? "pago" : expenseType.value,
@@ -662,7 +666,7 @@ export default function TransactionModal(props: TransactionModalProps) {
 
   function handleDelete() {
     if (!props.editingId.value) return;
-    if (!confirm("Eliminar esta transacción?")) return;
+    if (!confirm(t("modal.delete_confirm"))) return;
     const id = props.editingId.value;
     transactions.value = transactions.value.filter((t) => t.id !== id);
     props.isOpen.value = false;
@@ -722,7 +726,7 @@ export default function TransactionModal(props: TransactionModalProps) {
     const result: EligibleTransaction[] = [];
     for (const [id, { tx, debt }] of debtMap) {
       if (debt > 0.005) {
-        const paidByName = tx.paidByUser?.name ?? "Desconocido";
+        const paidByName = tx.paidByUser?.name ?? t("modal.unknown_payer");
         result.push({
           id,
           description: tx.description,
@@ -790,15 +794,15 @@ export default function TransactionModal(props: TransactionModalProps) {
     : 0;
 
   const modalTitle = isPago
-    ? (isEditing.value ? "Editar Pago" : "Nuevo Pago")
-    : (isEditing.value ? "Editar Gasto" : "Nuevo Gasto");
+    ? (isEditing.value ? t("modal.edit_payment") : t("modal.new_payment"))
+    : (isEditing.value ? t("modal.edit_expense") : t("modal.new_expense"));
   const modalSubtitle = isPago
     ? (isEditing.value
-      ? "Modifica los detalles del pago."
-      : "Registra un pago entre usuarios.")
+      ? t("modal.edit_payment_subtitle")
+      : t("modal.new_payment_subtitle"))
     : (isEditing.value
-      ? "Modifica los detalles del gasto."
-      : "Configura cómo se divide este gasto.");
+      ? t("modal.edit_expense_subtitle")
+      : t("modal.new_expense_subtitle"));
 
   const totalSplitAmount = splits.value.reduce((s, sp) => s + sp.amount, 0);
   const totalPct = splitMode.value === "percentage"
@@ -854,15 +858,15 @@ export default function TransactionModal(props: TransactionModalProps) {
               class="block text-sm font-medium text-zinc-300"
               for="description"
             >
-              Descripción
+              {t("modal.description")}
             </label>
             <input
               class="block w-full px-4 py-2.5 bg-background border border-white/20 rounded-custom text-white focus:ring-primary focus:border-primary"
               id="description"
               type="text"
               placeholder={isPago
-                ? "Ej: Pago de balance"
-                : "Ej: Supermercado semanal"}
+                ? t("modal.description_payment_placeholder")
+                : t("modal.description_expense_placeholder")}
               value={description.value}
               onInput={(e) =>
                 description.value = (e.target as HTMLInputElement).value}
@@ -877,11 +881,11 @@ export default function TransactionModal(props: TransactionModalProps) {
                 for="total-amount"
               >
                 {isPago
-                  ? "Monto del Pago"
+                  ? t("modal.amount_payment")
                   : expenseType.value === "parcialidad" &&
                       installmentInputMode.value === "installment"
-                  ? "Monto por Parcialidad"
-                  : "Monto Total"}
+                  ? t("modal.amount_installment")
+                  : t("modal.amount_total")}
               </label>
               <div class="relative">
                 <span class="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400">
@@ -940,7 +944,9 @@ export default function TransactionModal(props: TransactionModalProps) {
                   Total: ${Math.abs(amount.value).toLocaleString("en-US", {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
-                  })} ({installmentTotal.value} parcialidades)
+                  })} ({t("modal.installment_count", {
+                    n: installmentTotal.value,
+                  })})
                 </p>
               )}
               {isPago && debtToRecipient > 0 && (
@@ -971,10 +977,12 @@ export default function TransactionModal(props: TransactionModalProps) {
                     />
                   </svg>
                   <span class="text-xs font-medium text-emerald-300">
-                    Los ${debtToRecipient.toLocaleString("en-US", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })} pendientes
+                    {t("modal.pay_debt", {
+                      amount: debtToRecipient.toLocaleString("en-US", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      }),
+                    })}
                   </span>
                 </button>
               )}
@@ -982,7 +990,7 @@ export default function TransactionModal(props: TransactionModalProps) {
             {!isPago && (
               <div class="space-y-2">
                 <label class="block text-sm font-medium text-zinc-300">
-                  Tipo
+                  {t("modal.type")}
                 </label>
                 <div
                   class="flex gap-1 p-1 bg-background border border-white/20 rounded-custom"
@@ -992,22 +1000,22 @@ export default function TransactionModal(props: TransactionModalProps) {
                     "unico",
                     "parcialidad",
                     "recurrente",
-                  ] as TransactionType[]).map((t) => (
+                  ] as TransactionType[]).map((typeVal) => (
                     <button
-                      key={t}
+                      key={typeVal}
                       type="button"
-                      onClick={() => expenseType.value = t}
+                      onClick={() => expenseType.value = typeVal}
                       class={`flex-1 py-2 text-sm font-medium rounded-custom transition-colors ${
-                        expenseType.value === t
+                        expenseType.value === typeVal
                           ? "bg-primary text-white shadow-sm"
                           : "text-zinc-400 hover:text-white"
                       }`}
                     >
-                      {t === "unico"
-                        ? "Único"
-                        : t === "parcialidad"
-                        ? "Parcialidad"
-                        : "Recurrente"}
+                      {typeVal === "unico"
+                        ? t("type.unico")
+                        : typeVal === "parcialidad"
+                        ? t("type.parcialidad")
+                        : t("type.recurrente")}
                     </button>
                   ))}
                 </div>
@@ -1029,7 +1037,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                       : "bg-background border-white/20 text-zinc-400 hover:text-white"
                   }`}
                 >
-                  Monto Total
+                  {t("modal.installment_mode_total")}
                 </button>
                 <button
                   type="button"
@@ -1048,13 +1056,13 @@ export default function TransactionModal(props: TransactionModalProps) {
                       : "bg-background border-white/20 text-zinc-400 hover:text-white"
                   }`}
                 >
-                  Monto por Parcialidad
+                  {t("modal.installment_mode_per")}
                 </button>
               </div>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6">
                 <div class="space-y-2">
                   <label class="block text-sm font-medium text-zinc-300">
-                    Parcialidad Actual
+                    {t("modal.installment_current")}
                   </label>
                   <div class="flex items-center gap-3">
                     <select
@@ -1072,7 +1080,9 @@ export default function TransactionModal(props: TransactionModalProps) {
                         ),
                       )}
                     </select>
-                    <span class="text-zinc-500">de</span>
+                    <span class="text-zinc-500">
+                      {t("modal.installment_of")}
+                    </span>
                     <input
                       class="block w-20 px-4 py-2 bg-background border border-white/20 rounded-custom text-white focus:ring-primary focus:border-primary"
                       type="text"
@@ -1113,7 +1123,9 @@ export default function TransactionModal(props: TransactionModalProps) {
                         }
                       }}
                     />
-                    <span class="text-zinc-500">meses</span>
+                    <span class="text-zinc-500">
+                      {t("modal.installment_months")}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1126,7 +1138,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                 class="block text-sm font-medium text-zinc-300"
                 for="payer-select"
               >
-                Pagó
+                {t("modal.payer")}
               </label>
               <select
                 id="payer-select"
@@ -1138,7 +1150,9 @@ export default function TransactionModal(props: TransactionModalProps) {
                 {users.value.map((user) => (
                   <option key={user.id} value={user.id}>
                     {user.name}
-                    {user.id === currentUserId.value ? " (Tú)" : ""}
+                    {user.id === currentUserId.value
+                      ? ` ${t("common.you_label")}`
+                      : ""}
                   </option>
                 ))}
               </select>
@@ -1150,13 +1164,13 @@ export default function TransactionModal(props: TransactionModalProps) {
               class="block text-sm font-medium text-zinc-300"
               for="notes"
             >
-              Notas (opcional)
+              {t("modal.notes")}
             </label>
             <textarea
               class="block w-full px-4 py-2.5 bg-background border border-white/20 rounded-custom text-white focus:ring-primary focus:border-primary resize-none"
               id="notes"
               rows={2}
-              placeholder="Notas adicionales..."
+              placeholder={t("modal.notes_placeholder")}
               value={notes.value}
               onInput={(e) =>
                 notes.value = (e.target as HTMLTextAreaElement).value}
@@ -1168,24 +1182,24 @@ export default function TransactionModal(props: TransactionModalProps) {
               <>
                 <section class="space-y-3 sm:space-y-4">
                   <h3 class="text-sm font-bold uppercase tracking-wider text-zinc-400">
-                    Transferencia
+                    {t("modal.transfer_section")}
                   </h3>
                   <div class="border border-white/10 rounded-custom overflow-hidden">
                     <table class="hidden md:table w-full text-left border-collapse">
                       <thead class="bg-white/5">
                         <tr>
                           <th class="px-4 py-3 text-xs font-semibold text-zinc-400">
-                            USUARIO
+                            {t("modal.user_header")}
                           </th>
                           <th class="px-4 py-3 text-xs font-semibold text-zinc-400 w-24 text-center">
-                            Pagó
+                            {t("modal.paid_header")}
                           </th>
                           <th class="px-4 py-3 text-xs font-semibold text-zinc-400 w-24 text-center">
-                            Recibió
+                            {t("modal.received_header")}
                           </th>
                           {users.value.length > 2 && (
                             <th class="px-4 py-3 text-xs font-semibold text-zinc-400 text-right">
-                              SALDO
+                              {t("modal.balance_header")}
                             </th>
                           )}
                         </tr>
@@ -1208,12 +1222,12 @@ export default function TransactionModal(props: TransactionModalProps) {
                                     {user.name}
                                     {user.id === currentUserId.value && (
                                       <span class="text-zinc-500 ml-1">
-                                        (Tú)
+                                        {t("common.you_label")}
                                       </span>
                                     )}
                                     {props.entityIds.value.has(user.id) && (
                                       <span class="text-xs ml-1 px-1.5 py-0.5 rounded bg-white/10 text-zinc-400">
-                                        tercero
+                                        {t("common.tercero_badge")}
                                       </span>
                                     )}
                                   </span>
@@ -1274,26 +1288,30 @@ export default function TransactionModal(props: TransactionModalProps) {
                                       return bd.amount > 0
                                         ? (
                                           <span class="text-xs font-semibold text-green-400">
-                                            Te debe ${bd.amount
-                                              .toLocaleString(
-                                                "en-US",
-                                                {
-                                                  minimumFractionDigits: 2,
-                                                  maximumFractionDigits: 2,
-                                                },
-                                              )}
+                                            {t("modal.owes_you", {
+                                              amount: bd.amount
+                                                .toLocaleString(
+                                                  "en-US",
+                                                  {
+                                                    minimumFractionDigits: 2,
+                                                    maximumFractionDigits: 2,
+                                                  },
+                                                ),
+                                            })}
                                           </span>
                                         )
                                         : (
                                           <span class="text-xs font-semibold text-red-400">
-                                            Le debes ${Math.abs(bd.amount)
-                                              .toLocaleString(
-                                                "en-US",
-                                                {
-                                                  minimumFractionDigits: 2,
-                                                  maximumFractionDigits: 2,
-                                                },
-                                              )}
+                                            {t("modal.you_owe_them", {
+                                              amount: Math.abs(bd.amount)
+                                                .toLocaleString(
+                                                  "en-US",
+                                                  {
+                                                    minimumFractionDigits: 2,
+                                                    maximumFractionDigits: 2,
+                                                  },
+                                                ),
+                                            })}
                                           </span>
                                         );
                                     })()}
@@ -1322,7 +1340,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                           >
                             <div class="flex flex-col items-center gap-1">
                               <span class="text-[9px] text-zinc-500 uppercase">
-                                Pagó
+                                {t("modal.paid_header")}
                               </span>
                               <input
                                 type="radio"
@@ -1342,7 +1360,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                             </div>
                             <div class="flex flex-col items-center gap-1">
                               <span class="text-[9px] text-zinc-500 uppercase">
-                                Recibió
+                                {t("modal.received_header")}
                               </span>
                               <input
                                 type="radio"
@@ -1372,12 +1390,12 @@ export default function TransactionModal(props: TransactionModalProps) {
                                   {user.name}
                                   {user.id === currentUserId.value && (
                                     <span class="text-zinc-500 ml-1">
-                                      (Tú)
+                                      {t("common.you_label")}
                                     </span>
                                   )}
                                   {props.entityIds.value.has(user.id) && (
                                     <span class="text-xs ml-1 px-1 py-0.5 rounded bg-white/10 text-zinc-400">
-                                      tercero
+                                      {t("common.tercero_badge")}
                                     </span>
                                   )}
                                 </span>
@@ -1391,21 +1409,25 @@ export default function TransactionModal(props: TransactionModalProps) {
                                   } ml-8`}
                                 >
                                   {bd.amount > 0
-                                    ? `Te debe $${
-                                      bd.amount.toLocaleString("en-US", {
-                                        minimumFractionDigits: 2,
-                                        maximumFractionDigits: 2,
-                                      })
-                                    }`
-                                    : `Le debes $${
-                                      Math.abs(bd.amount).toLocaleString(
+                                    ? t("modal.owes_you", {
+                                      amount: bd.amount.toLocaleString(
                                         "en-US",
                                         {
                                           minimumFractionDigits: 2,
                                           maximumFractionDigits: 2,
                                         },
-                                      )
-                                    }`}
+                                      ),
+                                    })
+                                    : t("modal.you_owe_them", {
+                                      amount: Math.abs(bd.amount)
+                                        .toLocaleString(
+                                          "en-US",
+                                          {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                          },
+                                        ),
+                                    })}
                                 </span>
                               )}
                             </div>
@@ -1433,7 +1455,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                       class="accent-primary w-4 h-4"
                     />
                     <span class="text-sm font-medium text-zinc-300">
-                      Relacionar este pago a gastos existentes
+                      {t("modal.link_expenses")}
                     </span>
                     {!hasEligibleTransactions.value && (
                       <span class="relative group">
@@ -1441,8 +1463,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                           ?
                         </span>
                         <span class="absolute left-5 top-1/2 -translate-y-1/2 w-64 bg-surface border border-white/10 text-white text-xs font-normal no-underline rounded-custom px-3 py-2 shadow-xl z-50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                          Sólo puedes relacionar pagos cuando tienes saldo por
-                          pagar!
+                          {t("modal.link_expenses_tooltip")}
                         </span>
                       </span>
                     )}
@@ -1469,7 +1490,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                         </span>
                         <input
                           type="text"
-                          placeholder="Buscar gasto..."
+                          placeholder={t("modal.search_expense")}
                           value={relatedTxSearch.value}
                           onInput={(e) =>
                             relatedTxSearch.value =
@@ -1503,7 +1524,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                         {filteredEligible.value.length === 0
                           ? (
                             <p class="text-xs text-zinc-400 text-center py-4">
-                              No se encontraron gastos.
+                              {t("modal.no_expenses_found")}
                             </p>
                           )
                           : filteredEligible.value.map((etx) => {
@@ -1548,12 +1569,17 @@ export default function TransactionModal(props: TransactionModalProps) {
                                       {etx.description}
                                     </p>
                                     <p class="text-xs text-zinc-400 mt-0.5">
-                                      Pagó {paidByName} &bull;{" "}
-                                      {new Date(etx.createdAt)
-                                        .toLocaleDateString("es-MX", {
+                                      {t("modal.paid_by_name", {
+                                        name: paidByName,
+                                      })} &bull; {formatDate(
+                                        etx.createdAt,
+                                        props.locale ??
+                                          "es",
+                                        {
                                           month: "short",
                                           day: "numeric",
-                                        })}
+                                        },
+                                      )}
                                     </p>
                                   </div>
                                   <div class="text-right shrink-0">
@@ -1568,11 +1594,13 @@ export default function TransactionModal(props: TransactionModalProps) {
                                             etx.originalDebt,
                                         ) > 0.01 && (
                                       <p class="text-[10px] text-zinc-400">
-                                        de ${etx.originalDebt
-                                          .toLocaleString("en-US", {
-                                            minimumFractionDigits: 2,
-                                            maximumFractionDigits: 2,
-                                          })}
+                                        {t("tx.of_total", {
+                                          total: etx.originalDebt
+                                            .toLocaleString("en-US", {
+                                              minimumFractionDigits: 2,
+                                              maximumFractionDigits: 2,
+                                            }),
+                                        })}
                                       </p>
                                     )}
                                   </div>
@@ -1624,7 +1652,8 @@ export default function TransactionModal(props: TransactionModalProps) {
                                     >
                                       <div class="flex justify-between items-center text-xs">
                                         <span class="text-slate-300 truncate">
-                                          {exp?.description ?? "Gasto"}
+                                          {exp?.description ??
+                                            t("modal.allocation_expense")}
                                         </span>
                                         <span class="text-white font-semibold ml-2">
                                           ${a.amount.toLocaleString("en-US", {
@@ -1642,21 +1671,26 @@ export default function TransactionModal(props: TransactionModalProps) {
                                       <div class="flex justify-between items-center text-[10px] text-zinc-400">
                                         <span>
                                           {isFull
-                                            ? "Completamente cubierto"
-                                            : `Cubriendo $${
-                                              a.amount.toLocaleString("en-US", {
-                                                minimumFractionDigits: 2,
-                                                maximumFractionDigits: 2,
-                                              })
-                                            } de $${
-                                              exp!.remainingDebt.toLocaleString(
+                                            ? t(
+                                              "modal.allocation_fully_covered",
+                                            )
+                                            : t("modal.allocation_partial", {
+                                              covered: a.amount.toLocaleString(
                                                 "en-US",
                                                 {
                                                   minimumFractionDigits: 2,
                                                   maximumFractionDigits: 2,
                                                 },
-                                              )
-                                            }`}
+                                              ),
+                                              total: exp!.remainingDebt
+                                                .toLocaleString(
+                                                  "en-US",
+                                                  {
+                                                    minimumFractionDigits: 2,
+                                                    maximumFractionDigits: 2,
+                                                  },
+                                                ),
+                                            })}
                                         </span>
                                         {!isFull && (
                                           <span
@@ -1676,7 +1710,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                                 {remainder > 0.005 && (
                                   <div class="flex justify-between items-center text-xs border-t border-white/5 pt-1.5">
                                     <span class="text-zinc-400">
-                                      Sin asignar
+                                      {t("modal.allocation_unassigned")}
                                     </span>
                                     <span class="text-amber-400 font-semibold">
                                       ${remainder.toLocaleString("en-US", {
@@ -1700,7 +1734,7 @@ export default function TransactionModal(props: TransactionModalProps) {
               <section class="space-y-3 sm:space-y-4">
                 <div class="flex justify-between items-center">
                   <h3 class="text-sm font-bold uppercase tracking-wider text-zinc-400">
-                    División
+                    {t("modal.split_section")}
                   </h3>
                   <div class="flex gap-2" data-tour="split-mode">
                     <button
@@ -1712,7 +1746,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                           : "text-zinc-400 hover:text-white hover:bg-white/5"
                       }`}
                     >
-                      Auto
+                      {t("modal.split_auto")}
                     </button>
                     <button
                       type="button"
@@ -1730,7 +1764,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                           : "text-zinc-400 hover:text-white hover:bg-white/5"
                       }`}
                     >
-                      Porcentaje
+                      {t("modal.split_percentage")}
                     </button>
                     <button
                       type="button"
@@ -1741,7 +1775,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                           : "text-zinc-400 hover:text-white hover:bg-white/5"
                       }`}
                     >
-                      Monto Fijo
+                      {t("modal.split_fixed")}
                     </button>
                   </div>
                 </div>
@@ -1751,13 +1785,13 @@ export default function TransactionModal(props: TransactionModalProps) {
                     <thead class="bg-white/5">
                       <tr>
                         <th class="px-4 py-3 text-xs font-semibold text-zinc-400">
-                          USUARIO
+                          {t("modal.user_header")}
                         </th>
                         <th class="px-4 py-3 text-xs font-semibold text-zinc-400 w-32 text-right">
                           %
                         </th>
                         <th class="px-4 py-3 text-xs font-semibold text-zinc-400 w-40 text-right">
-                          MONTO
+                          {t("modal.amount_header")}
                         </th>
                       </tr>
                     </thead>
@@ -1782,12 +1816,12 @@ export default function TransactionModal(props: TransactionModalProps) {
                                   {user.name}
                                   {user.id === currentUserId.value && (
                                     <span class="text-zinc-500 ml-1">
-                                      (Tú)
+                                      {t("common.you_label")}
                                     </span>
                                   )}
                                   {props.entityIds.value.has(user.id) && (
                                     <span class="text-xs ml-1 px-1.5 py-0.5 rounded bg-white/10 text-zinc-400">
-                                      tercero
+                                      {t("common.tercero_badge")}
                                     </span>
                                   )}
                                 </span>
@@ -1866,7 +1900,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                     <tfoot class="bg-white/5">
                       <tr>
                         <td class="px-4 py-2 text-xs font-bold text-zinc-400 italic">
-                          TOTAL
+                          {t("modal.total_header")}
                         </td>
                         <td
                           class={`px-4 py-2 text-right text-xs font-bold ${
@@ -1916,12 +1950,12 @@ export default function TransactionModal(props: TransactionModalProps) {
                                 {user.name}
                                 {user.id === currentUserId.value && (
                                   <span class="text-zinc-500 ml-1">
-                                    (Tú)
+                                    {t("common.you_label")}
                                   </span>
                                 )}
                                 {props.entityIds.value.has(user.id) && (
                                   <span class="text-xs ml-1 px-1 py-0.5 rounded bg-white/10 text-zinc-400">
-                                    tercero
+                                    {t("common.tercero_badge")}
                                   </span>
                                 )}
                               </span>
@@ -2000,7 +2034,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                     })}
                     <div class="flex items-center justify-between px-3 py-2 bg-white/5">
                       <span class="text-xs font-bold text-zinc-400 italic">
-                        TOTAL
+                        {t("modal.total_header")}
                       </span>
                       <div class="flex items-center gap-4">
                         <span
@@ -2040,7 +2074,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                 onClick={handleDelete}
                 class="px-4 py-2 text-sm font-semibold text-red-400 hover:text-red-300 transition-colors disabled:opacity-50"
               >
-                Eliminar
+                {t("common.delete")}
               </button>
             )}
           </div>
@@ -2053,7 +2087,7 @@ export default function TransactionModal(props: TransactionModalProps) {
               }}
               class="px-6 py-2 text-sm font-semibold text-zinc-300 hover:text-white transition-colors"
             >
-              Cancelar
+              {t("common.cancel")}
             </button>
             <button
               type="button"
@@ -2072,7 +2106,7 @@ export default function TransactionModal(props: TransactionModalProps) {
                   : "bg-primary hover:bg-primary-light text-white"
               }`}
             >
-              {submitting.value ? "Guardando..." : "Guardar"}
+              {submitting.value ? t("common.saving") : t("common.save")}
             </button>
           </div>
         </footer>

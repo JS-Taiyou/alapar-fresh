@@ -174,6 +174,7 @@ export const en: Record<string, string> = {
   "modal.allocation_partial": "Covering {covered} of {total}",
   "modal.allocation_unassigned": "Unassigned",
   "modal.allocation_expense": "Expense",
+  "modal.allocation_section": "Allocation",
   "modal.split_section": "Split",
   "modal.split_auto": "Auto",
   "modal.split_percentage": "Percentage",

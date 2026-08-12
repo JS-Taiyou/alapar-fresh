@@ -1,14 +1,20 @@
 import { Head } from "fresh/runtime";
 import { define } from "../utils.ts";
 import JoinCodeForm from "../islands/JoinCodeForm.tsx";
+import LocaleToggle from "../islands/LocaleToggle.tsx";
+import { type Locale, t as translate } from "../lib/i18n.ts";
 
-export default define.page(function Home() {
+export default define.page(function Home(ctx) {
+  const locale: Locale = ctx.state.locale;
+  const t = (key: string) => translate(locale, key);
+
   return (
     <>
       <Head>
-        <title>A la par - Gestión de Gastos Grupales</title>
+        <title>{t("app.name")}</title>
       </Head>
       <main class="relative h-screen flex flex-col items-center justify-center p-6 bg-pattern">
+        <LocaleToggle locale={locale} class="absolute top-4 right-4 z-20" />
         <div class="absolute inset-0 gradient-glow pointer-events-none" />
         <header class="text-center mb-12 z-10">
           <div class="inline-flex items-center justify-center p-3 bg-primary rounded-custom mb-4 shadow-lg shadow-primary/20">
@@ -27,11 +33,10 @@ export default define.page(function Home() {
             </svg>
           </div>
           <h1 class="text-4xl font-bold tracking-tight text-white mb-2">
-            A la par
+            {t("app.name")}
           </h1>
           <p class="text-zinc-400 text-lg max-w-md mx-auto">
-            La forma más sencilla de dividir gastos con amigos, familiares o
-            compañeros de viaje.
+            {t("app.tagline")}
           </p>
         </header>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl z-10">
@@ -55,13 +60,13 @@ export default define.page(function Home() {
               </svg>
             </div>
             <h2 class="text-2xl font-semibold text-white mb-2">
-              Nuevo registro
+              {t("landing.new_registry")}
             </h2>
             <p class="text-zinc-400">
-              Crea un nuevo grupo de gastos para tu próximo viaje o evento.
+              {t("landing.new_registry_desc")}
             </p>
             <div class="mt-6 flex items-center text-primary font-medium">
-              <span>Comenzar</span>
+              <span>{t("landing.start")}</span>
               <svg
                 class="h-5 w-5 ml-2 transform group-hover:translate-x-1 transition-transform"
                 fill="none"
@@ -94,17 +99,16 @@ export default define.page(function Home() {
               </svg>
             </div>
             <h2 class="text-2xl font-semibold text-white mb-2">
-              Unirme a registro
+              {t("landing.join_registry")}
             </h2>
             <p class="text-zinc-400 mb-4">
-              Introduce un código de invitación para unirte a un grupo
-              existente.
+              {t("landing.join_registry_desc")}
             </p>
             <JoinCodeForm />
           </div>
         </div>
         <footer class="absolute bottom-8 text-zinc-500 text-sm">
-          <p>&copy; 2024 A la par. Finanzas transparentes.</p>
+          <p>{t("landing.copyright")}</p>
         </footer>
       </main>
     </>

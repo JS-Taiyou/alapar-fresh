@@ -180,6 +180,7 @@ export const es: Record<string, string> = {
   "modal.allocation_partial": "Cubriendo {covered} de {total}",
   "modal.allocation_unassigned": "Sin asignar",
   "modal.allocation_expense": "Gasto",
+  "modal.allocation_section": "Distribución",
   "modal.split_section": "División",
   "modal.split_auto": "Auto",
   "modal.split_percentage": "Porcentaje",

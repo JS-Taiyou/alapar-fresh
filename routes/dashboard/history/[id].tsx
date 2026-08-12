@@ -175,6 +175,7 @@ export default define.page(function ExerciseDetail(ctx) {
                   currentUserId={currentRegistryUserId}
                   allUsers={ctx.state.participants}
                   relatedDescription={relatedDesc}
+                  locale={ctx.state.locale}
                 />
               );
             })}

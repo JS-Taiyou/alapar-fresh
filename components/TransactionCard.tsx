@@ -1,4 +1,10 @@
 import type { Participant, Transaction } from "../lib/types.ts";
+import {
+  formatDate,
+  formatTime,
+  type Locale,
+  t as translate,
+} from "../lib/i18n.ts";
 
 interface TransactionCardProps {
   transaction: Transaction;
@@ -6,6 +12,7 @@ interface TransactionCardProps {
   currentUserId: string;
   allUsers?: Participant[];
   relatedDescription?: string;
+  locale?: Locale;
 }
 
 export default function TransactionCard(props: TransactionCardProps) {
@@ -16,6 +23,9 @@ export default function TransactionCard(props: TransactionCardProps) {
     allUsers,
     relatedDescription,
   } = props;
+
+  const t = (key: string, params?: Record<string, string | number>) =>
+    translate(props.locale ?? "es", key, params);
 
   if (tx.type === "pago" || tx.type === "ajuste") {
     const isPayer = tx.userPaid === currentUserId;
@@ -32,16 +42,18 @@ export default function TransactionCard(props: TransactionCardProps) {
     const badgeBg = tx.type === "pago"
       ? "bg-indigo-500/20 text-indigo-300 border-l-indigo-500"
       : "bg-amber-500/20 text-amber-300 border-l-amber-500";
-    const badgeText = tx.type === "pago" ? "Pago" : "Ajuste";
+    const badgeText = tx.type === "pago"
+      ? t("tx.badge_payment")
+      : t("tx.badge_adjustment");
     const amountColor = tx.type === "pago"
       ? "text-indigo-400"
       : "text-amber-400";
 
     let label = "";
     if (isPayer && recipientUser) {
-      label = `Le pagaste a ${recipientUser.name}`;
+      label = t("tx.paid_to", { name: recipientUser.name });
     } else if (!isPayer && payerUser) {
-      label = `Te pag\u00f3 ${payerUser.name}`;
+      label = t("tx.received_from", { name: payerUser.name });
     }
 
     return (
@@ -58,14 +70,8 @@ export default function TransactionCard(props: TransactionCardProps) {
             </span>
           </span>
           <span class="text-sm text-gray-500">
-            {tx.createdAt.toLocaleDateString("es-MX", {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-            })} &bull; {tx.createdAt.toLocaleTimeString("es-MX", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+            {formatDate(tx.createdAt, props.locale ?? "es")} &bull;{" "}
+            {formatTime(tx.createdAt, props.locale ?? "es")}
             {label && (
               <>
                 {" "}&bull; <span class={amountColor}>{label}</span>
@@ -107,14 +113,8 @@ export default function TransactionCard(props: TransactionCardProps) {
       <div class="flex flex-col">
         <span class="text-lg font-semibold text-white">{tx.description}</span>
         <span class="text-sm text-gray-500">
-          {tx.createdAt.toLocaleDateString("es-MX", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          })} &bull; {tx.createdAt.toLocaleTimeString("es-MX", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
+          {formatDate(tx.createdAt, props.locale ?? "es")} &bull;{" "}
+          {formatTime(tx.createdAt, props.locale ?? "es")}
           {paidByUser && (
             <>
               {" "}&bull;{" "}
@@ -125,7 +125,7 @@ export default function TransactionCard(props: TransactionCardProps) {
                     : "bg-slate-300 text-slate-800 font-bold"
                 }`}
               >
-                {isPaidByMe ? "Tú pagaste" : paidByUser.name}
+                {isPaidByMe ? t("tx.paid_by_you") : paidByUser.name}
               </span>
             </>
           )}
@@ -134,7 +134,10 @@ export default function TransactionCard(props: TransactionCardProps) {
             <>
               {" "}&bull;{" "}
               <span class="text-xs font-semibold px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-400">
-                {tx.installmentCurrent}/{tx.installmentTotal}
+                {t("tx.badge_installment", {
+                  current: tx.installmentCurrent,
+                  total: tx.installmentTotal,
+                })}
               </span>
             </>
           )}
@@ -153,9 +156,11 @@ export default function TransactionCard(props: TransactionCardProps) {
           })}
         </span>
         <span class="text-xs text-slate-500">
-          de ${perInstallmentTotal.toLocaleString("en-US", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
+          {t("tx.of_total", {
+            total: perInstallmentTotal.toLocaleString("en-US", {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            }),
           })}
         </span>
       </div>

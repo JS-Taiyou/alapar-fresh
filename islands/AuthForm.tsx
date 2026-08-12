@@ -2,14 +2,19 @@ import { useSignal } from "@preact/signals";
 import { createClient } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { clearSupabaseBrowserStorage } from "./auth-storage.ts";
+import { type Locale, t as translate } from "../lib/i18n.ts";
 
 interface AuthFormProps {
   mode: "login" | "signup";
   supabaseUrl: string;
   supabaseAnonKey: string;
+  locale?: Locale;
 }
 
 export default function AuthForm(props: AuthFormProps) {
+  const t = (key: string, params?: Record<string, string | number>) =>
+    translate(props.locale ?? "es", key, params);
+
   const email = useSignal("");
   const password = useSignal("");
   const showPassword = useSignal(false);
@@ -38,7 +43,7 @@ export default function AuthForm(props: AuthFormProps) {
       },
     });
   } catch {
-    error.value = "Failed to initialize auth client";
+    error.value = t("common.error_unknown");
     return <div class="text-red-400 text-center p-4">{error.value}</div>;
   }
 
@@ -76,7 +81,9 @@ export default function AuthForm(props: AuthFormProps) {
       }
       // On success the browser navigates away to Google — nothing to clean up.
     } catch (err) {
-      error.value = err instanceof Error ? err.message : "Error desconocido";
+      error.value = err instanceof Error
+        ? err.message
+        : t("common.error_unknown");
       loading.value = false;
     }
   }
@@ -96,12 +103,12 @@ export default function AuthForm(props: AuthFormProps) {
           });
           const data = await res.json();
           if (!data.allowed) {
-            error.value = "Este email no está autorizado para registrarse.";
+            error.value = t("auth.email_not_allowed");
             loading.value = false;
             return;
           }
         } catch {
-          error.value = "Error al verificar email.";
+          error.value = t("auth.email_verify_error");
           loading.value = false;
           return;
         }
@@ -124,7 +131,7 @@ export default function AuthForm(props: AuthFormProps) {
             data.session.refresh_token,
           );
         } else {
-          successMessage.value = "Revisa tu email para confirmar tu cuenta.";
+          successMessage.value = t("auth.check_email");
           loading.value = false;
           return;
         }
@@ -147,7 +154,9 @@ export default function AuthForm(props: AuthFormProps) {
         }
       }
     } catch (err) {
-      error.value = err instanceof Error ? err.message : "Error desconocido";
+      error.value = err instanceof Error
+        ? err.message
+        : t("common.error_unknown");
       loading.value = false;
     }
   }
@@ -162,11 +171,11 @@ export default function AuthForm(props: AuthFormProps) {
       if (res.ok) {
         globalThis.location.href = redirectPath;
       } else {
-        error.value = "Error al guardar la sesión";
+        error.value = t("auth.session_error");
         loading.value = false;
       }
     } catch {
-      error.value = "Error de conexión";
+      error.value = t("common.error_connection");
       loading.value = false;
     }
   }
@@ -187,13 +196,13 @@ export default function AuthForm(props: AuthFormProps) {
                   class="block text-sm font-medium text-zinc-300 mb-1.5"
                   for="name"
                 >
-                  Nombre
+                  {t("auth.name")}
                 </label>
                 <input
                   class="block w-full px-4 py-2.5 bg-background border border-white/20 rounded-custom text-white focus:ring-primary focus:border-primary"
                   id="name"
                   type="text"
-                  placeholder="Tu nombre"
+                  placeholder={t("auth.name_placeholder")}
                   value={name.value}
                   onInput={(e) =>
                     name.value = (e.target as HTMLInputElement).value}
@@ -206,13 +215,13 @@ export default function AuthForm(props: AuthFormProps) {
                 class="block text-sm font-medium text-zinc-300 mb-1.5"
                 for="email"
               >
-                Email
+                {t("auth.email")}
               </label>
               <input
                 class="block w-full px-4 py-2.5 bg-background border border-white/20 rounded-custom text-white focus:ring-primary focus:border-primary"
                 id="email"
                 type="email"
-                placeholder="tu@email.com"
+                placeholder={t("auth.email_placeholder")}
                 value={email.value}
                 onInput={(e) =>
                   email.value = (e.target as HTMLInputElement).value}
@@ -224,7 +233,7 @@ export default function AuthForm(props: AuthFormProps) {
                 class="block text-sm font-medium text-zinc-300 mb-1.5"
                 for="password"
               >
-                Contraseña
+                {t("auth.password")}
               </label>
               <div class="relative">
                 <input
@@ -244,8 +253,8 @@ export default function AuthForm(props: AuthFormProps) {
                   onClick={() => showPassword.value = !showPassword.value}
                   tabIndex={-1}
                   aria-label={showPassword.value
-                    ? "Ocultar contraseña"
-                    : "Mostrar contraseña"}
+                    ? t("auth.hide_password")
+                    : t("auth.show_password")}
                 >
                   {showPassword.value
                     ? (
@@ -318,7 +327,7 @@ export default function AuthForm(props: AuthFormProps) {
                   fill="#EA4335"
                 />
               </svg>
-              {loading.value ? "Cargando..." : "Continuar con Google"}
+              {loading.value ? t("common.loading") : t("auth.google")}
             </button>
 
             <div class="relative">
@@ -326,7 +335,9 @@ export default function AuthForm(props: AuthFormProps) {
                 <div class="w-full border-t border-white/10" />
               </div>
               <div class="relative flex justify-center text-sm">
-                <span class="bg-surface px-3 text-zinc-500">o</span>
+                <span class="bg-surface px-3 text-zinc-500">
+                  {t("auth.or")}
+                </span>
               </div>
             </div>
 
@@ -336,10 +347,10 @@ export default function AuthForm(props: AuthFormProps) {
               class="w-full py-3 bg-primary hover:bg-primary-light text-white font-semibold rounded-custom transition-all shadow-lg active:scale-95 disabled:opacity-50"
             >
               {loading.value
-                ? "Cargando..."
+                ? t("common.loading")
                 : props.mode === "login"
-                ? "Iniciar Sesión"
-                : "Crear Cuenta"}
+                ? t("auth.login")
+                : t("auth.signup")}
             </button>
           </>
         )}
@@ -350,7 +361,7 @@ export default function AuthForm(props: AuthFormProps) {
             href="/forgot-password"
             class="text-zinc-400 hover:text-primary hover:underline"
           >
-            Olvidaste tu contraseña?
+            {t("auth.forgot_link")}
           </a>
         </p>
       )}
@@ -359,7 +370,7 @@ export default function AuthForm(props: AuthFormProps) {
         {props.mode === "login"
           ? (
             <>
-              No tienes cuenta?{" "}
+              {t("auth.no_account")}{" "}
               <a
                 href={`/signup${
                   redirectPath !== "/dashboard"
@@ -368,13 +379,13 @@ export default function AuthForm(props: AuthFormProps) {
                 }`}
                 class="text-primary hover:underline"
               >
-                Regístrate
+                {t("auth.signup_link")}
               </a>
             </>
           )
           : (
             <>
-              Ya tienes cuenta?{" "}
+              {t("auth.has_account")}{" "}
               <a
                 href={`/login${
                   redirectPath !== "/dashboard"
@@ -383,7 +394,7 @@ export default function AuthForm(props: AuthFormProps) {
                 }`}
                 class="text-primary hover:underline"
               >
-                Inicia sesión
+                {t("auth.login_link")}
               </a>
             </>
           )}

@@ -3,14 +3,19 @@ import { useSignal } from "@preact/signals";
 import { createClient } from "@supabase/supabase-js";
 import AuthCardLayout from "../components/AuthCardLayout.tsx";
 import { clearSupabaseBrowserStorage } from "./auth-storage.ts";
+import { type Locale, t as translate } from "../lib/i18n.ts";
 
 interface AuthCallbackProps {
   redirectPath: string;
   supabaseUrl: string;
   supabaseAnonKey: string;
+  locale?: Locale;
 }
 
 export default function AuthCallback(props: AuthCallbackProps) {
+  const t = (key: string, params?: Record<string, string | number>) =>
+    translate(props.locale ?? "es", key, params);
+
   const error = useSignal("");
   const debug = useSignal("Initializing...");
 
@@ -34,7 +39,7 @@ export default function AuthCallback(props: AuthCallbackProps) {
 
     if (!code) {
       debug.value = `No auth code in URL: ${globalThis.location.href}`;
-      error.value = "No se recibió un código de autenticación.";
+      error.value = t("auth_callback.no_tokens");
       return;
     }
 
@@ -60,7 +65,7 @@ export default function AuthCallback(props: AuthCallbackProps) {
           debug.value = `Code exchange failed: ${
             exchangeError?.message ?? "no session"
           }`;
-          error.value = "No se pudo completar la autenticación.";
+          error.value = t("auth_callback.auth_failed");
           return;
         }
 
@@ -83,9 +88,9 @@ export default function AuthCallback(props: AuthCallbackProps) {
           // Server rejected the tokens — restart the login flow.
           globalThis.location.href = "/login";
         } else {
-          const t = await res.text();
-          debug.value = `Cookie set failed: ${t}`;
-          error.value = `Cookie set failed: ${t}`;
+          const body = await res.text();
+          debug.value = `Cookie set failed: ${body}`;
+          error.value = `Cookie set failed: ${body}`;
         }
       } catch (err) {
         debug.value = `Auth callback error: ${String(err)}`;
@@ -95,7 +100,7 @@ export default function AuthCallback(props: AuthCallbackProps) {
   }, []);
 
   return (
-    <AuthCardLayout pageTitle="A la par - Autenticando" centered>
+    <AuthCardLayout pageTitle={t("auth_callback.title")} centered>
       {error.value
         ? (
           <>
@@ -104,7 +109,7 @@ export default function AuthCallback(props: AuthCallbackProps) {
             </div>
             <details class="mb-6">
               <summary class="text-xs text-zinc-500 cursor-pointer hover:text-zinc-400 transition-colors">
-                Detalles técnicos
+                {t("auth_callback.technical_details")}
               </summary>
               <pre class="text-xs text-zinc-500 bg-background mt-2 p-3 rounded-custom overflow-auto text-left whitespace-pre-wrap break-all">
                 {debug.value}
@@ -114,7 +119,7 @@ export default function AuthCallback(props: AuthCallbackProps) {
               href="/login"
               class="block w-full py-3 btn-primary rounded-custom text-center transition-all shadow-lg active:scale-95"
             >
-              Volver a iniciar sesión
+              {t("auth_callback.back_login")}
             </a>
           </>
         )
@@ -139,7 +144,9 @@ export default function AuthCallback(props: AuthCallbackProps) {
                 d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
               />
             </svg>
-            <p class="text-zinc-300 text-sm font-medium">Autenticando...</p>
+            <p class="text-zinc-300 text-sm font-medium">
+              {t("auth_callback.authenticating")}
+            </p>
           </div>
         )}
     </AuthCardLayout>

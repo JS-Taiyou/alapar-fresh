@@ -1,14 +1,19 @@
 import { define } from "../utils.ts";
 import { getSupabaseAnonKey, getSupabaseUrl } from "../lib/supabase.ts";
+import { type Locale, t as translate } from "../lib/i18n.ts";
 import AuthForm from "../islands/AuthForm.tsx";
 import AuthCardLayout from "../components/AuthCardLayout.tsx";
 
 export default define.page(function Login(ctx) {
+  const locale: Locale = ctx.state.locale;
+  const t = (key: string, params?: Record<string, string | number>) =>
+    translate(locale, key, params);
+
   const url = new URL(ctx.req.url);
   const errorMsg = url.searchParams.get("error");
 
   return (
-    <AuthCardLayout pageTitle="A la par - Iniciar Sesión">
+    <AuthCardLayout pageTitle={`A la par - ${t("auth.login")}`}>
       <div class="text-center mb-8">
         <div class="inline-flex items-center justify-center p-3 bg-primary rounded-custom mb-4">
           <svg
@@ -25,20 +30,21 @@ export default define.page(function Login(ctx) {
             />
           </svg>
         </div>
-        <h1 class="text-2xl font-bold text-white">Iniciar Sesión</h1>
+        <h1 class="text-2xl font-bold text-white">{t("auth.login")}</h1>
         <p class="text-zinc-400 text-sm mt-2">
-          Ingresa a tu cuenta de A la par
+          {t("auth.login_subtitle")}
         </p>
       </div>
 
       {errorMsg === "unauthorized" && (
         <div class="text-sm text-red-300 bg-red-500/20 border border-red-500/30 rounded-custom px-4 py-2 mb-4">
-          Tu email no está autorizado para usar esta aplicación.
+          {t("auth.not_authorized")}
         </div>
       )}
 
       <AuthForm
         mode="login"
+        locale={locale}
         supabaseUrl={getSupabaseUrl()}
         supabaseAnonKey={getSupabaseAnonKey()}
       />

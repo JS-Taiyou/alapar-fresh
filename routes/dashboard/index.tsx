@@ -170,6 +170,7 @@ export default define.page(function DashboardIndex(ctx) {
             balance={$balance}
             entries={$balanceEntries}
             users={$users}
+            locale={ctx.state.locale}
           />
           <div class="flex items-center gap-2 sm:gap-4 shrink-0">
             <RecurringSpawn candidates={$spawnCandidates} />
@@ -214,6 +215,7 @@ export default define.page(function DashboardIndex(ctx) {
         transactionPayments={$transactionPayments}
         supabaseUrl={data.supabaseUrl}
         supabaseAnonKey={data.supabaseAnonKey}
+        locale={ctx.state.locale}
       />
     </>
   );

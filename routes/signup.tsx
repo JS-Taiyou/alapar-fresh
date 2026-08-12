@@ -1,11 +1,16 @@
 import { define } from "../utils.ts";
 import { getSupabaseAnonKey, getSupabaseUrl } from "../lib/supabase.ts";
+import { type Locale, t as translate } from "../lib/i18n.ts";
 import AuthForm from "../islands/AuthForm.tsx";
 import AuthCardLayout from "../components/AuthCardLayout.tsx";
 
-export default define.page(function Signup() {
+export default define.page(function Signup(ctx) {
+  const locale: Locale = ctx.state.locale;
+  const t = (key: string, params?: Record<string, string | number>) =>
+    translate(locale, key, params);
+
   return (
-    <AuthCardLayout pageTitle="A la par - Crear Cuenta">
+    <AuthCardLayout pageTitle={`A la par - ${t("auth.signup")}`}>
       <div class="text-center mb-8">
         <div class="inline-flex items-center justify-center p-3 bg-primary rounded-custom mb-4">
           <svg
@@ -22,13 +27,14 @@ export default define.page(function Signup() {
             />
           </svg>
         </div>
-        <h1 class="text-2xl font-bold text-white">Crear Cuenta</h1>
+        <h1 class="text-2xl font-bold text-white">{t("auth.signup")}</h1>
         <p class="text-zinc-400 text-sm mt-2">
-          Regístrate para empezar a dividir gastos
+          {t("auth.signup_subtitle")}
         </p>
       </div>
       <AuthForm
         mode="signup"
+        locale={locale}
         supabaseUrl={getSupabaseUrl()}
         supabaseAnonKey={getSupabaseAnonKey()}
       />

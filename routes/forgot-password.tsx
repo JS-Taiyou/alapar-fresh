@@ -1,11 +1,16 @@
 import { define } from "../utils.ts";
 import { getSupabaseAnonKey, getSupabaseUrl } from "../lib/supabase.ts";
+import { type Locale, t as translate } from "../lib/i18n.ts";
 import ForgotPassword from "../islands/ForgotPassword.tsx";
 import AuthCardLayout from "../components/AuthCardLayout.tsx";
 
-export default define.page(function ForgotPasswordPage() {
+export default define.page(function ForgotPasswordPage(ctx) {
+  const locale: Locale = ctx.state.locale;
+  const t = (key: string, params?: Record<string, string | number>) =>
+    translate(locale, key, params);
+
   return (
-    <AuthCardLayout pageTitle="A la par - Recuperar Contraseña">
+    <AuthCardLayout pageTitle={`A la par - ${t("auth.forgot_password")}`}>
       <div class="text-center mb-8">
         <div class="inline-flex items-center justify-center p-3 bg-primary rounded-custom mb-4">
           <svg
@@ -22,13 +27,16 @@ export default define.page(function ForgotPasswordPage() {
             />
           </svg>
         </div>
-        <h1 class="text-2xl font-bold text-white">Recuperar Contraseña</h1>
+        <h1 class="text-2xl font-bold text-white">
+          {t("auth.forgot_password")}
+        </h1>
         <p class="text-zinc-400 text-sm mt-2">
-          Ingresa tu email y te enviaremos un enlace para restablecerla
+          {t("auth.forgot_password_subtitle")}
         </p>
       </div>
 
       <ForgotPassword
+        locale={locale}
         supabaseUrl={getSupabaseUrl()}
         supabaseAnonKey={getSupabaseAnonKey()}
       />

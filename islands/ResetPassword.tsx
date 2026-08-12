@@ -2,13 +2,18 @@ import { useEffect } from "preact/hooks";
 import { useSignal } from "@preact/signals";
 import { createClient } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { type Locale, t as translate } from "../lib/i18n.ts";
 
 interface ResetPasswordProps {
   supabaseUrl: string;
   supabaseAnonKey: string;
+  locale?: Locale;
 }
 
 export default function ResetPassword(props: ResetPasswordProps) {
+  const t = (key: string, params?: Record<string, string | number>) =>
+    translate(props.locale ?? "es", key, params);
+
   const password = useSignal("");
   const confirmPassword = useSignal("");
   const showPassword = useSignal(false);
@@ -29,7 +34,7 @@ export default function ResetPassword(props: ResetPasswordProps) {
       },
     });
   } catch {
-    error.value = "Error al inicializar el cliente de auth";
+    error.value = t("common.error_unknown");
   }
 
   useEffect(() => {
@@ -40,8 +45,7 @@ export default function ResetPassword(props: ResetPasswordProps) {
     const type = params.get("type");
 
     if (!accessToken || type !== "recovery") {
-      error.value =
-        "Enlace de recuperación inválido o expirado. Solicita uno nuevo.";
+      error.value = t("reset.invalid_link");
       return;
     }
 
@@ -50,8 +54,7 @@ export default function ResetPassword(props: ResetPasswordProps) {
       refresh_token: refreshToken ?? "",
     }).then(({ error: sessionError }) => {
       if (sessionError) {
-        error.value =
-          "No se pudo establecer la sesión. El enlace puede haber expirado.";
+        error.value = t("reset.session_failed");
         return;
       }
       sessionReady.value = true;
@@ -64,11 +67,11 @@ export default function ResetPassword(props: ResetPasswordProps) {
     error.value = "";
 
     if (password.value.length < 6) {
-      error.value = "La contraseña debe tener al menos 6 caracteres.";
+      error.value = t("reset.password_too_short");
       return;
     }
     if (password.value !== confirmPassword.value) {
-      error.value = "Las contraseñas no coinciden.";
+      error.value = t("reset.password_mismatch");
       return;
     }
 
@@ -85,7 +88,9 @@ export default function ResetPassword(props: ResetPasswordProps) {
       }
       success.value = true;
     } catch (err) {
-      error.value = err instanceof Error ? err.message : "Error desconocido";
+      error.value = err instanceof Error
+        ? err.message
+        : t("common.error_unknown");
     }
     loading.value = false;
   }
@@ -100,7 +105,7 @@ export default function ResetPassword(props: ResetPasswordProps) {
           href="/forgot-password"
           class="block w-full text-center py-3 bg-primary hover:bg-primary-light text-white font-semibold rounded-custom transition-all"
         >
-          Solicitar un nuevo enlace
+          {t("reset.request_new")}
         </a>
       </div>
     );
@@ -109,7 +114,7 @@ export default function ResetPassword(props: ResetPasswordProps) {
   if (!sessionReady.value) {
     return (
       <div class="text-center text-zinc-400 text-sm py-4">
-        Verificando enlace...
+        {t("reset.verifying")}
       </div>
     );
   }
@@ -118,13 +123,13 @@ export default function ResetPassword(props: ResetPasswordProps) {
     return (
       <div class="space-y-4">
         <div class="text-sm text-emerald-300 bg-emerald-500/20 border border-emerald-500/30 rounded-custom px-4 py-3 text-center">
-          Tu contraseña fue actualizada correctamente.
+          {t("reset.success")}
         </div>
         <a
           href="/login"
           class="block w-full text-center py-3 bg-primary hover:bg-primary-light text-white font-semibold rounded-custom transition-all"
         >
-          Iniciar sesión
+          {t("auth.login")}
         </a>
       </div>
     );
@@ -137,7 +142,7 @@ export default function ResetPassword(props: ResetPasswordProps) {
           class="block text-sm font-medium text-zinc-300 mb-1.5"
           for="new-password"
         >
-          Nueva contraseña
+          {t("reset.new_password")}
         </label>
         <div class="relative">
           <input
@@ -157,8 +162,8 @@ export default function ResetPassword(props: ResetPasswordProps) {
             onClick={() => showPassword.value = !showPassword.value}
             tabIndex={-1}
             aria-label={showPassword.value
-              ? "Ocultar contraseña"
-              : "Mostrar contraseña"}
+              ? t("auth.hide_password")
+              : t("auth.show_password")}
           >
             {showPassword.value
               ? (
@@ -206,7 +211,7 @@ export default function ResetPassword(props: ResetPasswordProps) {
           class="block text-sm font-medium text-zinc-300 mb-1.5"
           for="confirm-password"
         >
-          Confirmar contraseña
+          {t("reset.confirm_password")}
         </label>
         <input
           class="block w-full px-4 py-2.5 bg-background border border-white/20 rounded-custom text-white focus:ring-primary focus:border-primary"
@@ -232,7 +237,7 @@ export default function ResetPassword(props: ResetPasswordProps) {
         disabled={loading.value}
         class="w-full py-3 bg-primary hover:bg-primary-light text-white font-semibold rounded-custom transition-all shadow-lg active:scale-95 disabled:opacity-50"
       >
-        {loading.value ? "Actualizando..." : "Restablecer contraseña"}
+        {loading.value ? t("reset.updating") : t("reset.submit")}
       </button>
     </form>
   );

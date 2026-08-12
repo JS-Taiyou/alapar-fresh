@@ -37,6 +37,12 @@ import {
 } from "../lib/notifications.ts";
 import { cache } from "../lib/cache.ts";
 import TransactionModal from "../components/TransactionModal.tsx";
+import {
+  formatDate,
+  formatTime,
+  type Locale,
+  t as translate,
+} from "../lib/i18n.ts";
 
 let lastPushSubscribedRegistry: string | null = null;
 
@@ -65,6 +71,7 @@ interface TransactionListProps {
   supabaseUrl?: string;
   supabaseAnonKey?: string;
   isDemo?: boolean;
+  locale?: Locale;
 }
 
 function TransactionCardClickable(props: {
@@ -74,9 +81,12 @@ function TransactionCardClickable(props: {
   onClick: () => void;
   allTxs?: EnrichedTransaction[];
   transactionPayments?: TransactionPayment[];
+  locale?: Locale;
 }) {
   const { tx, users, currentUserId } = props;
   const tpList = props.transactionPayments ?? [];
+  const t = (key: string, params?: Record<string, string | number>) =>
+    translate(props.locale ?? "es", key, params);
 
   if (tx.type === "ajuste") {
     const formattedAmount = tx.originalAmount.toLocaleString("en-US", {
@@ -90,18 +100,12 @@ function TransactionCardClickable(props: {
           <span class="text-lg font-semibold text-white flex items-center gap-2 truncate">
             {tx.description}
             <span class="text-xs font-medium px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 shrink-0">
-              Saldo pendiente
+              {t("tx.badge_adjustment")}
             </span>
           </span>
           <span class="text-sm text-zinc-400">
-            {new Date(tx.createdAt).toLocaleDateString("es-MX", {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-            })} &bull; {new Date(tx.createdAt).toLocaleTimeString("es-MX", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+            {formatDate(tx.createdAt, props.locale ?? "es")} &bull;{" "}
+            {formatTime(tx.createdAt, props.locale ?? "es")}
           </span>
         </div>
         <div class="text-right flex flex-col items-end">
@@ -127,9 +131,9 @@ function TransactionCardClickable(props: {
 
     let label = "";
     if (isPayer && recipientUser) {
-      label = `Le pagaste a ${recipientUser.name}`;
+      label = t("tx.paid_to", { name: recipientUser.name });
     } else if (!isPayer && payerUser) {
-      label = `Te pagó ${payerUser.name}`;
+      label = t("tx.received_from", { name: payerUser.name });
     }
 
     const linkedExpenseIds = tpList
@@ -154,18 +158,12 @@ function TransactionCardClickable(props: {
             <span class="text-lg font-semibold text-white flex items-center gap-2 truncate">
               {tx.description}
               <span class="text-xs font-medium px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 shrink-0">
-                Pago
+                {t("tx.badge_payment")}
               </span>
             </span>
             <span class="text-sm text-zinc-400">
-              {new Date(tx.createdAt).toLocaleDateString("es-MX", {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              })} &bull; {new Date(tx.createdAt).toLocaleTimeString("es-MX", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
+              {formatDate(tx.createdAt, props.locale ?? "es")} &bull;{" "}
+              {formatTime(tx.createdAt, props.locale ?? "es")}
               {label && (
                 <>
                   {" "}&bull; <span class="text-indigo-400">{label}</span>
@@ -227,7 +225,7 @@ function TransactionCardClickable(props: {
                   {relatedTx.description}
                 </p>
                 <p class="text-[10px] text-zinc-400">
-                  {new Date(relatedTx.createdAt).toLocaleDateString("es-MX", {
+                  {formatDate(relatedTx.createdAt, props.locale ?? "es", {
                     month: "short",
                     day: "numeric",
                     year: "numeric",
@@ -318,14 +316,8 @@ function TransactionCardClickable(props: {
         </span>
         <div class="text-sm text-zinc-400">
           <span class="block sm:inline">
-            {new Date(tx.createdAt).toLocaleDateString("es-MX", {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-            })} &bull; {new Date(tx.createdAt).toLocaleTimeString("es-MX", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+            {formatDate(tx.createdAt, props.locale ?? "es")} &bull;{" "}
+            {formatTime(tx.createdAt, props.locale ?? "es")}
           </span>
           {tx.paidByUser && (
             <>
@@ -338,7 +330,7 @@ function TransactionCardClickable(props: {
                       : "bg-slate-300 text-slate-800 font-bold"
                   }`}
                 >
-                  {isPaidByMe ? "Tú pagaste" : tx.paidByUser.name}
+                  {isPaidByMe ? t("tx.paid_by_you") : tx.paidByUser.name}
                 </span>
               </span>
               <span
@@ -348,7 +340,7 @@ function TransactionCardClickable(props: {
                     : "bg-slate-300 text-slate-800 font-bold"
                 }`}
               >
-                {isPaidByMe ? "Tú pagaste" : tx.paidByUser.name}
+                {isPaidByMe ? t("tx.paid_by_you") : tx.paidByUser.name}
               </span>
             </>
           )}
@@ -357,7 +349,10 @@ function TransactionCardClickable(props: {
             <>
               {" • "}
               <span class="text-xs font-semibold px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-400">
-                {tx.installmentCurrent}/{tx.installmentTotal}
+                {t("tx.badge_installment", {
+                  current: tx.installmentCurrent,
+                  total: tx.installmentTotal,
+                })}
               </span>
             </>
           )}
@@ -380,9 +375,11 @@ function TransactionCardClickable(props: {
             )}
         </span>
         <span class="text-xs text-zinc-400">
-          de ${perInstallmentTotal.toLocaleString("en-US", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
+          {t("tx.of_total", {
+            total: perInstallmentTotal.toLocaleString("en-US", {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            }),
           })}
         </span>
       </div>
@@ -399,6 +396,8 @@ export default function TransactionList(props: TransactionListProps) {
   const balance = props.balance;
   const balanceEntries = props.balanceEntries;
   const showTerceroPopover = useSignal(false);
+  const t = (key: string, params?: Record<string, string | number>) =>
+    translate(props.locale ?? "es", key, params);
 
   const isOpen = useSignal(false);
   const editingId = useSignal<string | null>(null);
@@ -465,11 +464,11 @@ export default function TransactionList(props: TransactionListProps) {
               ) {
                 lastNotificationAt = now;
                 const desc = (payload.new.description as string) ??
-                  "Nueva transacción";
+                  t("tx.notification_body");
                 const amt = typeof payload.new.amount === "number"
                   ? payload.new.amount
                   : 0;
-                new Notification("Nueva transacción", {
+                new Notification(t("tx.notification_title"), {
                   body: `${desc} — $${
                     amt.toLocaleString("en-US", {
                       minimumFractionDigits: 2,
@@ -788,10 +787,10 @@ export default function TransactionList(props: TransactionListProps) {
             </svg>
           </div>
           <h3 class="text-2xl font-bold text-white">
-            Está muy solo aquí
+            {t("tx.single_user_title")}
           </h3>
           <p class="text-zinc-400 text-base leading-relaxed">
-            Asegúrate de invitar otros usuarios o crear un{" "}
+            {t("tx.single_user_desc")}{" "}
             <span
               class="font-bold underline cursor-pointer text-orange-400 relative"
               onClick={() =>
@@ -802,8 +801,7 @@ export default function TransactionList(props: TransactionListProps) {
               tercero
               {showTerceroPopover.value && (
                 <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-surface border border-white/10 text-white text-xs font-normal no-underline rounded-custom px-3 py-2 shadow-xl z-50">
-                  Un tercero es una entidad diferente de ti pero que no se va a
-                  registrar como usuario, por ejemplo: un banco!
+                  {t("tx.tercero_tooltip")}
                 </span>
               )}
             </span>
@@ -861,11 +859,11 @@ export default function TransactionList(props: TransactionListProps) {
         <div class="flex justify-between items-center mb-2">
           <h2 class="text-lg font-semibold text-zinc-200">
             {filterUserId.value
-              ? `Ejercicio actual (pagados por ${
-                users.value.find((u) => u.id === filterUserId.value)?.name ??
-                  ""
-              })`
-              : "Ejercicio actual"}
+              ? t("tx.current_period_filtered", {
+                name: users.value.find((u) => u.id === filterUserId.value)
+                  ?.name ?? "",
+              })
+              : t("tx.current_period")}
           </h2>
         </div>
 
@@ -882,7 +880,7 @@ export default function TransactionList(props: TransactionListProps) {
                       : "text-zinc-400 hover:text-white hover:bg-white/5 border border-white/10"
                   }`}
                 >
-                  Todos
+                  {t("tx.all")}
                 </button>
                 {users.value.map((user) => {
                   const initials = user.name.split(" ").map((n) => n[0]).join(
@@ -938,7 +936,7 @@ export default function TransactionList(props: TransactionListProps) {
               <input
                 type="text"
                 data-tour="search-bar"
-                placeholder="Buscar transacción..."
+                placeholder={t("tx.search_placeholder")}
                 value={searchQuery.value}
                 onInput={(e) =>
                   searchQuery.value = (e.target as HTMLInputElement).value}
@@ -989,7 +987,7 @@ export default function TransactionList(props: TransactionListProps) {
                 stroke-width="2"
               />
             </svg>
-            Pago
+            {t("tx.add_payment_mobile")}
           </button>
           <button
             type="button"
@@ -1010,7 +1008,7 @@ export default function TransactionList(props: TransactionListProps) {
                 stroke-width="2"
               />
             </svg>
-            Gasto
+            {t("tx.add_expense_mobile")}
           </button>
         </div>
 
@@ -1033,10 +1031,10 @@ export default function TransactionList(props: TransactionListProps) {
                 </svg>
               </div>
               <h3 class="text-lg font-medium text-zinc-300">
-                Sin transacciones
+                {t("tx.empty_title")}
               </h3>
               <p class="text-zinc-400 mt-2">
-                Agrega un gasto o un pago
+                {t("tx.empty_desc")}
               </p>
             </div>
           )
@@ -1044,7 +1042,7 @@ export default function TransactionList(props: TransactionListProps) {
           ? (
             <div class="flex flex-col items-center justify-center py-12 text-center">
               <p class="text-zinc-400">
-                No se encontraron transacciones con estos filtros.
+                {t("tx.no_results")}
               </p>
               <button
                 type="button"
@@ -1054,7 +1052,7 @@ export default function TransactionList(props: TransactionListProps) {
                 }}
                 class="mt-2 text-sm text-primary hover:underline"
               >
-                Limpiar filtros
+                {t("tx.clear_filters")}
               </button>
             </div>
           )
@@ -1068,6 +1066,7 @@ export default function TransactionList(props: TransactionListProps) {
                   tx.type !== "ajuste" && openEdit(tx)}
                 allTxs={transactions.value}
                 transactionPayments={transactionPayments.value}
+                locale={props.locale}
               />
             </div>
           ))}
@@ -1077,7 +1076,7 @@ export default function TransactionList(props: TransactionListProps) {
       <div class="hidden sm:flex fixed bottom-8 right-8 z-50 flex-col gap-3">
         <div class="group relative">
           <span class="absolute right-full top-1/2 -translate-y-1/2 mr-3 whitespace-nowrap bg-surface text-white text-sm px-3 py-1.5 rounded-custom shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-            Agregar pago
+            {t("tx.add_payment_tooltip")}
           </span>
           <button
             type="button"
@@ -1102,7 +1101,7 @@ export default function TransactionList(props: TransactionListProps) {
         </div>
         <div class="group relative">
           <span class="absolute right-full top-1/2 -translate-y-1/2 mr-3 whitespace-nowrap bg-surface text-white text-sm px-3 py-1.5 rounded-custom shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-            Agregar gasto
+            {t("tx.add_expense_tooltip")}
           </span>
           <button
             type="button"
@@ -1142,6 +1141,7 @@ export default function TransactionList(props: TransactionListProps) {
         transactionPayments={transactionPayments}
         onRecalculate={recalculate}
         isDemo={props.isDemo}
+        locale={props.locale}
       />
     </>
   );
