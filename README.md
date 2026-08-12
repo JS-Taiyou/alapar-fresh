@@ -1,41 +1,113 @@
 # A la Par
 
-Comparte gastos con tu pareja, amigos o roomies de forma sencilla.
+**English** | [Español](README.es.md)
 
-A la Par is a shared expense tracker built with **Deno**, **Fresh 2**, and
-**PostgreSQL** (Supabase-hosted). Create shared expense groups ("registros"),
-log expenses and payments, and the app calculates who owes whom — down to the
-cent. Built for Spanish-speaking users with a clean, dark-themed, mobile-first
-PWA experience.
+> Split shared expenses with your partner, friends, or roommates — and always
+> settle _a la par_ (dead even).
 
-## Getting started
+![CI](https://github.com/JS-Taiyou/alapar-fresh/actions/workflows/ci.yml/badge.svg)
+![License](https://img.shields.io/badge/license-AGPLv3-blue)
+![Demo](https://img.shields.io/badge/demo-live-brightgreen)
 
-Install Deno: https://docs.deno.com/runtime/getting_started/installation
+**[▶ Try the live guided demo — no signup needed](https://alapar.itzayanos.deno.net/demo)**
+**Live app:** https://alapar.itzayanos.deno.net
+
+## What it is
+
+A la Par is a full-stack expense-splitting PWA for Spanish-speaking users.
+Create a group ("registro"), log expenses and payments, and the app keeps a
+running balance of who owes whom — across installments, recurring charges, and
+direct payments between members.
+
+- **Groups for any context** — couples, roommates, trips; users can belong to
+  multiple groups
+- **Installments & recurring charges** — tracks remaining cycles per purchase
+  and ongoing subscriptions
+- **Automatic balance calculation** — nets out arbitrary payments between any
+  two members
+- **"Corte de ejercicio" (period closing)** — archive a period's transactions
+  and start with a clean slate; unsettled balances carry forward as opening
+  transactions so nothing is lost
+- **Searchable history** — filter the transaction list, and revisit closed
+  periods anytime
+- **Installable PWA** — optimistic updates, client-side caching via service
+  workers, push notifications, and add-to-home-screen on Android and desktop
+- **Real-time updates** — changes from other members appear instantly via
+  Supabase Realtime
+
+## Tech stack
+
+| Layer     | Tech                                                           |
+| --------- | -------------------------------------------------------------- |
+| Frontend  | Deno + Fresh 2 (Preact + Signals), server-rendered islands     |
+| Backend   | Supabase — Postgres, Auth (email/password + Google OAuth), RLS |
+| Styling   | Tailwind CSS + DaisyUI (dark theme)                            |
+| Hosting   | Deno Deploy                                                    |
+| Packaging | PWA (web manifest + service worker + Web Push)                 |
+
+## Engineering highlights
+
+- **Money is handled in integer cents** end-to-end — no floating-point drift in
+  balance math. Split shares always sum exactly to the original amount.
+- **Deterministic remainder distribution** — when a split doesn't divide evenly,
+  leftover cents are assigned reproducibly (seeded by a per-transaction UUID),
+  so balances are auditable and fair in aggregate.
+- **Exact balance persistence** — per-user deltas are stored as `NUMERIC(12,2)`
+  in a `transaction_balances` table and summed via exact SQL arithmetic,
+  eliminating the 1-2 cent discrepancies that accumulate with float-based
+  running totals.
+- **Realtime channel recovery** — if the Supabase Realtime WebSocket drops
+  (token expiry, network blip, mobile sleep), the client automatically fetches a
+  fresh token and resubscribes with backoff.
+- **Security enforced in the database** — Postgres Row-Level Security isolates
+  every group's data; the realtime channel can only deliver transactions from
+  registries the authenticated user belongs to.
+- **Comprehensive test suite** — 53 suites, 352 steps covering the balance
+  engine, split math, route validation, and business rules, with a DB stub so
+  tests run without a live database.
+
+## Running locally
+
+### Prerequisites
+
+- [Deno](https://docs.deno.com/runtime/getting_started/installation) (latest)
+- A [Supabase](https://supabase.com) project (free tier works)
+
+### Setup
+
+```bash
+git clone https://github.com/JS-Taiyou/alapar-fresh.git
+cd alapar-fresh
+cp .env.example .env   # fill in your Supabase + VAPID credentials
+```
+
+Run the database migrations in `db/` against your Supabase project (in order:
+`schema.sql` first, then the `add_*.sql` files).
 
 Start the dev server:
 
-```
+```bash
 deno task dev
 ```
 
-Build for production:
+Build and run for production:
 
-```
+```bash
 deno task build
+deno task start
 ```
 
 ## Testing
 
-The project has a comprehensive test suite (47 suites, 339 steps) covering pure
-logic, extracted modules, route-handler validation, and business rules.
-
-```
-deno task test    # run tests (uses deno.test.json with a DB stub)
+```bash
+deno task test    # run the test suite (DB stubbed, no DATABASE_URL needed)
 deno task check   # fmt + lint + type-check + tests
 ```
 
-Tests live alongside source as `*_test.ts` files. The test config remaps
-`lib/db.ts` to a stub so tests run without `DATABASE_URL` or a live database.
+The suite covers the balance/splitting engine: shares always sum to the total,
+the deviation between members is at most one cent, and identical inputs produce
+identical splits. Route handlers are tested with a fake request context and a
+stubbed query layer.
 
 ## Documentation
 
@@ -48,3 +120,13 @@ Tests live alongside source as `*_test.ts` files. The test config remaps
 - [`docs/ISLANDS.md`](docs/ISLANDS.md) — interactive components
 - [`docs/COMPONENTS.md`](docs/COMPONENTS.md) — server-side components
 - [`CHANGELOG.md`](CHANGELOG.md) — record of significant changes
+
+## Roadmap
+
+- [ ] Android release via TWA (Google Play)
+- [ ] Custom domain
+- [ ] English UI
+
+## License
+
+AGPLv3 — see [LICENSE](LICENSE).

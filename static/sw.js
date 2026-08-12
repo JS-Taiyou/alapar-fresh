@@ -34,8 +34,8 @@ self.addEventListener("activate", (event) => {
 function offlineResponse(request) {
   const isHtml = (request.headers.get("Accept") ?? "").includes("text/html");
   const body = isHtml
-    ? "<!DOCTYPE html><html lang=\"es\"><head><meta charset=\"utf-8\">" +
-      "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
+    ? '<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width,initial-scale=1">' +
       "<title>Sin conexión — A la Par</title><style>" +
       ":root{color-scheme:dark}" +
       "body{display:flex;align-items:center;justify-content:center;" +
@@ -46,11 +46,11 @@ function offlineResponse(request) {
       "p{color:#94a3b8;margin:0 0 1.5rem;line-height:1.5}" +
       "button{background:#3b82f6;color:#fff;border:0;border-radius:.5rem;" +
       "padding:.6rem 1.25rem;font-size:1rem;cursor:pointer}" +
-      "</style></head><body><div class=\"card\">" +
+      '</style></head><body><div class="card">' +
       "<h1>No hay conexión</h1>" +
       "<p>No se pudo cargar esta página. Revisa tu conexión a internet e " +
       "inténtalo de nuevo.</p>" +
-      "<button onclick=\"location.reload()\">Reintentar</button>" +
+      '<button onclick="location.reload()">Reintentar</button>' +
       "</div></body></html>"
     : "";
   return new Response(body, {
