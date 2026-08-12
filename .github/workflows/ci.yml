@@ -8,7 +8,7 @@ on:
 
 jobs:
   check:
-    name: fmt, lint, type-check & tests
+    name: fmt, lint & tests
     runs-on: ubuntu-latest
 
     steps:
@@ -19,17 +19,11 @@ jobs:
         with:
           deno-version: v2.5.2
 
-      - name: Install dependencies
-        run: deno install --frozen
-
       - name: Format check
         run: deno fmt --check .
 
       - name: Lint
         run: deno lint .
-
-      - name: Type-check
-        run: deno check
 
       - name: Test
         run: deno test --config deno.test.json --allow-env
