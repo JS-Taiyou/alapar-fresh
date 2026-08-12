@@ -4,6 +4,8 @@ import { cache } from "../lib/cache.ts";
 import { clearSupabaseBrowserStorage } from "./auth-storage.ts";
 import EntityManager from "./EntityManager.tsx";
 import DefaultSplitConfig from "./DefaultSplitConfig.tsx";
+import LocaleToggle from "./LocaleToggle.tsx";
+import type { Locale } from "../lib/i18n.ts";
 
 interface SidebarProps {
   registries: Registry[];
@@ -17,6 +19,7 @@ interface SidebarProps {
   defaultSplit: DefaultSplit | null;
   deletableRegistryIds: Set<string>;
   initialCollapsed?: boolean;
+  locale?: Locale;
 }
 
 const REGISTRY_COLORS = [
@@ -961,6 +964,12 @@ export default function Sidebar(props: SidebarProps) {
             Nuevo Registro
           </span>
         </button>
+        {(!collapsed.value || mobileOpen.value) && (
+          <LocaleToggle
+            locale={props.locale ?? "es"}
+            class="justify-center py-1"
+          />
+        )}
         <button
           type="button"
           onClick={handleLogout}

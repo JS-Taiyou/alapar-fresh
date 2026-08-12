@@ -46,6 +46,7 @@ export default define.layout(async function DashboardLayout(ctx) {
         defaultSplit={ctx.state.activeRegistry?.defaultSplit ?? null}
         deletableRegistryIds={deletableRegistryIds}
         initialCollapsed={sidebarCollapsed}
+        locale={ctx.state.locale}
       />
       <div class="flex-1 flex flex-col min-w-0">
         <ctx.Component />

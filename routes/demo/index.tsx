@@ -8,6 +8,8 @@ import { Head } from "fresh/runtime";
 import TransactionList from "../../islands/TransactionList.tsx";
 import BalanceBreakdown from "../../islands/BalanceBreakdown.tsx";
 import DemoTour from "../../islands/DemoTour.tsx";
+import LocaleToggle from "../../islands/LocaleToggle.tsx";
+import type { Locale } from "../../lib/i18n.ts";
 import type {
   BalanceBreakdownEntry,
   DefaultSplit,
@@ -31,7 +33,11 @@ interface DemoData {
 }
 
 export const handler = define.handlers({
-  GET() {
+  GET(ctx) {
+    const cookieHeader = ctx.req.headers.get("cookie") ?? "";
+    const locale: Locale = cookieHeader.includes("alapar-locale=en")
+      ? "en"
+      : "es";
     const users: Participant[] = demoData.users.map((u) => ({
       id: u.id,
       name: u.name,
@@ -132,8 +138,10 @@ export default define.page(function DemoPage(ctx) {
             balance={$balance}
             entries={$balanceEntries}
             users={$users}
+            locale={locale}
           />
           <div class="flex items-center gap-2 sm:gap-4 shrink-0">
+            <LocaleToggle locale={locale} />
             <a
               href="/"
               class="p-3 bg-card hover:bg-white/5 transition-colors rounded-custom text-gray-300"
@@ -170,6 +178,7 @@ export default define.page(function DemoPage(ctx) {
         entities={$entities}
         transactionPayments={$transactionPayments}
         isDemo
+        locale={locale}
       />
       <DemoTour />
     </>
