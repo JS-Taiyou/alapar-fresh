@@ -262,3 +262,12 @@ CREATE POLICY push_subscriptions_insert_self ON push_subscriptions
 
 CREATE POLICY push_subscriptions_delete_self ON push_subscriptions
   FOR DELETE USING (user_id = app_user_id());
+
+-- ===========================================================================
+-- Covering indexes for foreign keys
+-- ===========================================================================
+
+CREATE INDEX IF NOT EXISTS idx_transactions_creator ON transactions(creator_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_related ON transactions(related_transaction_id);
+CREATE INDEX IF NOT EXISTS idx_invitations_created_by ON invitations(created_by);
+CREATE INDEX IF NOT EXISTS idx_user_preferences_active_registry ON user_preferences(active_registry_id);

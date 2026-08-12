@@ -131,3 +131,7 @@ CREATE INDEX idx_transactions_user_paid ON transactions(user_paid);
 CREATE INDEX idx_transactions_recurring_group ON transactions(recurring_group_id);
 CREATE INDEX idx_transactions_split_json ON transactions USING gin(split_json);
 CREATE INDEX idx_transactions_active ON transactions(registry_id) WHERE exercise_id IS NULL;
+CREATE INDEX idx_transactions_creator ON transactions(creator_id);
+CREATE INDEX idx_transactions_related ON transactions(related_transaction_id);
+CREATE INDEX idx_invitations_created_by ON invitations(created_by);
+CREATE INDEX idx_user_preferences_active_registry ON user_preferences(active_registry_id);
