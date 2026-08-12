@@ -2,7 +2,10 @@ import { define } from "../../../utils.ts";
 import {
   createTransaction,
   getActiveTransactions,
+  getEntities,
   getTransactionPaymentsForRegistry,
+  getTransactionsByIds,
+  getUsers,
 } from "../../../lib/store.ts";
 import {
   getCachedTransactions,
@@ -81,6 +84,12 @@ export const handler = define.handlers({
           { status: 400 },
         );
       }
+      if (!Array.isArray(transactionPaymentEntries)) {
+        return Response.json(
+          { error: "transactionPayments JSON inválido" },
+          { status: 400 },
+        );
+      }
     }
 
     if (!description || !description.trim()) {
@@ -115,6 +124,43 @@ export const handler = define.handlers({
       splitJson = JSON.parse(splitJsonStr ?? "{}");
     } catch {
       return Response.json({ error: "Split JSON inválido" }, { status: 400 });
+    }
+
+    // Cross-reference validation (S7): the payer and every split recipient
+    // must be participants (users or entities) of the TARGET registry, and
+    // every referenced transaction must live in that same registry.
+    const participantIds = registryId === ctx.state.activeRegistry?.id
+      ? ctx.state.participants.map((p) => p.id)
+      : [
+        ...(await getUsers(registryId)).map((u) => u.id),
+        ...(await getEntities(registryId, userId)).map((e) => e.id),
+      ];
+    if (!participantIds.includes(userPaid)) {
+      return Response.json({ error: "Usuario pagador inválido" }, {
+        status: 400,
+      });
+    }
+    const splitUserIds = Array.isArray(splitJson?.splits)
+      ? splitJson.splits.map((s) => s.userId)
+      : [];
+    if (splitUserIds.some((id) => !participantIds.includes(id))) {
+      return Response.json({ error: "Participante inválido en el split" }, {
+        status: 400,
+      });
+    }
+
+    const refIds = [
+      ...(relatedTransactionId ? [relatedTransactionId] : []),
+      ...(transactionPaymentEntries ?? []).map((e) => e.expenseId),
+    ];
+    if (refIds.length > 0) {
+      const refs = await getTransactionsByIds(refIds);
+      const refRegistryById = new Map(refs.map((t) => [t.id, t.registry_id]));
+      if (refIds.some((refId) => refRegistryById.get(refId) !== registryId)) {
+        return Response.json({ error: "Referencia inválida" }, {
+          status: 400,
+        });
+      }
     }
 
     const tx = await createTransaction(

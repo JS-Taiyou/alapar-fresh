@@ -9,14 +9,14 @@ application.
 
 ## Tech Stack
 
-| Technology       | Purpose                         |
-| ---------------- | ------------------------------- |
-| Deno             | Runtime                         |
-| Fresh 2          | Web framework (SSR + Islands)   |
-| Preact + Signals | UI and reactive state           |
-| PostgreSQL (pg)  | Database via connection pool    |
-| Supabase Auth    | Authentication (email/password) |
-| Tailwind CSS     | Styling                         |
+| Technology       | Purpose                                              |
+| ---------------- | ---------------------------------------------------- |
+| Deno             | Runtime                                              |
+| Fresh 2          | Web framework (SSR + Islands)                        |
+| Preact + Signals | UI and reactive state                                |
+| PostgreSQL (pg)  | Database via connection pool                         |
+| Supabase Auth    | Authentication (email/password + Google OAuth, PKCE) |
+| Tailwind CSS     | Styling                                              |
 
 ## Key Differences from Kotlin Version
 
@@ -132,7 +132,10 @@ alapar-fresh/
 │   ├── add_related_transaction_id.sql
 │   ├── add_transaction_payments.sql
 │   ├── add_push_subscriptions.sql
-│   └── add_transaction_balances.sql  # Per-user balance deltas table + backfill
+│   ├── add_transaction_balances.sql  # Per-user balance deltas table + backfill
+│   ├── enable_rls.sql         # Row-Level Security policies (re-runnable)
+│   ├── tighten_rls.sql        # RLS hardening follow-up (idempotent)
+│   └── enable_realtime.sql    # Publishes `transactions` via supabase_realtime
 ├── data/demo.json             # Static demo data (3 users, 7 transactions)
 ├── deno.json                  # Deno config (imports, tasks, compiler options)
 ├── deno.test.json             # Test-only config (remaps lib/db.ts → stub)
@@ -143,7 +146,7 @@ alapar-fresh/
 ```
 ### Testing
 
-The project has a comprehensive test suite (47 suites, 339 steps) covering pure
+The project has a comprehensive test suite (59 suites, 417 steps) covering pure
 logic, extracted modules, and route-handler validation.
 ```
 
@@ -157,18 +160,45 @@ so tests run without `DATABASE_URL` or a live database.
 
 ## Authentication Flow
 
+**Email/password**:
+
 1. User visits `/login` or `/signup`
-2. Supabase client-side SDK handles auth (signUp / signInWithPassword)
-3. On success, tokens are sent to `/api/auth/callback` (POST)
-4. Server sets `sb-access-token` and `sb-refresh-token` as HttpOnly cookies
+2. Supabase client-side SDK handles auth (signUp / signInWithPassword) with
+   `persistSession: false` — nothing auth-related reaches browser storage
+3. On success, tokens are sent to `/api/auth/callback` (POST, JSON only)
+4. Server validates the token pair with Supabase, then sets `sb-access-token`
+   and `sb-refresh-token` as HttpOnly cookies (`Secure` in production —
+   `COOKIE_SECURE`)
 5. Subsequent requests: middleware reads cookie → validates with Supabase →
-   resolves `State`
-6. Logout: `/api/auth/logout` clears cookies
+   resolves `State` (refreshing expired tokens single-flight, so concurrent
+   requests share one refresh)
+6. First-ever request from a new Supabase user: the email allowlist is checked
+   **before** the `users` row is created — disallowed emails never get a row
+7. Logout: `/api/auth/logout` revokes the session server-side
+   (`auth.admin.signOut`) and clears cookies; the client also wipes
+   service-worker caches, IndexedDB snapshots, and any `sb-*` localStorage
+   keys
+
+**Google OAuth (PKCE)**:
+
+1. `AuthForm` starts the OAuth flow with a PKCE client (`flowType: "pkce"`);
+   the code verifier is the only value persisted to localStorage
+2. Google redirects back to `/auth/callback?code=...`
+3. `AuthCallback` exchanges the code for a session
+   (`exchangeCodeForSession`), wipes the stored `sb-*` keys, then sends the
+   tokens to `/api/auth/callback` as above
+4. Redirect targets (`next`/`redirect` params) are validated to relative
+   same-origin paths only — absolute URLs are rejected
 
 ## PWA Support
 
 - **Manifest**: `/manifest.json` with standalone display mode
-- **Service Worker**: `/sw.js` — caches static assets and API responses
+- **Service Worker**: `/sw.js` — cache-first only for immutable static assets
+  (`/assets/*`, `/logo.svg`, `/favicon.ico`, `/manifest.json`,
+  `/sw-register.js`). `/api/*` and HTML navigations are strictly network-only
+  (never written to cache — authenticated responses must not be replayed),
+  with a generic offline shell shown on network failure. On logout the client
+  posts a `CLEAR_CACHES` message and the SW drops every cache
 - **Viewport**: `maximum-scale=1.0, user-scalable=no` +
   `touch-action: manipulation` on body to prevent zoom interference with
   two-finger sidebar gesture
@@ -179,13 +209,27 @@ so tests run without `DATABASE_URL` or a live database.
 
 ## Authorization
 
-- **Email allowlist**: `AuthForm.tsx` hardcodes allowed emails for signup
+- **Email allowlist**: signup is gated on the `allowed_emails` table — checked
+  client-side via `POST /api/auth/check-email` (which always returns 200
+  `{ allowed }`) and enforced again server-side in the middleware **before** a
+  `users` row is created, even on the very first request
 - **Role-based access**: Registry membership tracked in `registry_members` with
   `owner` or `member` roles
 - **Owner-only actions**: Creating/revoking invitations, configuring default
-  split
+  split, renaming/deleting a registry, closing an exercise ("cortar").
+  Ownership is checked against the **target** registry (via
+  `ctx.state.ownerRegistryIds`), not just the active one
 - **Member gating**: `ctx.state.registries` only contains registries the user
-  belongs to
+  belongs to; API endpoints additionally validate any client-supplied
+  `registryId`/exercise/invitation against membership (404/403 on foreign ids)
+- **Middleware protections**: CSRF middleware with no exemptions (mutating
+  requests must send a matching `Origin`); security headers on every response
+  (`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`);
+  per-IP rate limit (20 req/min → 429) on `/join`,
+  `/api/invitations/join`, `/api/auth/check-email`, `/api/auth/callback`;
+  public-path matching is segment-aware so `/joinville`-style prefixes can't
+  slip through
 
 ## State Management
 
@@ -246,6 +290,14 @@ Supabase Postgres Changes subscription on `transactions` table filtered by
 - Browser notifications for other users' inserts
 - `resubscribe()` called on wake-up to reconnect dropped WebSocket
 
+The channel's access token is **never serialized into page HTML** — the token
+lives in an `HttpOnly` cookie, so `lib/realtime.ts` fetches it from
+`/api/auth/token` when subscribing (and again, with backoff, when a channel
+error suggests expiry). The realtime Supabase client runs with
+`persistSession: false`; RLS policies on `transactions` gate what each
+subscriber receives (see `db/enable_realtime.sql` — only `transactions` is
+published).
+
 ### Server State (`utils.ts:State`)
 
 Every request within an authenticated context has:
@@ -259,7 +311,9 @@ interface State {
   participants: Participant[]; // Combined: registryUsers + entities
   registries: Registry[]; // All registries for this user
   supabaseAuthId: string | null; // Supabase auth UUID
+  accessToken: string | null; // Middleware-validated token (served by /api/auth/token)
   isOwner: boolean; // Is user owner of active registry
+  ownerRegistryIds: Set<string>; // Registries the user owns (target-registry checks)
 }
 ````
 

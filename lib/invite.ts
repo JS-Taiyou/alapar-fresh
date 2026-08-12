@@ -70,9 +70,13 @@ const INVITE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 /** Generate an 8-character invite code from the unambiguous alphabet. */
 export function generateInviteCode(): string {
+  // CSPRNG (crypto.getRandomValues), not Math.random: invite codes are
+  // bearer secrets. 256 is an exact multiple of the 32-char alphabet, so
+  // `byte % length` is uniform (no modulo bias).
+  const bytes = crypto.getRandomValues(new Uint8Array(8));
   let code = "";
-  for (let i = 0; i < 8; i++) {
-    code += INVITE_ALPHABET[Math.floor(Math.random() * INVITE_ALPHABET.length)];
+  for (const byte of bytes) {
+    code += INVITE_ALPHABET[byte % INVITE_ALPHABET.length];
   }
   return code;
 }

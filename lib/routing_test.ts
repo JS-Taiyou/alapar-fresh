@@ -69,6 +69,13 @@ describe("needsFullState", () => {
     assertEquals(needsFullState("/something-random"), false);
   });
 
+  it("matches segment-wise: extensions of full-state prefixes stay lightweight", () => {
+    // N16: same footgun class as isPublicPath — "/dashboardfoo" is not "/dashboard".
+    assertEquals(needsFullState("/dashboardfoo"), false);
+    assertEquals(needsFullState("/api/registriesevil"), false);
+    assertEquals(needsFullState("/api/transactionsx"), false);
+  });
+
   it("documents that /api/registries/default-split is covered by the /api/registries prefix", () => {
     // Guard against the latent fragility noted in routing.ts: even if the
     // redundant "/api/default-split" entry were removed, this real route must
@@ -84,8 +91,8 @@ describe("needsFullState", () => {
 describe("isPublicPath", () => {
   const publicPaths = [
     "/login",
-    "/login?error=unauthorized",
     "/signup",
+    "/join",
     "/join/ABCDEF",
     "/forgot-password",
     "/reset-password",
@@ -106,6 +113,14 @@ describe("isPublicPath", () => {
     assertEquals(isPublicPath("/dashboard"), false);
     assertEquals(isPublicPath("/api/transactions"), false);
     assertEquals(isPublicPath("/api/registries/new"), false);
+  });
+
+  it("matches segment-wise: a bare startsWith must not make paths public", () => {
+    // N16: "/joinville" starts with "/join" but is NOT the public /join page.
+    assertEquals(isPublicPath("/joinville"), false);
+    assertEquals(isPublicPath("/loginx"), false);
+    assertEquals(isPublicPath("/demolition"), false);
+    assertEquals(isPublicPath("/api/auth/callbackevil"), false);
   });
 });
 

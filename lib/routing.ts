@@ -52,9 +52,19 @@ const PUBLIC_PREFIXES = [
 const AUTH_PAGES: readonly string[] = ["/login", "/signup", "/forgot-password"];
 
 /**
+ * Segment-aware prefix match: `path` must equal `prefix` exactly or start with
+ * `prefix` followed by `/`. A plain `startsWith` would make `/joinville`
+ * match the `/join` prefix (and `/loginx` match `/login`), accidentally
+ * turning non-public paths public.
+ */
+function matchesPrefix(path: string, prefix: string): boolean {
+  return path === prefix || path.startsWith(prefix + "/");
+}
+
+/**
  * Returns `true` when `path` must run through {@link resolveUserState}
  * (the expensive full-state path: user + all registries + active registry
- * members + entities). Every entry is a `startsWith` prefix match.
+ * members + entities). Every entry is a segment-aware prefix match.
  *
  * Note: `"/"` is intentionally **excluded**. The landing page only needs to
  * know whether the user has any registry (to redirect to `/dashboard`) — the
@@ -62,12 +72,12 @@ const AUTH_PAGES: readonly string[] = ["/login", "/signup", "/forgot-password"];
  * query rather than the full 4-query state resolution.
  */
 export function needsFullState(path: string): boolean {
-  return FULL_STATE_PREFIXES.some((prefix) => path.startsWith(prefix));
+  return FULL_STATE_PREFIXES.some((prefix) => matchesPrefix(path, prefix));
 }
 
 /** Returns `true` when `path` is reachable without authentication. */
 export function isPublicPath(path: string): boolean {
-  return PUBLIC_PREFIXES.some((prefix) => path.startsWith(prefix));
+  return PUBLIC_PREFIXES.some((prefix) => matchesPrefix(path, prefix));
 }
 
 /**

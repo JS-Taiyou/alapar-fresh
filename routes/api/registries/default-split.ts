@@ -1,5 +1,10 @@
 import { define } from "../../../utils.ts";
-import { clearDefaultSplit, setDefaultSplit } from "../../../lib/store.ts";
+import {
+  clearDefaultSplitForOwner,
+  getEntities,
+  getUsers,
+  setDefaultSplit,
+} from "../../../lib/store.ts";
 
 export const handler = define.handlers({
   async POST(ctx) {
@@ -13,7 +18,9 @@ export const handler = define.handlers({
       return Response.json({ error: "Datos inválidos" }, { status: 400 });
     }
 
-    if (!ctx.state.isOwner) {
+    const userId = ctx.state.user?.id;
+    // Ownership of the TARGET registry (not just the active one).
+    if (!userId || !ctx.state.ownerRegistryIds.has(registryId)) {
       return Response.json({ error: "Solo el owner puede configurar esto" }, {
         status: 403,
       });
@@ -26,8 +33,22 @@ export const handler = define.handlers({
       });
     }
 
-    const registryUserIds = ctx.state.participants.map((u) => u.id);
-    const allValid = splits.every((s) => registryUserIds.includes(s.userId));
+    // Validate split userIds against the TARGET registry's participants
+    // (ctx.state.participants only describes the active registry).
+    let participantIds: string[];
+    if (registryId === ctx.state.activeRegistry?.id) {
+      participantIds = ctx.state.participants.map((u) => u.id);
+    } else {
+      const [users, entities] = await Promise.all([
+        getUsers(registryId),
+        getEntities(registryId, userId),
+      ]);
+      participantIds = [
+        ...users.map((u) => u.id),
+        ...entities.map((e) => e.id),
+      ];
+    }
+    const allValid = splits.every((s) => participantIds.includes(s.userId));
     if (!allValid) {
       return Response.json({ error: "Usuario no encontrado en el registro" }, {
         status: 400,
@@ -35,9 +56,9 @@ export const handler = define.handlers({
     }
 
     if (splits.length === 0) {
-      await clearDefaultSplit(registryId);
+      await clearDefaultSplitForOwner(registryId, userId);
     } else {
-      await setDefaultSplit(registryId, splits);
+      await setDefaultSplit(registryId, splits, userId);
     }
 
     return Response.json({ ok: true });
@@ -47,11 +68,16 @@ export const handler = define.handlers({
     const body = await ctx.req.json();
     const { registryId } = body as { registryId: string };
 
-    if (!ctx.state.isOwner) {
+    if (!registryId) {
+      return Response.json({ error: "Datos inválidos" }, { status: 400 });
+    }
+
+    const userId = ctx.state.user?.id;
+    if (!userId || !ctx.state.ownerRegistryIds.has(registryId)) {
       return Response.json({ error: "Solo el owner" }, { status: 403 });
     }
 
-    await clearDefaultSplit(registryId);
+    await clearDefaultSplitForOwner(registryId, userId);
     return Response.json({ ok: true });
   },
 });

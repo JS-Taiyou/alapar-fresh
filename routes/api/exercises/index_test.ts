@@ -2,10 +2,10 @@
  * Tests for the exercises collection route handler.
  *
  * The POST handler is the most branchy in the app: it sniffs content-type,
- * branches on the Accept header (JSON error vs redirect), re-checks registry
- * membership when a requestedRegistryId differs from active, short-circuits
- * when there are no active transactions, and decides whether to emit balance
- * "ajuste" transactions based on a rounding threshold
+ * branches on the Accept header (JSON error vs redirect), requires OWNERSHIP
+ * of the target registry (S8 — closing an exercise is destructive),
+ * short-circuits when there are no active transactions, and decides whether
+ * to emit balance "ajuste" transactions based on a rounding threshold
  * (`totalPending > 0.01 * active.length`).
  *
  * These tests focus on the pre-DB validation/branching and the empty-active
@@ -85,10 +85,8 @@ describe("exercises POST — auth & body parsing", () => {
   });
 });
 
-describe("exercises POST — membership re-check", () => {
-  it("returns 403 JSON when the requested registry differs from active and the user isn't a member", async () => {
-    // isMemberOfRegistry returns 0 rows.
-    __setQueryResult({ rows: [] });
+describe("exercises POST — ownership gate (S8)", () => {
+  it("returns 403 JSON when the requested registry isn't owned by the user", async () => {
     const ctx = makeCtx({
       req: jsonRequest(URL, { registryId: "r-other" }, {
         Accept: "application/json",
@@ -96,19 +94,37 @@ describe("exercises POST — membership re-check", () => {
       state: {
         user: { id: "u1" } as never,
         activeRegistry: { id: "r1" } as never,
+        registries: [{ id: "r1" } as never],
+        ownerRegistryIds: new Set(["r1"]),
       },
     });
     const res = await handler.POST!(ctx as never);
     assertEquals(res.status, 403);
   });
 
-  it("redirects when the membership check fails and the client doesn't accept JSON", async () => {
-    __setQueryResult({ rows: [] });
+  it("returns 403 JSON when the user is a member of the ACTIVE registry but not its owner", async () => {
+    const ctx = makeCtx({
+      req: jsonRequest(URL, {}, { Accept: "application/json" }),
+      state: {
+        user: { id: "u1" } as never,
+        activeRegistry: { id: "r1" } as never,
+        registries: [{ id: "r1" } as never],
+        isOwner: false,
+        ownerRegistryIds: new Set<string>(),
+      },
+    });
+    const res = await handler.POST!(ctx as never);
+    assertEquals(res.status, 403);
+  });
+
+  it("redirects when the ownership check fails and the client doesn't accept JSON", async () => {
     const ctx = makeCtx({
       req: jsonRequest(URL, { registryId: "r-other" }),
       state: {
         user: { id: "u1" } as never,
         activeRegistry: { id: "r1" } as never,
+        registries: [{ id: "r1" } as never],
+        ownerRegistryIds: new Set(["r1"]),
       },
     });
     const res = await handler.POST!(ctx as never);
@@ -125,6 +141,27 @@ describe("exercises POST — empty active short-circuit", () => {
       state: {
         user: { id: "u1" } as never,
         activeRegistry: { id: "r1" } as never,
+        registries: [{ id: "r1" } as never],
+        ownerRegistryIds: new Set(["r1"]),
+      },
+    });
+    const res = await handler.POST!(ctx as never);
+    assertEquals(res.status, 200);
+    assertEquals(await res.json(), { exercise: null, transactions: [] });
+  });
+
+  it("proceeds for an owned non-active registry (empty active → null exercise)", async () => {
+    // Owner of both registries requesting a close on the non-active one.
+    __setQueryResult({ rows: [] });
+    const ctx = makeCtx({
+      req: jsonRequest(URL, { registryId: "r2" }, {
+        Accept: "application/json",
+      }),
+      state: {
+        user: { id: "u1" } as never,
+        activeRegistry: { id: "r1" } as never,
+        registries: [{ id: "r1" } as never, { id: "r2" } as never],
+        ownerRegistryIds: new Set(["r1", "r2"]),
       },
     });
     const res = await handler.POST!(ctx as never);
@@ -139,6 +176,8 @@ describe("exercises POST — empty active short-circuit", () => {
       state: {
         user: { id: "u1" } as never,
         activeRegistry: { id: "r1" } as never,
+        registries: [{ id: "r1" } as never],
+        ownerRegistryIds: new Set(["r1"]),
       },
     });
     const res = await handler.POST!(ctx as never);

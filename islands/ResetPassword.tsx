@@ -19,7 +19,15 @@ export default function ResetPassword(props: ResetPasswordProps) {
 
   let client: SupabaseClient;
   try {
-    client = createClient(props.supabaseUrl, props.supabaseAnonKey);
+    // The recovery session from setSession() lives only in memory — it is
+    // used once to call updateUser() and never persisted to browser storage.
+    client = createClient(props.supabaseUrl, props.supabaseAnonKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
   } catch {
     error.value = "Error al inicializar el cliente de auth";
   }

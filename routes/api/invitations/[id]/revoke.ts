@@ -1,24 +1,24 @@
 import { define } from "../../../../utils.ts";
-import { getUserRole, revokeInvitation } from "../../../../lib/store.ts";
+import { revokeInvitation } from "../../../../lib/store.ts";
 
 export const handler = define.handlers({
   async POST(ctx) {
     const invitationId = ctx.params.id;
     const systemUserId = ctx.state.user?.id;
-    const activeRegistryId = ctx.state.activeRegistry?.id;
 
-    if (!invitationId || !systemUserId || !activeRegistryId) {
+    if (!invitationId || !systemUserId) {
       return Response.json({ error: "Missing data" }, { status: 400 });
     }
 
-    const role = await getUserRole(systemUserId, activeRegistryId);
-    if (role !== "owner") {
-      return Response.json({ error: "Only owners can revoke invitations" }, {
-        status: 403,
+    // The revoke is ownership-scoped in SQL: it only lands when the user owns
+    // the registry the invitation belongs to (regardless of which registry is
+    // active). A foreign or unknown id therefore no-ops → 404.
+    const revoked = await revokeInvitation(invitationId, systemUserId);
+    if (!revoked) {
+      return Response.json({ error: "Not found or forbidden" }, {
+        status: 404,
       });
     }
-
-    await revokeInvitation(invitationId, systemUserId);
 
     return Response.json({ ok: true });
   },

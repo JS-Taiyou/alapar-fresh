@@ -1,14 +1,36 @@
 import { define } from "../../../utils.ts";
-import { setAuthCookies } from "../../../lib/supabase.ts";
+import { createServerClient, setAuthCookies } from "../../../lib/supabase.ts";
 
 export const handler = define.handlers({
   async POST(ctx) {
-    const body = await ctx.req.json();
+    // JSON only: keeps this endpoint out of simple HTML-form CSRF territory
+    // (the csrf middleware already enforces a matching Origin).
+    const contentType = ctx.req.headers.get("content-type") ?? "";
+    if (!contentType.includes("application/json")) {
+      return Response.json({ error: "Expected application/json" }, {
+        status: 400,
+      });
+    }
+
+    let body: { accessToken?: unknown; refreshToken?: unknown };
+    try {
+      body = await ctx.req.json();
+    } catch {
+      return Response.json({ error: "Invalid JSON" }, { status: 400 });
+    }
     const accessToken = body.accessToken as string;
     const refreshToken = body.refreshToken as string;
 
     if (!accessToken || !refreshToken) {
       return Response.json({ error: "Missing tokens" }, { status: 400 });
+    }
+
+    // Validate the token pair with Supabase before setting auth cookies:
+    // an arbitrary/garbage token must never become a session.
+    const client = createServerClient();
+    const { data, error } = await client.auth.getUser(accessToken);
+    if (error || !data.user) {
+      return Response.json({ error: "Invalid tokens" }, { status: 401 });
     }
 
     const headers = new Headers();

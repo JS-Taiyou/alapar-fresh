@@ -19,3 +19,9 @@ db/backups
 AGENTS.md
 .zcode
 PENDING.md
+
+# Agent tooling & internal notes (kept locally, not shipped)
+.agents/
+.claude/
+skills-lock.json
+review/

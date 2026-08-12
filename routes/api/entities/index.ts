@@ -4,13 +4,26 @@ import { invalidateRegistry } from "../../../lib/server-cache.ts";
 
 export const handler = define.handlers({
   async GET(ctx) {
+    const userId = ctx.state.user?.id;
+    if (!userId) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const url = new URL(ctx.req.url);
     const registryId = url.searchParams.get("registryId") ||
       ctx.state.activeRegistry?.id;
     if (!registryId) {
       return Response.json([]);
     }
-    const entities = await getEntities(registryId);
+
+    // Mirror the POST membership check: a registryId the user doesn't belong
+    // to must not leak its entities.
+    const isMember = ctx.state.registries.some((r) => r.id === registryId);
+    if (!isMember) {
+      return Response.json({ error: "No eres miembro" }, { status: 403 });
+    }
+
+    const entities = await getEntities(registryId, userId);
     return Response.json(entities.map((e) => ({
       id: e.id,
       name: e.name,
@@ -19,6 +32,11 @@ export const handler = define.handlers({
   },
 
   async POST(ctx) {
+    const userId = ctx.state.user?.id;
+    if (!userId) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await ctx.req.json();
     const { name, color, registryId } = body;
 
@@ -38,7 +56,15 @@ export const handler = define.handlers({
       return Response.json({ error: "No eres miembro" }, { status: 403 });
     }
 
-    const entity = await createEntity(activeRegistryId, name.trim(), color);
+    const entity = await createEntity(
+      activeRegistryId,
+      name.trim(),
+      color,
+      userId,
+    );
+    if (!entity) {
+      return Response.json({ error: "No eres miembro" }, { status: 403 });
+    }
 
     invalidateRegistry(activeRegistryId);
 

@@ -1,9 +1,13 @@
 import { useEffect } from "preact/hooks";
 import { useSignal } from "@preact/signals";
+import { createClient } from "@supabase/supabase-js";
 import AuthCardLayout from "../components/AuthCardLayout.tsx";
+import { clearSupabaseBrowserStorage } from "./auth-storage.ts";
 
 interface AuthCallbackProps {
   redirectPath: string;
+  supabaseUrl: string;
+  supabaseAnonKey: string;
 }
 
 export default function AuthCallback(props: AuthCallbackProps) {
@@ -11,45 +15,83 @@ export default function AuthCallback(props: AuthCallbackProps) {
   const debug = useSignal("Initializing...");
 
   useEffect(() => {
-    const hash = globalThis.location.hash.substring(1);
-    const params = new URLSearchParams(hash);
-    const accessToken = params.get("access_token");
-    const refreshToken = params.get("refresh_token");
-    const hashError = params.get("error_description");
+    // Open-redirect guard (also enforced server-side in
+    // routes/auth/callback.tsx): only relative same-origin paths.
+    const target = /^\/(?!\/)/.test(props.redirectPath)
+      ? props.redirectPath
+      : "/dashboard";
 
-    if (hashError) {
-      debug.value = `Auth error: ${hashError}`;
-      error.value = hashError;
+    const url = new URL(globalThis.location.href);
+    const code = url.searchParams.get("code");
+    const oauthError = url.searchParams.get("error_description") ??
+      url.searchParams.get("error");
+
+    if (oauthError) {
+      debug.value = `Auth error: ${oauthError}`;
+      error.value = oauthError;
       return;
     }
 
-    if (!accessToken || !refreshToken) {
-      debug.value = `No tokens in hash. URL: ${globalThis.location.href}`;
-      error.value = "No se recibieron tokens de autenticación.";
+    if (!code) {
+      debug.value = `No auth code in URL: ${globalThis.location.href}`;
+      error.value = "No se recibió un código de autenticación.";
       return;
     }
 
-    debug.value = "Tokens found, setting cookies...";
+    // PKCE code exchange (supabase-js 2.49+ default flow). persistSession is
+    // required only so the client can read the code verifier the OAuth-
+    // initiating client left in localStorage — the stored keys are wiped
+    // immediately after the exchange; sessions live in HttpOnly cookies.
+    const client = createClient(props.supabaseUrl, props.supabaseAnonKey, {
+      auth: {
+        flowType: "pkce",
+        persistSession: true,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
 
-    fetch("/api/auth/callback", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accessToken, refreshToken }),
-    })
-      .then((res) => {
-        if (res.ok) {
-          globalThis.location.href = props.redirectPath;
-        } else {
-          res.text().then((t) => {
-            debug.value = `Cookie set failed: ${t}`;
-            error.value = `Cookie set failed: ${t}`;
-          });
+    (async () => {
+      try {
+        const { data, error: exchangeError } = await client.auth
+          .exchangeCodeForSession(code);
+        clearSupabaseBrowserStorage();
+        if (exchangeError || !data.session) {
+          debug.value = `Code exchange failed: ${
+            exchangeError?.message ?? "no session"
+          }`;
+          error.value = "No se pudo completar la autenticación.";
+          return;
         }
-      })
-      .catch((err) => {
-        debug.value = `Fetch error: ${String(err)}`;
+
+        // The code is single-use and already consumed — strip it from history.
+        globalThis.history.replaceState(null, "", "/auth/callback");
+
+        debug.value = "Code exchanged, setting cookies...";
+
+        const res = await fetch("/api/auth/callback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            accessToken: data.session.access_token,
+            refreshToken: data.session.refresh_token,
+          }),
+        });
+        if (res.ok) {
+          globalThis.location.href = target;
+        } else if (res.status === 400 || res.status === 401) {
+          // Server rejected the tokens — restart the login flow.
+          globalThis.location.href = "/login";
+        } else {
+          const t = await res.text();
+          debug.value = `Cookie set failed: ${t}`;
+          error.value = `Cookie set failed: ${t}`;
+        }
+      } catch (err) {
+        debug.value = `Auth callback error: ${String(err)}`;
         error.value = String(err);
-      });
+      }
+    })();
   }, []);
 
   return (

@@ -68,30 +68,67 @@ export async function getUserFromRequest(
 
   if (!refreshToken) return null;
 
-  devLog("Attempting token refresh...");
-  const { data: refreshData, error: refreshError } = await client.auth
-    .refreshSession({ refresh_token: refreshToken });
-  if (refreshError || !refreshData.session || !refreshData.user) {
-    devLog("Refresh failed:", refreshError?.message);
-    return null;
-  }
-
-  devLog("Refresh succeeded for:", refreshData.user.email);
-  return {
-    user: {
-      id: refreshData.user.id,
-      email: refreshData.user.email ?? "",
-      name: refreshData.user.user_metadata?.name as string | undefined,
-    },
-    refreshedTokens: {
-      accessToken: refreshData.session.access_token,
-      refreshToken: refreshData.session.refresh_token,
-    },
-  };
+  return await refreshSessionSingleFlight(client, refreshToken);
 }
 
-const isProduction = !!Deno.env.get("DENO_DEPLOYMENT_ID");
-const cookieSecure = isProduction ? "; Secure" : "";
+/**
+ * In-flight refreshSession promises keyed by refresh token. Supabase rotates
+ * refresh tokens on use, so two concurrent requests refreshing with the same
+ * token race: the loser gets "Invalid Refresh Token" and the user is
+ * spuriously logged out. Sharing one promise per token collapses the race.
+ */
+const refreshInFlight = new Map<string, Promise<AuthResult | null>>();
+
+async function refreshSessionSingleFlight(
+  client: SupabaseClient,
+  refreshToken: string,
+): Promise<AuthResult | null> {
+  const pending = refreshInFlight.get(refreshToken);
+  if (pending) return await pending;
+
+  const promise = (async (): Promise<AuthResult | null> => {
+    devLog("Attempting token refresh...");
+    const { data: refreshData, error: refreshError } = await client.auth
+      .refreshSession({ refresh_token: refreshToken });
+    if (refreshError || !refreshData.session || !refreshData.user) {
+      devLog("Refresh failed:", refreshError?.message);
+      return null;
+    }
+
+    devLog("Refresh succeeded for:", refreshData.user.email);
+    return {
+      user: {
+        id: refreshData.user.id,
+        email: refreshData.user.email ?? "",
+        name: refreshData.user.user_metadata?.name as string | undefined,
+      },
+      refreshedTokens: {
+        accessToken: refreshData.session.access_token,
+        refreshToken: refreshData.session.refresh_token,
+      },
+    };
+  })();
+
+  refreshInFlight.set(refreshToken, promise);
+  // Drop the entry once settled so the map can't grow unbounded. Explicit
+  // reject handler (rather than .finally) to avoid an unhandled rejection
+  // on the derived promise.
+  promise.then(
+    () => refreshInFlight.delete(refreshToken),
+    () => refreshInFlight.delete(refreshToken),
+  );
+  return await promise;
+}
+
+// Secure is on by default in production (Deno Deploy sets
+// DENO_DEPLOYMENT_ID). Local dev runs over plain HTTP, where browsers reject
+// Secure cookies, so it stays off there unless COOKIE_SECURE=true.
+// COOKIE_SECURE=false forces it off in any environment.
+const cookieSecure = Deno.env.get("COOKIE_SECURE") !== "false" &&
+    (Deno.env.get("DENO_DEPLOYMENT_ID") !== undefined ||
+      Deno.env.get("COOKIE_SECURE") === "true")
+  ? "; Secure"
+  : "";
 
 export function setAuthCookies(
   headers: Headers,

@@ -63,7 +63,7 @@ cargos recurrentes y pagos directos entre miembros.
 - **Seguridad en la base de datos** — Row-Level Security de Postgres aísla los
   datos de cada grupo; el canal de tiempo real solo entrega transacciones de los
   registros a los que pertenece el usuario autenticado.
-- **Suite de pruebas completa** — 53 suites, 352 pasos cubriendo el motor de
+- **Suite de pruebas completa** — 59 suites, 417 pasos cubriendo el motor de
   saldos, repartos, validación de rutas y reglas de negocio, con un stub de DB
   para que las pruebas corran sin base de datos.
 
@@ -83,8 +83,9 @@ cd alapar-fresh
 cp .env.example .env   # agrega tus credenciales de Supabase y VAPID
 ```
 
-Ejecuta las migraciones en `db/` contra tu proyecto de Supabase (en orden:
-`schema.sql` primero, luego los archivos `add_*.sql`).
+Ejecuta las migraciones en `db/` contra tu proyecto de Supabase, en orden:
+`schema.sql` primero, luego los archivos `add_*.sql`, después `enable_rls.sql`,
+`tighten_rls.sql` y finalmente `enable_realtime.sql`.
 
 Inicia el servidor de desarrollo:
 

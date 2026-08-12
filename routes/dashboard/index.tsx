@@ -12,7 +12,6 @@ import {
   getCachedTransactions,
 } from "../../lib/server-cache.ts";
 import { getSupabaseAnonKey, getSupabaseUrl } from "../../lib/supabase.ts";
-import { getCookie } from "../../lib/auth-cookies.ts";
 import { Head } from "fresh/runtime";
 import TransactionList from "../../islands/TransactionList.tsx";
 import CortarButton from "../../islands/CortarButton.tsx";
@@ -43,7 +42,6 @@ interface DashboardData {
   spawnCandidates: SpawnCandidate[];
   balanceBreakdown: BalanceBreakdownEntry[];
   usersCount: number;
-  accessToken: string;
   supabaseUrl: string;
   supabaseAnonKey: string;
   lastModified: string | null;
@@ -53,14 +51,7 @@ export const handler = define.handlers({
   async GET(ctx) {
     const registryId = ctx.state.activeRegistry?.id;
     const userId = ctx.state.user?.id;
-    console.log(
-      "[dashboard] handler start, registryId:",
-      registryId,
-      "userId:",
-      userId,
-    );
     if (!registryId || !userId) {
-      console.log("[dashboard] early return (no registry/user)");
       return {
         data: {
           transactions: [] as EnrichedTransaction[],
@@ -70,7 +61,6 @@ export const handler = define.handlers({
           spawnCandidates: [],
           balanceBreakdown: [],
           usersCount: ctx.state.participants.length,
-          accessToken: "",
           supabaseUrl: getSupabaseUrl(),
           supabaseAnonKey: getSupabaseAnonKey(),
           lastModified: null,
@@ -78,41 +68,24 @@ export const handler = define.handlers({
       };
     }
 
-    console.log("[dashboard] getCachedTransactions start");
     const { transactions } = await getCachedTransactions(
       registryId,
       () => getActiveTransactions(registryId),
     );
-    console.log(
-      "[dashboard] getCachedTransactions done, count:",
-      transactions.length,
-    );
 
-    console.log("[dashboard] getTransactionPaymentsForRegistry start");
     const transactionPayments = await getTransactionPaymentsForRegistry(
       registryId,
     );
-    console.log(
-      "[dashboard] getTransactionPaymentsForRegistry done, count:",
-      transactionPayments.length,
-    );
 
-    console.log("[dashboard] calculateBalance start");
     const balance = await calculateBalance(
       userId,
       registryId,
       transactions,
     );
-    console.log("[dashboard] calculateBalance done:", balance);
 
-    console.log("[dashboard] getCachedSpawnCandidates start");
     const candidates = await getCachedSpawnCandidates(
       registryId,
       () => getSpawnCandidates(registryId),
-    );
-    console.log(
-      "[dashboard] getCachedSpawnCandidates done, count:",
-      candidates.length,
     );
 
     const participantMap = new Map(
@@ -138,7 +111,6 @@ export const handler = define.handlers({
       ctx.state.participants,
     );
 
-    console.log("[dashboard] handler complete, returning data");
     return {
       data: {
         transactions: enriched,
@@ -148,9 +120,6 @@ export const handler = define.handlers({
         spawnCandidates,
         balanceBreakdown,
         usersCount: ctx.state.participants.length,
-        accessToken:
-          getCookie(ctx.req.headers.get("cookie") ?? "", "sb-access-token") ??
-            "",
         supabaseUrl: getSupabaseUrl(),
         supabaseAnonKey: getSupabaseAnonKey(),
         lastModified: ctx.state.activeRegistry?.lastModified?.toISOString() ??
@@ -245,7 +214,6 @@ export default define.page(function DashboardIndex(ctx) {
         transactionPayments={$transactionPayments}
         supabaseUrl={data.supabaseUrl}
         supabaseAnonKey={data.supabaseAnonKey}
-        accessToken={data.accessToken}
       />
     </>
   );

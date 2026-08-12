@@ -194,7 +194,7 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
     );
     registryUsers = usersResult.rows.map(rowToUser);
 
-    entities = await getEntities(activeRegistry.id);
+    entities = await getEntities(activeRegistry.id, user.id);
 
     participants = [
       ...registryUsers.map((u) => ({ id: u.id, name: u.name, color: u.color })),
@@ -251,12 +251,45 @@ export async function getTransactionsByExercise(
   return result.rows.map(rowToTransaction);
 }
 
+/**
+ * Membership-scoped variant of {@link getTransactionsByExercise}: returns rows
+ * only when `userId` belongs to the registry that owns the exercise. API
+ * routes use this so a bare exercise id can't leak another registry's data.
+ */
+export async function getTransactionsByExerciseForUser(
+  exerciseId: string,
+  userId: string,
+): Promise<Transaction[]> {
+  const result = await query(
+    `SELECT t.* FROM transactions t WHERE t.exercise_id = $1
+     AND EXISTS (
+       SELECT 1 FROM registry_members rm
+       WHERE rm.registry_id = t.registry_id AND rm.user_id = $2
+     )
+     ORDER BY t.created_at DESC, t.description ASC`,
+    [exerciseId, userId],
+  );
+  return result.rows.map(rowToTransaction);
+}
+
 export async function getTransactionById(
   id: string,
 ): Promise<Transaction | undefined> {
   const result = await query("SELECT * FROM transactions WHERE id = $1", [id]);
   if (result.rows.length === 0) return undefined;
   return rowToTransaction(result.rows[0]);
+}
+
+/** Fetch several transactions by id in one query (used for cross-reference validation). */
+export async function getTransactionsByIds(
+  ids: string[],
+): Promise<Transaction[]> {
+  if (ids.length === 0) return [];
+  const result = await query(
+    "SELECT * FROM transactions WHERE id = ANY($1::uuid[])",
+    [ids],
+  );
+  return result.rows.map(rowToTransaction);
 }
 
 export async function getTransactionPaymentsForRegistry(
@@ -416,6 +449,27 @@ export async function getExerciseById(
   return rowToExercise(result.rows[0]);
 }
 
+/**
+ * Membership-scoped variant of {@link getExerciseById}: returns the exercise
+ * only when `userId` belongs to its registry (else `undefined`, so the caller
+ * can answer 404 without leaking existence).
+ */
+export async function getExerciseByIdForUser(
+  id: string,
+  userId: string,
+): Promise<Exercise | undefined> {
+  const result = await query(
+    `SELECT e.* FROM exercises e WHERE e.id = $1
+     AND EXISTS (
+       SELECT 1 FROM registry_members rm
+       WHERE rm.registry_id = e.registry_id AND rm.user_id = $2
+     )`,
+    [id, userId],
+  );
+  if (result.rows.length === 0) return undefined;
+  return rowToExercise(result.rows[0]);
+}
+
 export async function createExercise(registryId: string): Promise<Exercise> {
   const result = await query(
     `WITH active AS (
@@ -521,13 +575,17 @@ export async function deleteRegistry(
   registryId: string,
   userId: string,
 ): Promise<boolean> {
-  const member = await isMemberOfRegistry(userId, registryId);
-  if (!member) return false;
   const count = await getTransactionCount(registryId);
   if (count > 0) return false;
-  const result = await query("DELETE FROM registries WHERE id = $1", [
-    registryId,
-  ]);
+  // Owner-only: the DELETE itself carries the ownership subquery so it can't
+  // be misused by a caller that skipped the role check.
+  const result = await query(
+    `DELETE FROM registries WHERE id = $1 AND EXISTS (
+       SELECT 1 FROM registry_members rm
+       WHERE rm.registry_id = registries.id AND rm.user_id = $2 AND rm.role = 'owner'
+     )`,
+    [registryId, userId],
+  );
   return (result.rowCount ?? 0) > 0;
 }
 
@@ -639,12 +697,18 @@ export async function cloneTransactionForNextPeriod(
 
 export async function batchCloneTransactions(
   items: { id: string; quantity: number }[],
+  userId: string,
 ): Promise<Transaction[]> {
   if (items.length === 0) return [];
   const ids = items.map((i) => i.id);
+  // Membership-scoped: only resolve sources in registries the user belongs
+  // to, so a bare id from another registry can never be cloned into it.
   const result = await query(
-    `SELECT * FROM transactions WHERE id = ANY($1::uuid[])`,
-    [ids],
+    `SELECT * FROM transactions WHERE id = ANY($1::uuid[])
+     AND registry_id IN (
+       SELECT rm.registry_id FROM registry_members rm WHERE rm.user_id = $2
+     )`,
+    [ids, userId],
   );
   const sources = new Map(
     result.rows.map(rowToTransaction).map((t) => [t.id, t]),
@@ -696,10 +760,18 @@ export async function batchCloneTransactions(
   return cloned;
 }
 
-export async function getEntities(registryId: string): Promise<Entity[]> {
+export async function getEntities(
+  registryId: string,
+  userId: string,
+): Promise<Entity[]> {
+  // Membership-scoped: non-members see an empty list, same as "no entities".
   const result = await query(
-    "SELECT entities_json FROM registries WHERE id = $1",
-    [registryId],
+    `SELECT entities_json FROM registries r WHERE r.id = $1
+     AND EXISTS (
+       SELECT 1 FROM registry_members rm
+       WHERE rm.registry_id = r.id AND rm.user_id = $2
+     )`,
+    [registryId, userId],
   );
   if (result.rows.length === 0) return [];
   const raw = result.rows[0].entities_json;
@@ -715,19 +787,25 @@ export async function getEntities(registryId: string): Promise<Entity[]> {
 export async function createEntity(
   registryId: string,
   name: string,
-  color?: string,
-): Promise<Entity> {
-  const entities = await getEntities(registryId);
+  color: string | undefined,
+  userId: string,
+): Promise<Entity | null> {
+  const entities = await getEntities(registryId, userId);
   const entity: Entity = {
     id: crypto.randomUUID(),
     name,
     color: color ?? "#6b7280",
   };
   entities.push(entity);
-  await query(
-    "UPDATE registries SET entities_json = $1 WHERE id = $2",
-    [JSON.stringify(entities), registryId],
+  const result = await query(
+    `UPDATE registries SET entities_json = $1 WHERE id = $2
+     AND EXISTS (
+       SELECT 1 FROM registry_members rm
+       WHERE rm.registry_id = registries.id AND rm.user_id = $3
+     )`,
+    [JSON.stringify(entities), registryId, userId],
   );
+  if ((result.rowCount ?? 0) === 0) return null;
   return entity;
 }
 
@@ -735,9 +813,10 @@ export async function updateEntity(
   registryId: string,
   entityId: string,
   name: string,
-  color?: string,
+  color: string | undefined,
+  userId: string,
 ): Promise<Entity | undefined> {
-  const entities = await getEntities(registryId);
+  const entities = await getEntities(registryId, userId);
   const idx = entities.findIndex((e) => e.id === entityId);
   if (idx === -1) return undefined;
   entities[idx] = {
@@ -745,16 +824,22 @@ export async function updateEntity(
     name,
     color: color ?? entities[idx].color,
   };
-  await query(
-    "UPDATE registries SET entities_json = $1 WHERE id = $2",
-    [JSON.stringify(entities), registryId],
+  const result = await query(
+    `UPDATE registries SET entities_json = $1 WHERE id = $2
+     AND EXISTS (
+       SELECT 1 FROM registry_members rm
+       WHERE rm.registry_id = registries.id AND rm.user_id = $3
+     )`,
+    [JSON.stringify(entities), registryId, userId],
   );
+  if ((result.rowCount ?? 0) === 0) return undefined;
   return entities[idx];
 }
 
 export async function deleteEntity(
   registryId: string,
   entityId: string,
+  userId: string,
 ): Promise<boolean> {
   const txCheck = await query(
     `SELECT 1 FROM transactions WHERE registry_id = $1
@@ -764,15 +849,19 @@ export async function deleteEntity(
   );
   if (txCheck.rows.length > 0) return false;
 
-  const entities = await getEntities(registryId);
+  const entities = await getEntities(registryId, userId);
   const idx = entities.findIndex((e) => e.id === entityId);
   if (idx === -1) return false;
   entities.splice(idx, 1);
-  await query(
-    "UPDATE registries SET entities_json = $1 WHERE id = $2",
-    [JSON.stringify(entities), registryId],
+  const result = await query(
+    `UPDATE registries SET entities_json = $1 WHERE id = $2
+     AND EXISTS (
+       SELECT 1 FROM registry_members rm
+       WHERE rm.registry_id = registries.id AND rm.user_id = $3
+     )`,
+    [JSON.stringify(entities), registryId, userId],
   );
-  return true;
+  return (result.rowCount ?? 0) > 0;
 }
 
 export async function getRegistryMemberCount(
@@ -788,12 +877,19 @@ export async function getRegistryMemberCount(
 export async function setDefaultSplit(
   registryId: string,
   splits: { userId: string; percentage: number }[],
-): Promise<void> {
+  ownerId: string,
+): Promise<boolean> {
   const memberCount = await getRegistryMemberCount(registryId);
-  await query(
-    "UPDATE registries SET default_split_json = $1, default_split_member_count = $2 WHERE id = $3",
-    [JSON.stringify({ splits }), memberCount, registryId],
+  // Owner-scoped: the UPDATE no-ops unless `ownerId` owns the registry.
+  const result = await query(
+    `UPDATE registries SET default_split_json = $1, default_split_member_count = $2 WHERE id = $3
+     AND EXISTS (
+       SELECT 1 FROM registry_members rm
+       WHERE rm.registry_id = registries.id AND rm.user_id = $4 AND rm.role = 'owner'
+     )`,
+    [JSON.stringify({ splits }), memberCount, registryId, ownerId],
   );
+  return (result.rowCount ?? 0) > 0;
 }
 
 export async function clearDefaultSplit(
@@ -803,6 +899,25 @@ export async function clearDefaultSplit(
     "UPDATE registries SET default_split_json = NULL, default_split_member_count = NULL WHERE id = $1",
     [registryId],
   );
+}
+
+/**
+ * Owner-scoped variant of {@link clearDefaultSplit} for user-facing routes.
+ * Returns `false` when `ownerId` doesn't own the registry (no-op).
+ */
+export async function clearDefaultSplitForOwner(
+  registryId: string,
+  ownerId: string,
+): Promise<boolean> {
+  const result = await query(
+    `UPDATE registries SET default_split_json = NULL, default_split_member_count = NULL WHERE id = $1
+     AND EXISTS (
+       SELECT 1 FROM registry_members rm
+       WHERE rm.registry_id = registries.id AND rm.user_id = $2 AND rm.role = 'owner'
+     )`,
+    [registryId, ownerId],
+  );
+  return (result.rowCount ?? 0) > 0;
 }
 
 export async function invalidateDefaultSplitIfNeeded(
@@ -829,13 +944,17 @@ export async function createInvitation(
   maxUses?: number,
 ): Promise<{ id: string; code: string; expiresAt: Date | null }> {
   const code = generateInviteCode();
+  // Invitations created without an explicit expiry (e.g. from the UI) default
+  // to 7 days instead of being valid forever.
+  const effectiveExpiresAt = expiresAt ??
+    new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   const result = await query(
     `INSERT INTO invitations (registry_id, code, created_by, expires_at, max_uses) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
     [
       registryId,
       code,
       createdBy,
-      expiresAt?.toISOString() ?? null,
+      effectiveExpiresAt.toISOString(),
       maxUses ?? null,
     ],
   );
@@ -853,7 +972,7 @@ export async function createInvitation(
   return {
     id: row.id as string,
     code: row.code as string,
-    expiresAt: row.expires_at ? new Date(row.expires_at as string) : null,
+    expiresAt: effectiveExpiresAt,
   };
 }
 
@@ -897,9 +1016,6 @@ export async function useInvitation(
   if (invitation.expiresAt && invitation.expiresAt < new Date()) {
     throw new Error("Invitation has expired");
   }
-  if (
-    invitation.maxUses !== null && invitation.currentUses >= invitation.maxUses
-  ) throw new Error("Invitation has reached max uses");
 
   const existing = await query(
     "SELECT registry_id FROM registry_members WHERE registry_id = $1 AND user_id = $2",
@@ -909,14 +1025,23 @@ export async function useInvitation(
     return invitation.registryId;
   }
 
-  await query(
-    "INSERT INTO registry_members (registry_id, user_id, role) VALUES ($1, $2, 'member')",
-    [invitation.registryId, userId],
+  // Atomic check-and-increment: the UPDATE itself enforces not-revoked and
+  // max-uses, so concurrent joins can't overshoot max_uses (the read above
+  // only exists to give precise error messages).
+  const claimed = await query(
+    `UPDATE invitations SET current_uses = current_uses + 1
+     WHERE id = $1 AND revoked_at IS NULL
+       AND (max_uses IS NULL OR current_uses < max_uses)
+     RETURNING id`,
+    [invitation.id],
   );
+  if (claimed.rows.length === 0) {
+    throw new Error("Invitation has reached max uses");
+  }
 
   await query(
-    "UPDATE invitations SET current_uses = current_uses + 1 WHERE id = $1",
-    [invitation.id],
+    "INSERT INTO registry_members (registry_id, user_id, role) VALUES ($1, $2, 'member') ON CONFLICT DO NOTHING",
+    [invitation.registryId, userId],
   );
 
   await invalidateDefaultSplitIfNeeded(invitation.registryId);
@@ -962,11 +1087,20 @@ export async function getInvitationsForRegistry(registryId: string): Promise<{
 export async function revokeInvitation(
   invitationId: string,
   userId: string,
-): Promise<void> {
-  await query(
-    "UPDATE invitations SET revoked_at = now() WHERE id = $1",
-    [invitationId],
+): Promise<boolean> {
+  // Ownership-scoped: the UPDATE no-ops unless `userId` owns the registry the
+  // invitation belongs to, so a bare invitation id can't be revoked across
+  // registries. Returns false in that case (and when already revoked).
+  const result = await query(
+    `UPDATE invitations SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL
+     AND registry_id IN (
+       SELECT rm.registry_id FROM registry_members rm
+       WHERE rm.user_id = $2 AND rm.role = 'owner'
+         AND rm.registry_id = invitations.registry_id
+     )`,
+    [invitationId, userId],
   );
+  if ((result.rowCount ?? 0) === 0) return false;
   await query(
     `INSERT INTO audit_log (actor_id, action, target_type, target_id, metadata) VALUES ($1, $2, $3, $4, $5)`,
     [
@@ -977,6 +1111,7 @@ export async function revokeInvitation(
       JSON.stringify({}),
     ],
   );
+  return true;
 }
 
 export async function isEmailAllowed(email: string): Promise<boolean> {

@@ -1,10 +1,12 @@
 /**
  * Tests for the default-split route handler.
  *
- * Covers the pre-DB validation logic: body presence, the isOwner gate, the
- * percentage-sum check (±0.01 threshold), and participant-membership
- * validation. The store calls (`setDefaultSplit`/`clearDefaultSplit`) run
- * against the stubbed query, so the happy paths are exercised too.
+ * Covers the pre-DB validation logic: body presence, the per-registry
+ * ownership gate (B4 — the target registry must be in ownerRegistryIds, not
+ * just the active one), the percentage-sum check (±0.01 threshold), and
+ * participant-membership validation against the TARGET registry. The store
+ * calls (`setDefaultSplit`/`clearDefaultSplitForOwner`) run against the
+ * stubbed query, so the happy paths are exercised too.
  */
 import { assertEquals } from "@std/assert";
 import { beforeEach, describe, it } from "@std/testing/bdd";
@@ -16,7 +18,6 @@ import {
   mkParticipant,
 } from "../../../test/helpers.ts";
 import {
-  __queryLog,
   __resetDbStub,
   __setQueryResult,
 } from "../../../test/fixtures/db_stub.ts";
@@ -31,14 +32,28 @@ const participants = [
 function ownerCtx(req: Request) {
   return makeCtx({
     req,
-    state: { user: { id: "u1" } as never, isOwner: true, participants },
+    state: {
+      user: { id: "u1" } as never,
+      isOwner: true,
+      participants,
+      activeRegistry: { id: "r1" } as never,
+      registries: [{ id: "r1" } as never],
+      ownerRegistryIds: new Set(["r1"]),
+    },
   });
 }
 
 function memberCtx(req: Request) {
   return makeCtx({
     req,
-    state: { user: { id: "u2" } as never, isOwner: false, participants },
+    state: {
+      user: { id: "u2" } as never,
+      isOwner: false,
+      participants,
+      activeRegistry: { id: "r1" } as never,
+      registries: [{ id: "r1" } as never],
+      ownerRegistryIds: new Set<string>(),
+    },
   });
 }
 
@@ -58,6 +73,26 @@ describe("default-split POST", () => {
         splits: [{ userId: "u1", percentage: 100 }],
       }),
     );
+    const res = await handler.POST!(ctx as never);
+    assertEquals(res.status, 403);
+  });
+
+  it("rejects an owner of a DIFFERENT registry with 403 (B4)", async () => {
+    // Owning the active registry must not authorize mutating another one.
+    const ctx = makeCtx({
+      req: jsonRequest(URL, {
+        registryId: "r-other",
+        splits: [{ userId: "u1", percentage: 100 }],
+      }),
+      state: {
+        user: { id: "u1" } as never,
+        isOwner: true,
+        participants,
+        activeRegistry: { id: "r1" } as never,
+        registries: [{ id: "r1" } as never, { id: "r-other" } as never],
+        ownerRegistryIds: new Set(["r1"]),
+      },
+    });
     const res = await handler.POST!(ctx as never);
     assertEquals(res.status, 403);
   });
@@ -118,11 +153,47 @@ describe("default-split POST", () => {
     assertEquals(res.status, 200);
     assertEquals(await res.json(), { ok: true });
   });
+
+  it("validates split userIds against the TARGET registry when it isn't the active one (B4)", async () => {
+    // The owner owns r2 but it's not active: participants must be fetched,
+    // not taken from ctx.state.participants (which describes r1).
+    // getUsers returns [] and getEntities returns [] → u1 is not a
+    // participant of r2 → 400.
+    __setQueryResult(() => ({ rows: [] }));
+    const ctx = makeCtx({
+      req: jsonRequest(URL, {
+        registryId: "r2",
+        splits: [{ userId: "u1", percentage: 100 }],
+      }),
+      state: {
+        user: { id: "u1" } as never,
+        isOwner: false,
+        participants,
+        activeRegistry: { id: "r1" } as never,
+        registries: [{ id: "r1" } as never, { id: "r2" } as never],
+        ownerRegistryIds: new Set(["r2"]),
+      },
+    });
+    const res = await handler.POST!(ctx as never);
+    assertEquals(res.status, 400);
+  });
 });
 
 describe("default-split DELETE", () => {
+  it("rejects a missing registryId with 400", async () => {
+    const ctx = ownerCtx(jsonDelete(URL, {}));
+    const res = await handler.DELETE!(ctx as never);
+    assertEquals(res.status, 400);
+  });
+
   it("rejects a non-owner with 403", async () => {
     const ctx = memberCtx(jsonDelete(URL, { registryId: "r1" }));
+    const res = await handler.DELETE!(ctx as never);
+    assertEquals(res.status, 403);
+  });
+
+  it("rejects clearing another registry's split with 403 (B4)", async () => {
+    const ctx = ownerCtx(jsonDelete(URL, { registryId: "r-other" }));
     const res = await handler.DELETE!(ctx as never);
     assertEquals(res.status, 403);
   });

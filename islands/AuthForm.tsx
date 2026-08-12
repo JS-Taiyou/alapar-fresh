@@ -1,6 +1,7 @@
 import { useSignal } from "@preact/signals";
 import { createClient } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { clearSupabaseBrowserStorage } from "./auth-storage.ts";
 
 interface AuthFormProps {
   mode: "login" | "signup";
@@ -20,11 +21,22 @@ export default function AuthForm(props: AuthFormProps) {
   const redirectParam = typeof globalThis.location !== "undefined"
     ? new URL(globalThis.location.href).searchParams.get("redirect")
     : null;
-  const redirectPath = redirectParam ?? "/dashboard";
+  // Open-redirect guard: only relative same-origin paths are honored.
+  const redirectPath = redirectParam && /^\/(?!\/)/.test(redirectParam)
+    ? redirectParam
+    : "/dashboard";
 
   let client: SupabaseClient;
   try {
-    client = createClient(props.supabaseUrl, props.supabaseAnonKey);
+    // Email/password sessions are handed straight to the server (which sets
+    // HttpOnly cookies) — never persisted to browser storage.
+    client = createClient(props.supabaseUrl, props.supabaseAnonKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
   } catch {
     error.value = "Failed to initialize auth client";
     return <div class="text-red-400 text-center p-4">{error.value}</div>;
@@ -34,7 +46,23 @@ export default function AuthForm(props: AuthFormProps) {
     error.value = "";
     loading.value = true;
     try {
-      const { error: oauthError } = await client.auth.signInWithOAuth({
+      // Dedicated PKCE client for OAuth. persistSession: true is required
+      // here (and only here): the PKCE code verifier must survive the
+      // redirect round-trip to Google and back, which means web storage.
+      // AuthCallback wipes the stored keys once the exchange completes.
+      const oauthClient = createClient(
+        props.supabaseUrl,
+        props.supabaseAnonKey,
+        {
+          auth: {
+            flowType: "pkce",
+            persistSession: true,
+            autoRefreshToken: false,
+            detectSessionInUrl: false,
+          },
+        },
+      );
+      const { error: oauthError } = await oauthClient.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo: globalThis.location.origin + "/auth/callback?next=" +
@@ -42,9 +70,11 @@ export default function AuthForm(props: AuthFormProps) {
         },
       });
       if (oauthError) {
+        clearSupabaseBrowserStorage();
         error.value = oauthError.message;
         loading.value = false;
       }
+      // On success the browser navigates away to Google — nothing to clean up.
     } catch (err) {
       error.value = err instanceof Error ? err.message : "Error desconocido";
       loading.value = false;
@@ -332,8 +362,8 @@ export default function AuthForm(props: AuthFormProps) {
               No tienes cuenta?{" "}
               <a
                 href={`/signup${
-                  redirectParam
-                    ? `?redirect=${encodeURIComponent(redirectParam)}`
+                  redirectPath !== "/dashboard"
+                    ? `?redirect=${encodeURIComponent(redirectPath)}`
                     : ""
                 }`}
                 class="text-primary hover:underline"
@@ -347,8 +377,8 @@ export default function AuthForm(props: AuthFormProps) {
               Ya tienes cuenta?{" "}
               <a
                 href={`/login${
-                  redirectParam
-                    ? `?redirect=${encodeURIComponent(redirectParam)}`
+                  redirectPath !== "/dashboard"
+                    ? `?redirect=${encodeURIComponent(redirectPath)}`
                     : ""
                 }`}
                 class="text-primary hover:underline"

@@ -28,6 +28,13 @@ var with SSL.
 supabase_auth_id) with app profile (name, color). Created at signup time. One
 row per real person, shared across all registries.
 
+**Indexes**: besides the case-sensitive `UNIQUE` on `email`, a unique expression
+index on `lower(email)` (`users_email_lower_uidx`, added by `tighten_rls.sql`)
+enforces case-insensitive email uniqueness. A trigger
+(`trg_users_protect_identity`) keeps `email` and `supabase_auth_id` immutable
+for client (JWT) callers while still allowing server-side sync — see
+[Triggers](#triggers).
+
 ---
 
 ### `registries` — Expense Groups
@@ -62,15 +69,18 @@ the registry and can be referenced in `transactions.user_paid` and `split_json`.
 
 ### `registry_members` — Membership & Roles
 
-| Column      | Type        | Constraints                | Description             |
-| ----------- | ----------- | -------------------------- | ----------------------- |
-| id          | UUID        | PK, auto                   | Unique identifier       |
-| registry_id | UUID        | FK → registries, CASCADE   | Target registry         |
-| user_id     | UUID        | FK → users, CASCADE        | Member                  |
-| role        | TEXT        | NOT NULL, default 'member' | `'owner'` or `'member'` |
-| joined_at   | TIMESTAMPTZ | NOT NULL, default now()    | Join timestamp          |
+| Column      | Type        | Constraints                                   | Description             |
+| ----------- | ----------- | --------------------------------------------- | ----------------------- |
+| id          | UUID        | PK, auto                                      | Unique identifier       |
+| registry_id | UUID        | FK → registries, CASCADE                      | Target registry         |
+| user_id     | UUID        | FK → users, CASCADE                           | Member                  |
+| role        | TEXT        | NOT NULL, default 'member', CHECK (see below) | `'owner'` or `'member'` |
+| joined_at   | TIMESTAMPTZ | NOT NULL, default now()                       | Join timestamp          |
 
 **Unique**: `(registry_id, user_id)` — one membership per user per registry.
+
+**CHECK**: `role IN ('owner', 'member')` (`registry_members_role_check`, added
+by `tighten_rls.sql`).
 
 **Roles**:
 
@@ -159,7 +169,11 @@ historical period. Active transactions have `exercise_id = NULL`.
 **Indexes**: `code`, `registry_id`
 
 **Code generation**: 8 characters from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`
-(excludes ambiguous: I, O, 0, 1).
+(excludes ambiguous: I, O, 0, 1), drawn with `crypto.getRandomValues` (CSPRNG —
+invite codes are bearer secrets). Invitations created without an explicit
+`expires_at` (e.g. from the UI) default to a 7-day expiry. Accepting an
+invitation increments `current_uses` via an atomic check-and-increment UPDATE
+that enforces not-revoked and `max_uses` in SQL.
 
 ---
 
@@ -256,31 +270,84 @@ Sets `registries.last_modified = now()` for the affected `registry_id` whenever
 a transaction is created, updated, or deleted. Used by both client and server
 caching layers to detect stale data.
 
+### `trg_users_protect_identity` — Immutable identity columns
+
+**On**: `users` table, BEFORE UPDATE, FOR EACH ROW
+
+**Function**: `protect_user_identity_columns()` (created by `tighten_rls.sql`)
+
+When the request carries a Supabase user JWT (`auth.uid() IS NOT NULL` — i.e.
+PostgREST/Realtime client roles), forces `email` and `supabase_auth_id` back to
+their OLD values, so a client can't change its own identity (account takeover /
+allowlist bypass). The app server connects directly without JWT claims, so
+server-side email sync and name updates are unaffected; `name`/`color` remain
+editable by clients.
+
 ---
 
 ## Migrations
 
 Migrations must be run in order:
 
-1. **`migrate_entities_phase1.sql`** — Adds `entities_json` to registries,
-   extracts entities from `users` table, drops FK on `user_paid`, changes
-   `creator_id` from CASCADE to SET NULL
-2. **Manual step** — Deduplicate `users` table (one row per real person per
-   registry, keeping the ID referenced by the most transactions)
-3. **`migrate_entities_phase2.sql`** — Drops `is_entity`, `registry_id` columns
-   from `users`
-4. **`migrate_merge_users.sql`** — Merges `system_users` into `users` table,
-   remaps all FK references, drops `system_users` table
-5. **`add_push_subscriptions.sql`** — Adds `push_subscriptions` table for Web
-   Push notifications
-6. **`add_related_transaction_id.sql`** — Adds `related_transaction_id` column
-   to `transactions`
-7. **`add_registry_last_modified.sql`** — Adds `last_modified` column to
-   `registries`, creates `update_registry_last_modified()` function and
-   `trg_transactions_registry_modified` trigger
-8. **`add_transaction_balances.sql`** — Adds `transaction_balances` table for
-   persisted per-user balance deltas (see below), with a backfill that computes
-   deltas for all existing transactions
+1. **`schema.sql`** — Full PostgreSQL schema (tables, constraints, indexes)
+2. **`add_*.sql`** — Incremental feature migrations:
+   - `add_push_subscriptions.sql` — Web Push subscriptions table (+ its own RLS
+     block)
+   - `add_related_transaction_id.sql` — `related_transaction_id` column on
+     `transactions`
+   - `add_registry_last_modified.sql` — `last_modified` column, the
+     `update_registry_last_modified()` function and its trigger
+   - `add_transaction_payments.sql` — expense↔payment links table (+ RLS)
+   - `add_transaction_balances.sql` — per-user balance deltas table (+ RLS),
+     with a backfill for existing transactions
+3. **`enable_rls.sql`** — Enables Row-Level Security on all tables and creates
+   the policies + helper functions (`app_user_id()`, `is_registry_member()`).
+   Re-runnable: every `CREATE POLICY` is preceded by `DROP POLICY IF EXISTS`
+4. **`tighten_rls.sql`** — Idempotent hardening follow-up. **Existing projects
+   that already applied the files above run this next** (fresh setups just run
+   the whole chain). See [Row-Level Security](#row-level-security) below
+5. **`enable_realtime.sql`** — Codifies
+   `ALTER PUBLICATION supabase_realtime ADD TABLE transactions` (idempotent)
+
+Run order: `schema.sql` → `add_*.sql` → `enable_rls.sql` → `tighten_rls.sql` →
+`enable_realtime.sql`.
+
+---
+
+## Row-Level Security
+
+**Posture**: the app server connects as a privileged role that bypasses RLS by
+design — authorization lives in the middleware/route layer. RLS exists to
+protect the two paths that reach the database with end-user credentials:
+
+- **Supabase Realtime** — subscribers connect with the user's JWT, so policies
+  gate which rows a channel can deliver
+- **Direct PostgREST access** via the Supabase client
+
+All tables have `ENABLE` + `FORCE ROW LEVEL SECURITY`. Helper functions
+`app_user_id()` (maps `auth.uid()` → `users.id`) and
+`is_registry_member(reg_id)` back the policies. Both have
+`REVOKE EXECUTE ... FROM PUBLIC` — note this does not block RPC calls from
+Supabase's default-granted authenticated roles, but calling either directly is
+harmless (they only read the caller's own identity/membership).
+
+Key policy points (final state after `tighten_rls.sql`):
+
+- `registry_members`: **no client INSERT policy** — joins happen server-side
+  only
+- `invitations`: SELECT scoped to `is_registry_member(registry_id)` (was: any
+  authenticated user)
+- `registries`: DELETE requires the `owner` role
+- `transactions`: per-command policies — SELECT by membership; INSERT also
+  requires `creator_id = app_user_id()`; UPDATE/DELETE only while
+  `exercise_id IS NULL` (settled transactions are immutable for clients)
+- `audit_log`, `allowed_emails`: no client policies at all (server-only tables)
+- `transaction_payments`: expense and pago must belong to the **same** registry
+- `transaction_balances`, `push_subscriptions`: membership/self-scoped (their
+  `add_*.sql` migrations carry matching RLS blocks)
+- `users`: `email`/`supabase_auth_id` immutable for JWT callers via
+  `trg_users_protect_identity`; `role` CHECK on `registry_members`; unique index
+  on `lower(email)`
 
 ---
 

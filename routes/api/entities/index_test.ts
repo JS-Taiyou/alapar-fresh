@@ -1,5 +1,6 @@
 /**
- * Tests for the entities collection route handler (POST validation + membership).
+ * Tests for the entities collection route handler (POST validation + membership,
+ * GET membership check).
  */
 import { assertEquals } from "@std/assert";
 import { beforeEach, describe, it } from "@std/testing/bdd";
@@ -11,18 +12,34 @@ import {
 } from "../../../test/fixtures/db_stub.ts";
 
 const URL = "https://test.local/api/entities";
+const user = { id: "u1" } as never;
 
 beforeEach(() => __resetDbStub());
 
 describe("entities POST", () => {
+  it("rejects an anonymous request with 401", async () => {
+    const ctx = makeCtx({
+      req: jsonRequest(URL, { name: "Landlord" }),
+      state: { user: null },
+    });
+    const res = await handler.POST!(ctx as never);
+    assertEquals(res.status, 401);
+  });
+
   it("rejects a missing name with 400", async () => {
-    const ctx = makeCtx({ req: jsonRequest(URL, { name: "" }) });
+    const ctx = makeCtx({
+      req: jsonRequest(URL, { name: "" }),
+      state: { user },
+    });
     const res = await handler.POST!(ctx as never);
     assertEquals(res.status, 400);
   });
 
   it("rejects a whitespace-only name with 400", async () => {
-    const ctx = makeCtx({ req: jsonRequest(URL, { name: "   " }) });
+    const ctx = makeCtx({
+      req: jsonRequest(URL, { name: "   " }),
+      state: { user },
+    });
     const res = await handler.POST!(ctx as never);
     assertEquals(res.status, 400);
   });
@@ -30,7 +47,7 @@ describe("entities POST", () => {
   it("rejects a request with no active registry and no registryId with 400", async () => {
     const ctx = makeCtx({
       req: jsonRequest(URL, { name: "Landlord" }),
-      state: { activeRegistry: null, registries: [] },
+      state: { user, activeRegistry: null, registries: [] },
     });
     const res = await handler.POST!(ctx as never);
     assertEquals(res.status, 400);
@@ -39,7 +56,7 @@ describe("entities POST", () => {
   it("rejects a non-member of the registry with 403", async () => {
     const ctx = makeCtx({
       req: jsonRequest(URL, { name: "Landlord", registryId: "r1" }),
-      state: { registries: [{ id: "r2" } as never] },
+      state: { user, registries: [{ id: "r2" } as never] },
     });
     const res = await handler.POST!(ctx as never);
     assertEquals(res.status, 403);
@@ -47,15 +64,15 @@ describe("entities POST", () => {
 
   it("creates an entity and returns 201 for a member", async () => {
     // createEntity → getEntities (SELECT entities_json) returns [] first,
-    // then UPDATE; the stub returns a created-row shape.
-    __setQueryResult(() => ({ rows: [] }));
+    // then the membership-scoped UPDATE (rowCount 1).
+    __setQueryResult(() => ({ rows: [], rowCount: 1 }));
     const ctx = makeCtx({
       req: jsonRequest(URL, {
         name: "Landlord",
         registryId: "r1",
         color: "#999",
       }),
-      state: { registries: [{ id: "r1" } as never] },
+      state: { user, registries: [{ id: "r1" } as never] },
     });
     const res = await handler.POST!(ctx as never);
     assertEquals(res.status, 201);
@@ -63,13 +80,48 @@ describe("entities POST", () => {
 });
 
 describe("entities GET", () => {
+  it("returns 401 when there is no user", async () => {
+    const ctx = makeCtx({
+      req: new Request(URL),
+      state: { user: null },
+    });
+    const res = await handler.GET!(ctx as never);
+    assertEquals(res.status, 401);
+  });
+
   it("returns an empty list when no registryId is resolvable", async () => {
     const ctx = makeCtx({
       req: new Request(URL),
-      state: { activeRegistry: null },
+      state: { user, activeRegistry: null },
     });
     const res = await handler.GET!(ctx as never);
     assertEquals(res.status, 200);
     assertEquals(await res.json(), []);
+  });
+
+  it("rejects a registryId the user is not a member of with 403 (S6)", async () => {
+    const ctx = makeCtx({
+      req: new Request(`${URL}?registryId=r-other`),
+      state: { user, registries: [{ id: "r1" } as never] },
+    });
+    const res = await handler.GET!(ctx as never);
+    assertEquals(res.status, 403);
+  });
+
+  it("returns the entities for a member registry", async () => {
+    __setQueryResult(() => ({
+      rows: [{
+        entities_json: [{ id: "e-1", name: "Landlord", color: "#123" }],
+      }],
+    }));
+    const ctx = makeCtx({
+      req: new Request(`${URL}?registryId=r1`),
+      state: { user, registries: [{ id: "r1" } as never] },
+    });
+    const res = await handler.GET!(ctx as never);
+    assertEquals(res.status, 200);
+    assertEquals(await res.json(), [
+      { id: "e-1", name: "Landlord", color: "#123" },
+    ]);
   });
 });

@@ -6,7 +6,6 @@ import {
   getActiveTransactions,
   getEntities,
   getUsers,
-  isMemberOfRegistry,
 } from "../../../lib/store.ts";
 import { invalidateRegistry } from "../../../lib/server-cache.ts";
 
@@ -50,18 +49,16 @@ export const handler = define.handlers({
       return ctx.redirect("/dashboard");
     }
 
-    if (
-      requestedRegistryId &&
-      requestedRegistryId !== ctx.state.activeRegistry?.id
-    ) {
-      const member = await isMemberOfRegistry(userId, registryId);
-      if (!member) {
-        const accept = ctx.req.headers.get("Accept") ?? "";
-        if (accept.includes("application/json")) {
-          return Response.json({ error: "Forbidden" }, { status: 403 });
-        }
-        return ctx.redirect("/dashboard");
+    // Closing an exercise is destructive and owner-only (S8) — for the
+    // active registry too, not just when a different one is requested.
+    if (!ctx.state.ownerRegistryIds.has(registryId)) {
+      const accept = ctx.req.headers.get("Accept") ?? "";
+      if (accept.includes("application/json")) {
+        return Response.json({ error: "Only owners can close an exercise" }, {
+          status: 403,
+        });
       }
+      return ctx.redirect("/dashboard");
     }
 
     const active = await getActiveTransactions(registryId);
@@ -75,7 +72,7 @@ export const handler = define.handlers({
 
     const [users, entities] = await Promise.all([
       getUsers(registryId),
-      getEntities(registryId),
+      getEntities(registryId, userId),
     ]);
     const participants = [
       ...users.map((u) => ({ id: u.id, name: u.name, color: u.color })),

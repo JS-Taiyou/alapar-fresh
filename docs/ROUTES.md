@@ -54,6 +54,8 @@ cookies.
 - If user is logged in → shows `JoinButton` island to accept invite
 - If user is not logged in → links to `/login` and `/signup`
 
+Rate-limited: 20 requests/minute per IP (429 beyond that).
+
 ### `/registries/new` — New Registry Form
 
 **File**: `routes/registries/new.tsx`
@@ -133,8 +135,11 @@ Wraps all dashboard routes in a sidebar + content layout:
 **Handler (GET)**:
 
 1. Fetches exercise by ID (`getExerciseById`)
-2. Fetches all transactions in that exercise (`getTransactionsByExercise`)
-3. Enriches each with `paidByUser` (looked up from `participants` map)
+2. Verifies the exercise belongs to one of the caller's registries — 404
+   otherwise (an exercise from a foreign registry is indistinguishable from
+   "does not exist")
+3. Fetches all transactions in that exercise (`getTransactionsByExercise`)
+4. Enriches each with `paidByUser` (looked up from `participants` map)
 
 **Page rendering**:
 
@@ -158,13 +163,15 @@ function).
 Returns:
 `{ transactions, users, balance, balanceEntries, spawnCandidates, defaultSplit, entityIds }`
 
-### `/api/stamp/[id]` — Registry Timestamp (GET)
+### `/api/stamp/[id]` — Registry Timestamp (POST)
 
 **File**: `routes/api/stamp/[id].ts`
 
-Lightweight endpoint. Validates user membership, returns `{ lastModified }` ISO
-string from `registries.last_modified`. Used by client-side cache to detect
-stale data without full dashboard fetch.
+Lightweight endpoint. **POST-only** — GET returns 405 with `Allow: POST`.
+Validates user membership (403 otherwise), returns `{ lastModified }` ISO string
+from `registries.last_modified`. Used by client-side cache to detect stale data
+without full dashboard fetch. As a side effect, the POST also marks the registry
+as the caller's active registry server-side (one reason it isn't a GET).
 
 Handled by the middleware's lightweight path (no `resolveUserState` — only basic
 auth + user lookup).
@@ -173,19 +180,49 @@ auth + user lookup).
 
 **File**: `routes/api/auth/callback.ts`
 
-Receives Supabase `accessToken` and `refreshToken` in JSON body. Sets them as
-`HttpOnly` cookies (`sb-access-token`, `sb-refresh-token`).
+Receives Supabase `accessToken` and `refreshToken` in a JSON body
+(`Content-Type: application/json` required — 400 otherwise). The token pair is
+validated with Supabase (`auth.getUser`) **before** any cookie is set — invalid
+tokens get a 401. Sets them as `HttpOnly` cookies (`sb-access-token`,
+`sb-refresh-token`).
 
 - Access token cookie: 7-day expiry
 - Refresh token cookie: 30-day expiry
+- `Secure` flag on both in production (see `COOKIE_SECURE` in `.env.example`)
 
-Called by `AuthForm` island after successful Supabase login/signup.
+Called by `AuthForm` island after successful Supabase login/signup, and by
+`AuthCallback` after the OAuth PKCE code exchange. Rate-limited (20 req/min per
+IP).
+
+### `/api/auth/check-email` — Allowlist Check (POST)
+
+**File**: `routes/api/auth/check-email.ts`
+
+Receives JSON `{ email }`. Always returns 200 with `{ allowed: boolean }` — the
+uniform response avoids leaking probe details (the per-IP rate limit is the
+actual enumeration mitigation). Used by the signup form before calling Supabase
+`signUp()`.
+
+### `/api/auth/token` — Current Access Token (GET)
+
+**File**: `routes/api/auth/token.ts`
+
+Returns `{ accessToken }` — the token the middleware already validated (and
+refreshed, if needed) for this request, served from `ctx.state.accessToken`
+instead of re-validating with possibly-spent cookies. 401 when unauthenticated.
+This is the seam the realtime client (`lib/realtime.ts`) uses to authenticate
+the Supabase channel, since the token lives in an `HttpOnly` cookie and is never
+serialized into page HTML.
 
 ### `/api/auth/logout` — Logout (POST)
 
 **File**: `routes/api/auth/logout.ts`
 
-Clears auth cookies and redirects to `/login`.
+Revokes the session server-side (`auth.admin.signOut`, best-effort — also
+invalidates refresh tokens), clears auth cookies, and redirects to `/login`
+(returns JSON `{ ok: true }` for `Accept: application/json`). The client
+additionally wipes service-worker caches, IndexedDB snapshots, and any `sb-*`
+localStorage keys before leaving (see `Sidebar` island).
 
 ### `/api/registries` — Create Registry (POST)
 
@@ -210,26 +247,33 @@ registry. Updates `user_preferences.active_registry_id`. Returns `{ ok: true }`.
 
 **File**: `routes/api/registries/[id].ts`
 
-**PATCH**: Renames registry. Returns updated registry JSON.
+**PATCH**: Renames registry. **Owner-only** (403 for plain members). Returns
+updated registry JSON.
 
-**DELETE**: Deletes registry only if it has zero transactions. Redirects
+**DELETE**: **Owner-only** (checked in middleware state and re-checked in SQL).
+Deletes registry only if it has zero transactions (409 otherwise). Redirects
 remaining registries.
 
 ### `/api/registries/default-split` — Configure Default Split (POST/DELETE)
 
 **File**: `routes/api/registries/default-split.ts`
 
-**POST**: Owner-only. Receives JSON
+**POST**: Owner-only — requires ownership of the **target** registry from the
+body (not just the active one; 403 otherwise). Receives JSON
 `{ splits: [{ userId, percentage }], registryId }`. Validates that all userIds
-are members of the registry. Saves to `registries.default_split_json`.
+are participants (users or entities) of that registry and that percentages sum
+to 100%. Saves to `registries.default_split_json`.
 
-**DELETE**: Owner-only. Clears default split for the registry.
+**DELETE**: Same target-registry ownership check. Clears default split for the
+registry.
 
 ### `/api/entities` — Entity CRUD
 
 **File**: `routes/api/entities/index.ts`
 
-**GET**: Returns all entities for a registry (query param `registryId`).
+**GET**: Returns all entities for a registry (query param `registryId`, defaults
+to the active registry). Requires membership of that registry — 403 otherwise,
+so foreign registry contents can't leak.
 
 **POST**: Creates a new entity in `registries.entities_json`. Auto-increments
 integer ID. Invalidates server cache.
@@ -248,15 +292,20 @@ integer ID. Invalidates server cache.
 **GET**: Returns active transactions for the registry via server cache. Supports
 ETag/304.
 
-**POST**: Creates transaction via `createTransaction()`. Invalidates server
-cache for the registry. Sends Web Push notification to other registry members.
+**POST**: Creates transaction via `createTransaction()`. Cross-reference
+validation: `userPaid` and every split `userId` must be participants (users or
+entities) of the target registry, and `relatedTransactionId`/payment
+`expenseIds` must resolve to transactions in that same registry (400 otherwise).
+Invalidates server cache for the registry. Sends Web Push notification to other
+registry members.
 
 ### `/api/transactions/[id]` — Update/Delete Transaction
 
 **File**: `routes/api/transactions/[id].ts`
 
-**PUT**: Updates transaction fields from form data. Invalidates server cache for
-the registry. Sends Web Push.
+**PUT**: Updates transaction fields from form data, with the same
+participant/reference validation as POST. Invalidates server cache for the
+registry. Sends Web Push.
 
 **DELETE**: Deletes transaction by ID. Invalidates server cache. Returns 204 on
 success, 404 if not found. Sends Web Push.
@@ -273,6 +322,10 @@ from future carry-forward.
 
 **File**: `routes/api/exercises/index.ts`
 
+**Owner-only** — closing an exercise is destructive; the caller must own the
+target registry (403 otherwise, for the active registry too, not just when a
+different one is requested).
+
 Creates an exercise (cut) for the active registry:
 
 1. Checks for active transactions
@@ -284,11 +337,22 @@ Creates an exercise (cut) for the active registry:
 5. Invalidates server cache for the registry
 6. Redirects to `/dashboard`
 
+### `/api/exercises/[id]/transactions` — Exercise Transactions (GET)
+
+**File**: `routes/api/exercises/[id]/transactions.ts`
+
+Returns the transactions of an exercise. Membership-scoped: an exercise outside
+the caller's registries resolves to 404 (no existence leak), and the transaction
+query is scoped the same way in SQL as defense in depth.
+
 ### `/api/exercises/carry-forward` — Carry Forward Recurring (POST)
 
 **File**: `routes/api/exercises/carry-forward.ts`
 
-Receives JSON `{ items: [{ id, quantity? }] }`. For each item:
+Receives JSON `{ items: [{ id, quantity? }] }`. Validates **every** item: all
+ids must exist (404 otherwise) and every source transaction's registry must
+belong to the caller (403 otherwise). Batch caps: at most 100 items, integer
+`quantity` between 1 and 60. For each item:
 
 - If parcialidad: clones `quantity` times, incrementing `installmentCurrent`
 - If recurrente: clones once
@@ -298,9 +362,11 @@ Receives JSON `{ items: [{ id, quantity? }] }`. For each item:
 
 **File**: `routes/api/invitations/index.ts`
 
-Owner-only. Receives JSON `{ registryId, expiresAt?, maxUses? }`. Generates
-8-character alphanumeric code. Creates invitation record + audit log entry.
-Returns `{ id, code, expiresAt }`.
+Owner-only. Receives JSON `{ registryId, expiresAt?, maxUses? }`. Generates an
+8-character alphanumeric code with `crypto.getRandomValues` (CSPRNG). When no
+`expiresAt` is given (e.g. invitations created from the UI), the expiry defaults
+to 7 days. Creates invitation record + audit log entry. Returns
+`{ id, code, expiresAt }`.
 
 ### `/api/invitations/join` — Join via Invitation (POST)
 
@@ -310,12 +376,14 @@ Receives JSON `{ code }`. Validates invitation (not expired, not revoked, under
 max uses). If user is already a member, just sets active registry. Otherwise:
 
 - Adds user to `registry_members` as `member`
-- Increments invitation's `current_uses`
+- Increments invitation's `current_uses` — atomically: the UPDATE itself
+  enforces not-revoked and under-max-uses, so concurrent joins can't overshoot
 - Sets as active registry
 - Invalidates default split if member count changed
 - Logs to audit log
 
-Returns `{ registryId }` or error.
+Returns `{ registryId }` or error. Rate-limited (20 req/min per IP), as is the
+`/join/[code]` page.
 
 ### `/api/invitations/list` — List Invitations (GET)
 
@@ -328,4 +396,31 @@ registry.
 
 **File**: `routes/api/invitations/[id]/revoke.ts`
 
-Owner-only. Sets `revoked_at = now()` on the invitation. Logs to audit log.
+Owner-only, scoped in SQL: the revoke only lands when the caller owns the
+invitation's registry (regardless of which registry is active) — a foreign or
+unknown id no-ops and returns 404. Sets `revoked_at = now()` on the invitation.
+Logs to audit log.
+
+### `/api/push/subscribe` — Push Subscription (POST)
+
+**File**: `routes/api/push/subscribe.ts`
+
+Receives JSON `{ endpoint, keys: { p256dh, auth }, registryId? }`. Validates
+that `endpoint` is a genuine `https:` push-service URL and, when `registryId` is
+supplied, that the caller is a member of it (403 otherwise). Upserts on
+`endpoint` conflict — the row's `user_id`/`registry_id` are re-assigned so a
+re-subscribed endpoint can't keep delivering to a previous owner.
+
+### `/api/push/unsubscribe` — Remove Push Subscription (POST)
+
+**File**: `routes/api/push/unsubscribe.ts`
+
+Deletes the caller's push subscription by endpoint.
+
+### `/api/push/public-key` — VAPID Public Key (GET)
+
+**File**: `routes/api/push/public-key.ts`
+
+Returns the VAPID public key the client needs to subscribe. The server signs
+push JWTs with `aud` derived from each subscription's endpoint origin (RFC
+8292), so non-FCM push services (Firefox, Safari) work.

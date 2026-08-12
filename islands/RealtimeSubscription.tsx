@@ -9,24 +9,15 @@ interface Props {
   registryId: string;
   supabaseUrl: string;
   supabaseAnonKey: string;
-  accessToken: string;
 }
 
 export default function RealtimeSubscription(
-  { registryId, supabaseUrl, supabaseAnonKey, accessToken }: Props,
+  { registryId, supabaseUrl, supabaseAnonKey }: Props,
 ) {
   const status = useSignal("disconnected");
 
   useSignalEffect(() => {
     if (!registryId) return;
-
-    console.log("[RealtimeSubscription] Mounting for registry:", registryId, {
-      hasAccessToken: !!accessToken,
-      tokenPreview: accessToken
-        ? accessToken.substring(0, 30) + "..."
-        : "MISSING",
-      tokenLength: accessToken?.length ?? 0,
-    });
 
     setupRealtimeConfig(supabaseUrl, supabaseAnonKey);
     status.value = "connecting";
@@ -42,7 +33,6 @@ export default function RealtimeSubscription(
           new Date().toLocaleTimeString()
         }`;
       },
-      accessToken,
     ).then(() => {
       status.value = "subscribed";
     }).catch((err) => {

@@ -14,18 +14,52 @@ Client-side authentication form using Supabase JS SDK directly in the browser.
 
 **Behavior**:
 
-- Creates a Supabase client with the provided URL and anon key
-- **Signup flow**: Checks email against a hardcoded allowlist
-  (`ALLOWED_EMAILS`), calls `signUp()`, then sends tokens to
+- Creates a Supabase client with the provided URL and anon key, with
+  `persistSession: false` — sessions live in `HttpOnly` cookies, never in
+  browser storage
+- **Signup flow**: Checks the email against the server-side allowlist via
+  `POST /api/auth/check-email`, calls `signUp()`, then sends tokens to
   `/api/auth/callback` via POST
 - **Login flow**: Calls `signInWithPassword()`, then sends tokens to
   `/api/auth/callback`
-- On success, redirects to `/dashboard`
+- **Google OAuth**: Uses a dedicated PKCE client (`flowType: "pkce"`,
+  `persistSession: true` — required only so the code verifier survives the
+  redirect round-trip) and redirects through `/auth/callback`, where
+  `AuthCallback` exchanges the `?code=` param; the stored `sb-*` keys are wiped
+  after the exchange
+- On success, redirects to `/dashboard` (or to a validated relative
+  `redirect`/`next` path — absolute URLs are rejected)
 - Shows password toggle (eye icon, hold to reveal)
 - Cross-links between login and signup pages
 
 **Validation**: Email required, password minimum 6 characters, name required for
 signup.
+
+---
+
+## `AuthCallback` — `islands/AuthCallback.tsx`
+
+**Props**:
+`{ redirectPath: string, supabaseUrl: string, supabaseAnonKey: string }`
+
+OAuth landing page (`/auth/callback`) for the Google sign-in flow.
+
+**Behavior**:
+
+- Reads the `?code=` query param (PKCE flow — the older `location.hash` implicit
+  flow is gone)
+- Creates a PKCE client (`flowType: "pkce"`, `persistSession: true` — required
+  only to read the code verifier left in localStorage by the initiating client)
+  and calls `exchangeCodeForSession(code)`
+- Wipes the stored `sb-*` localStorage keys immediately after the exchange
+  (`clearSupabaseBrowserStorage`) — sessions live in `HttpOnly` cookies
+- Strips the consumed single-use code from the URL via `history.replaceState`
+- POSTs the session tokens to `/api/auth/callback`; on 400/401 restarts at
+  `/login`
+- `redirectPath` is validated to a relative same-origin path (also enforced
+  server-side) — anything else falls back to `/dashboard`
+- Renders `AuthCardLayout` with a branded spinner, or an error card with a
+  collapsible technical-details block
 
 ---
 
@@ -91,7 +125,8 @@ Modal for managing invitations within a registry. Button with user+ icon.
 - On open, loads all invitations for the registry via
   `GET /api/invitations/list`
 - **Create**: POSTs to `/api/invitations`, displays generated code with copy
-  button
+  button. No explicit expiry is sent — the server defaults new invitations to a
+  7-day expiry
 - **Revoke**: POSTs to `/api/invitations/[id]/revoke`, refreshes list
 - Shows usage count (`currentUses/maxUses`) and revoked status for each
   invitation
@@ -195,7 +230,8 @@ reload needed).
 2. Update `activeRegistryId` signal immediately
 3. Read IndexedDB snapshot for target registry
 4. If snapshot exists → dispatch `registry-switch` CustomEvent → instant render
-5. Background: GET `/api/stamp/{id}` → compare `lastModified` → refresh if stale
+5. Background: POST `/api/stamp/{id}` → compare `lastModified` → refresh if
+   stale
 6. If no snapshot → fallback to `location.href = "/dashboard"`
 
 **Owner-only features**:
@@ -209,7 +245,10 @@ reload needed).
 **Actions**:
 
 - "Nuevo Registro" — links to `/registries/new`
-- "Cerrar sesión" — POSTs to `/api/auth/logout`, redirects to `/login`
+- "Cerrar sesión" — POSTs to `/api/auth/logout` (which revokes the session
+  server-side), then wipes every service-worker cache (directly and via the
+  `CLEAR_CACHES` SW message), clears the IndexedDB registry snapshots, removes
+  any `sb-*` localStorage keys, and redirects to `/login`
 
 ---
 
@@ -245,10 +284,11 @@ computed server-side in the dashboard handler.
 ## `TransactionList` — `islands/TransactionList.tsx`
 
 **Props**:
-`{ transactions: Signal<EnrichedTransaction[]>, users: Signal<Participant[]>, currentUserId: Signal<string>, registryId: Signal<string>, balance: Signal<number>, balanceEntries: Signal<BalanceBreakdownEntry[]>, defaultSplit: Signal<DefaultSplit | null>, entityIds: Set<string>, supabaseUrl?: string, supabaseAnonKey?: string, accessToken?: string, lastModified?: string | null }`
+`{ transactions: Signal<EnrichedTransaction[]>, users: Signal<Participant[]>, currentUserId: Signal<string>, registryId: Signal<string>, balance: Signal<number>, balanceEntries: Signal<BalanceBreakdownEntry[]>, defaultSplit: Signal<DefaultSplit | null>, spawnCandidates: Signal<SpawnCandidate[]>, lastModified: Signal<string | null>, entityIds: Signal<Set<string>>, entities: Signal<Entity[]>, transactionPayments: Signal<TransactionPayment[]>, supabaseUrl?: string, supabaseAnonKey?: string, isDemo?: boolean }`
 
 The main transaction list on the dashboard. Handles listing, CRUD, caching, and
-realtime updates.
+realtime updates. No access token is ever passed as a prop — the realtime client
+fetches it from `/api/auth/token` when subscribing.
 
 **Features**:
 
@@ -282,8 +322,8 @@ realtime updates.
 **Wake-up detection**:
 
 - Listens to `visibilitychange`, `resume`, and `pageshow` events
-- If backgrounded for >30s: compares stamp via `/api/stamp/{rid}` → refreshes if
-  stale
+- If backgrounded for >30s: compares stamp via `POST /api/stamp/{rid}` →
+  refreshes if stale
 - Reconnects realtime WebSocket via `resubscribe()` on wake-up
 
 **Pago (Payment) Mode**:

@@ -135,6 +135,95 @@ describe("transactions POST — happy path", () => {
   });
 });
 
+describe("transactions POST — cross-reference validation (S7)", () => {
+  it("rejects a userPaid that isn't a participant of the registry with 400", async () => {
+    const ctx = userCtx(formRequest(URL, validFields({ userPaid: "u-x" })));
+    const res = await handler.POST!(ctx as never);
+    assertEquals(res.status, 400);
+  });
+
+  it("rejects a split userId that isn't a participant of the registry with 400", async () => {
+    const ctx = userCtx(
+      formRequest(
+        URL,
+        validFields({
+          splitJson: JSON.stringify({
+            splits: [{ userId: "u-x", percentage: 100, amount: 100 }],
+          }),
+        }),
+      ),
+    );
+    const res = await handler.POST!(ctx as never);
+    assertEquals(res.status, 400);
+  });
+
+  it("rejects a relatedTransactionId from another registry with 400", async () => {
+    __setQueryResult((text) => {
+      if (text.includes("id = ANY")) {
+        return { rows: [{ id: "tx-2", registry_id: "r2" }] };
+      }
+      return { rows: [{ id: "tx-new" }] };
+    });
+    const ctx = userCtx(
+      formRequest(URL, validFields({ relatedTransactionId: "tx-2" })),
+    );
+    const res = await handler.POST!(ctx as never);
+    assertEquals(res.status, 400);
+  });
+
+  it("rejects an unknown relatedTransactionId with 400", async () => {
+    __setQueryResult(() => ({ rows: [] }));
+    const ctx = userCtx(
+      formRequest(URL, validFields({ relatedTransactionId: "tx-ghost" })),
+    );
+    const res = await handler.POST!(ctx as never);
+    assertEquals(res.status, 400);
+  });
+
+  it("rejects a transactionPayments expenseId from another registry with 400", async () => {
+    __setQueryResult((text) => {
+      if (text.includes("id = ANY")) {
+        return { rows: [{ id: "tx-9", registry_id: "r2" }] };
+      }
+      return { rows: [{ id: "tx-new" }] };
+    });
+    const ctx = userCtx(
+      formRequest(
+        URL,
+        validFields({
+          transactionPayments: JSON.stringify([
+            { expenseId: "tx-9", amount: 50 },
+          ]),
+        }),
+      ),
+    );
+    const res = await handler.POST!(ctx as never);
+    assertEquals(res.status, 400);
+  });
+
+  it("rejects a non-array transactionPayments JSON with 400", async () => {
+    const ctx = userCtx(
+      formRequest(URL, validFields({ transactionPayments: '{"a":1}' })),
+    );
+    const res = await handler.POST!(ctx as never);
+    assertEquals(res.status, 400);
+  });
+
+  it("accepts references inside the same registry", async () => {
+    __setQueryResult((text) => {
+      if (text.includes("id = ANY")) {
+        return { rows: [{ id: "tx-2", registry_id: "r1" }] };
+      }
+      return { rows: [{ id: "tx-new" }] };
+    });
+    const ctx = userCtx(
+      formRequest(URL, validFields({ relatedTransactionId: "tx-2" })),
+    );
+    const res = await handler.POST!(ctx as never);
+    assertEquals(res.status, 200);
+  });
+});
+
 describe("transactions GET", () => {
   it("returns an empty list when there is no active registry", async () => {
     const ctx = makeCtx({

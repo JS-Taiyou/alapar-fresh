@@ -4,6 +4,11 @@ import { invalidateRegistry } from "../../../lib/server-cache.ts";
 
 export const handler = define.handlers({
   async PUT(ctx) {
+    const userId = ctx.state.user?.id;
+    if (!userId) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const id = ctx.params.id;
     const body = await ctx.req.json();
     const { name, color } = body;
@@ -17,7 +22,13 @@ export const handler = define.handlers({
       return Response.json({ error: "Sin registro activo" }, { status: 400 });
     }
 
-    const entity = await updateEntity(registryId, id, name.trim(), color);
+    const entity = await updateEntity(
+      registryId,
+      id,
+      name.trim(),
+      color,
+      userId,
+    );
     if (!entity) {
       return Response.json({ error: "Entidad no encontrada" }, { status: 404 });
     }
@@ -32,13 +43,18 @@ export const handler = define.handlers({
   },
 
   async DELETE(ctx) {
+    const userId = ctx.state.user?.id;
+    if (!userId) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const id = ctx.params.id;
     const registryId = ctx.state.activeRegistry?.id;
     if (!registryId) {
       return Response.json({ error: "Sin registro activo" }, { status: 400 });
     }
 
-    const deleted = await deleteEntity(registryId, id);
+    const deleted = await deleteEntity(registryId, id, userId);
     if (!deleted) {
       return Response.json({
         error: "No se puede eliminar: tiene transacciones activas",

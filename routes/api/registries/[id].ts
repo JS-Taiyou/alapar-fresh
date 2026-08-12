@@ -13,9 +13,11 @@ export const handler = define.handlers({
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const isMember = ctx.state.registries.some((r) => r.id === id);
-    if (!isMember) {
-      return Response.json({ error: "Not a member" }, { status: 403 });
+    // Rename is owner-only (membership isn't enough).
+    if (!ctx.state.ownerRegistryIds.has(id)) {
+      return Response.json({ error: "Only owners can rename" }, {
+        status: 403,
+      });
     }
 
     const body = await ctx.req.json();
@@ -39,9 +41,11 @@ export const handler = define.handlers({
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const isMember = ctx.state.registries.some((r) => r.id === id);
-    if (!isMember) {
-      return Response.json({ error: "Not a member" }, { status: 403 });
+    // Delete is owner-only; deleteRegistry re-checks ownership in SQL too.
+    if (!ctx.state.ownerRegistryIds.has(id)) {
+      return Response.json({ error: "Only owners can delete" }, {
+        status: 403,
+      });
     }
 
     const txCount = await getTransactionCount(id);

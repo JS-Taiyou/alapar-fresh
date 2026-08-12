@@ -118,7 +118,13 @@ async function sendPushNotification(
   vapidKeys: { publicKey: string; privateKey: string; subject: string },
 ): Promise<Response> {
   const body = JSON.stringify(payload);
-  const jwt = await createVapidJWT(vapidKeys);
+  // RFC 8292: the VAPID `aud` claim must be the origin of the push service
+  // for this subscription — not a hardcoded FCM origin (subscriptions may
+  // come from Mozilla, Edge, etc.).
+  const jwt = await createVapidJWT(
+    vapidKeys,
+    new URL(subscription.endpoint).origin,
+  );
   const encrypted = await encryptPayload(
     body,
     subscription.p256dh,
@@ -143,11 +149,12 @@ async function sendPushNotification(
 
 async function createVapidJWT(
   keys: { publicKey: string; privateKey: string; subject: string },
+  audience: string,
 ): Promise<string> {
   const header = { typ: "JWT", alg: "ES256" };
   const now = Math.floor(Date.now() / 1000);
   const payload = {
-    aud: "https://fcm.googleapis.com",
+    aud: audience,
     exp: now + 43200,
     sub: keys.subject,
   };

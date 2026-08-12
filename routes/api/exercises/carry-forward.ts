@@ -1,9 +1,13 @@
 import { define } from "../../../utils.ts";
 import {
   batchCloneTransactions,
-  getTransactionById,
-  isMemberOfRegistry,
+  getTransactionsByIds,
 } from "../../../lib/store.ts";
+
+// Caps against batch-clone DoS (unbounded quantity × items previously let a
+// single request insert thousands of rows).
+const MAX_ITEMS = 100;
+const MAX_QUANTITY = 60;
 
 export const handler = define.handlers({
   async POST(ctx) {
@@ -14,23 +18,46 @@ export const handler = define.handlers({
 
     const body = await ctx.req.json();
     const items: { id: string; quantity?: number }[] = body.items ?? [];
+    if (!Array.isArray(items)) {
+      return Response.json({ error: "Invalid items" }, { status: 400 });
+    }
     if (items.length === 0) {
       return Response.json({ created: 0 });
     }
+    if (items.length > MAX_ITEMS) {
+      return Response.json({ error: "Too many items" }, { status: 400 });
+    }
 
-    const first = await getTransactionById(items[0].id);
-    if (!first) {
+    for (const item of items) {
+      const quantity = item?.quantity ?? 1;
+      if (
+        typeof item?.id !== "string" || !Number.isInteger(quantity) ||
+        quantity < 1 || quantity > MAX_QUANTITY
+      ) {
+        return Response.json({ error: "Invalid item" }, { status: 400 });
+      }
+    }
+
+    // Resolve EVERY source first: all must exist, and every source's
+    // registry — not just the first item's — must belong to the caller.
+    const requestedIds = new Set(items.map((i) => i.id));
+    const sources = await getTransactionsByIds([...requestedIds]);
+    if (sources.length !== requestedIds.size) {
       return new Response("Not found", { status: 404 });
     }
-    const member = await isMemberOfRegistry(userId, first.registry_id);
-    if (!member) {
+    const memberRegistryIds = new Set(ctx.state.registries.map((r) => r.id));
+    const allInMemberRegistries = sources.every((tx) =>
+      memberRegistryIds.has(tx.registry_id)
+    );
+    if (!allInMemberRegistries) {
       return new Response("Forbidden", { status: 403 });
     }
 
-    await batchCloneTransactions(
+    const cloned = await batchCloneTransactions(
       items.map((item) => ({ id: item.id, quantity: item.quantity ?? 1 })),
+      userId,
     );
 
-    return Response.json({ created: items.length });
+    return Response.json({ created: cloned.length });
   },
 });

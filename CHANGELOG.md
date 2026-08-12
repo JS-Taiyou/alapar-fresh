@@ -4,6 +4,59 @@ All notable changes to this project are documented here. Dates are approximate.
 
 ---
 
+## 2026-08-12 — v1.0.0: Public launch + security hardening
+
+First public release. A full security-hardening pass landed ahead of opening the
+repo.
+
+### Security — application layer
+
+- **API authorization scoping**: exercise transactions/history verify registry
+  membership (404 on foreign ids); carry-forward validates every item's registry
+  and caps batches (≤100 items, quantity 1–60); default-split and invitation
+  revoke are scoped to the target registry's owner; entities GET requires
+  membership; transaction create/update validate payer/split participants and
+  same-registry references; push subscribe requires an https endpoint and
+  membership of the supplied registry
+- **Owner-only destructive ops**: registry rename/delete and exercise close now
+  require the owner role (previously any member)
+- **Middleware**: CSRF exemptions removed entirely; `/api/auth/callback`
+  requires a JSON body and validates tokens before setting cookies; the email
+  allowlist is enforced before user creation on the very first request; security
+  headers on every response (X-Frame-Options DENY, nosniff, Referrer-Policy,
+  Permissions-Policy); per-IP rate limit (20 req/min, 429) on invite-acceptance
+  and auth endpoints
+- **Auth/session**: browser Supabase clients run `persistSession: false`; Google
+  OAuth moved to the PKCE flow (`/auth/callback` exchanges `?code=`);
+  open-redirect params restricted to relative paths; logout revokes the session
+  server-side and wipes client caches/storage; single-flight token refresh;
+  access tokens are no longer serialized into dashboard HTML — the realtime
+  client fetches `/api/auth/token` on subscribe
+- **Service worker**: cache-first restricted to immutable static assets;
+  `/api/*` and HTML navigations are network-only; caches purged on logout
+- **Database (RLS)**: new `tighten_rls.sql` and `enable_realtime.sql`
+  migrations; policies hardened — owner-only registry delete, per-command
+  transaction policies (exercise-locked rows immutable), server-only
+  audit_log/allowed_emails, member-scoped invitation reads, immutable user
+  identity columns for client callers, `role` CHECK, case-insensitive email
+  uniqueness
+- **Misc**: invite codes use a CSPRNG and default to a 7-day expiry; max-uses
+  increment is atomic; VAPID `aud` derived from the push endpoint origin per RFC
+  8292 (Firefox/Safari push works); segment-aware public-path matching
+
+### Repo hygiene
+
+- Agent tooling and internal notes (`.agents/`, `.claude/`, `review/`,
+  `mockups/`, `db/backups/`, `AGENTS.md`, `PENDING.md`, `skills-lock.json`) are
+  untracked and don't ship with the repo
+- Leftover debug logging removed from the dashboard route
+
+### Tests
+
+- Suite grew to 59 suites / 417 steps
+
+---
+
 ## 2026-08-12 — Test suite, balance fix, demo tour, performance
 
 ### Test suite (4 phases, 47 suites / 339 steps)

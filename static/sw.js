@@ -1,25 +1,20 @@
-const CACHE_NAME = "alapar-v1";
-
-const _PRECACHE_URLS = ["/", "/dashboard"];
-
-const BUILD_CACHE = "alapar-build-v4";
-const API_CACHE = "alapar-api-v4";
-const HTML_CACHE = "alapar-html-v4";
-const NETWORK_TIMEOUT_MS = 4000;
+// Only build assets and public static files are ever cached. API responses
+// and HTML navigations can carry authenticated data, so they are strictly
+// network-only (see the fetch handler below).
+const BUILD_CACHE = "alapar-build-v5";
 
 self.addEventListener("install", () => {
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
+  // Purge every cache that isn't the current build cache — including older
+  // caches (alapar-api-*, alapar-html-*) that may hold authenticated data.
   event.waitUntil(
     caches.keys().then((names) =>
       Promise.all(
         names
-          .filter((n) =>
-            n !== CACHE_NAME && n !== BUILD_CACHE && n !== API_CACHE &&
-            n !== HTML_CACHE
-          )
+          .filter((n) => n !== BUILD_CACHE)
           .map((n) => caches.delete(n)),
       )
     ).then(() => self.clients.claim()),
@@ -70,38 +65,36 @@ self.addEventListener("fetch", (event) => {
 
   if (event.request.method !== "GET") return;
 
-  if (isBuildAsset(url.pathname)) {
-    event.respondWith(cacheFirst(event.request, BUILD_CACHE));
+  // Cache-first only for immutable, non-sensitive assets: content-hashed
+  // build output under /assets/ and public static files.
+  if (isStaticAsset(url.pathname)) {
+    event.respondWith(cacheFirst(event.request));
     return;
   }
 
-  if (url.pathname.startsWith("/api/")) {
-    event.respondWith(networkFirst(event.request, API_CACHE));
-    return;
-  }
-
-  event.respondWith(networkFirst(event.request, HTML_CACHE));
+  // Everything else — /api/* and HTML navigations (including /dashboard) —
+  // is network-only and never written to the cache. Authenticated responses
+  // must not be replayed to anyone with physical access to the device. On
+  // network failure the generic offline shell is shown instead.
+  event.respondWith(networkOnly(event.request));
 });
 
-function isBuildAsset(pathname) {
-  return pathname.startsWith("/_frsh/") ||
-    pathname.endsWith(".js") ||
-    pathname.endsWith(".css") ||
-    pathname.endsWith(".woff2") ||
-    pathname.endsWith(".woff") ||
-    pathname.endsWith(".svg") ||
-    pathname.endsWith(".png") ||
-    pathname.endsWith(".ico");
+function isStaticAsset(pathname) {
+  return pathname.startsWith("/assets/") ||
+    pathname === "/logo.svg" ||
+    pathname === "/favicon.ico" ||
+    pathname === "/manifest.json" ||
+    pathname === "/sw-register.js";
 }
 
-async function cacheFirst(request, cacheName) {
+async function cacheFirst(request) {
   const cached = await caches.match(request);
   if (cached) return cached;
 
   try {
     const response = await fetch(request);
     if (response.ok) {
-      const cache = await caches.open(cacheName);
+      const cache = await caches.open(BUILD_CACHE);
       cache.put(request, response.clone()).catch(() => {});
     }
     return response;
@@ -110,36 +103,10 @@ async function cacheFirst(request, cacheName) {
   }
 }
 
-async function networkFirst(request, cacheName) {
-  let timeoutId;
-  const timeout = new Promise((_, reject) => {
-    timeoutId = setTimeout(
-      () => reject(new Error("network-timeout")),
-      NETWORK_TIMEOUT_MS,
-    );
-  });
+async function networkOnly(request) {
   try {
-    const response = await Promise.race([fetch(request), timeout]);
-    clearTimeout(timeoutId);
-    if (response.ok) {
-      const cache = await caches.open(cacheName);
-      cache.put(request, response.clone()).catch(() => {});
-    }
-    return response;
+    return await fetch(request);
   } catch {
-    clearTimeout(timeoutId);
-    fetch(request).then((res) => {
-      if (res.ok) {
-        caches.open(cacheName).then((c) => c.put(request, res)).catch(() => {});
-      }
-    }).catch(() => {});
-    const cached = await caches.match(request);
-    if (cached) return cached;
-    if (request.headers.get("Accept")?.includes("text/html")) {
-      const cache = await caches.open(HTML_CACHE);
-      const fallback = await cache.match("/dashboard");
-      if (fallback) return fallback;
-    }
     return offlineResponse(request);
   }
 }
@@ -178,10 +145,13 @@ self.addEventListener("notificationclick", (event) => {
 });
 
 self.addEventListener("message", (event) => {
-  if (event.data?.type === "CACHE_URLS") {
-    const urls = event.data.urls ?? [];
+  // Sent by the logout flow: drop every cached response so nothing
+  // authenticated survives on a shared device.
+  if (event.data?.type === "CLEAR_CACHES") {
     event.waitUntil(
-      caches.open(HTML_CACHE).then((cache) => cache.addAll(urls)),
+      caches.keys().then((names) =>
+        Promise.all(names.map((n) => caches.delete(n)))
+      ),
     );
   }
 });

@@ -16,15 +16,26 @@ import {
 } from "../../../test/fixtures/db_stub.ts";
 
 const URL = "https://test.local/api/entities/e-1";
+const user = { id: "u1" } as never;
 
 beforeEach(() => __resetDbStub());
 
 describe("entity PUT (rename)", () => {
+  it("rejects an anonymous request with 401", async () => {
+    const ctx = makeCtx({
+      req: jsonRequest(URL, { name: "X" }),
+      params: { id: "e-1" },
+      state: { user: null },
+    });
+    const res = await handler.PUT!(ctx as never);
+    assertEquals(res.status, 401);
+  });
+
   it("rejects a missing name with 400", async () => {
     const ctx = makeCtx({
       req: jsonRequest(URL, { name: "" }),
       params: { id: "e-1" },
-      state: { activeRegistry: { id: "r1" } as never },
+      state: { user, activeRegistry: { id: "r1" } as never },
     });
     const res = await handler.PUT!(ctx as never);
     assertEquals(res.status, 400);
@@ -34,7 +45,7 @@ describe("entity PUT (rename)", () => {
     const ctx = makeCtx({
       req: jsonRequest(URL, { name: "X" }),
       params: { id: "e-1" },
-      state: { activeRegistry: null },
+      state: { user, activeRegistry: null },
     });
     const res = await handler.PUT!(ctx as never);
     assertEquals(res.status, 400);
@@ -46,21 +57,22 @@ describe("entity PUT (rename)", () => {
     const ctx = makeCtx({
       req: jsonRequest(URL, { name: "New Name" }),
       params: { id: "e-1" },
-      state: { activeRegistry: { id: "r1" } as never },
+      state: { user, activeRegistry: { id: "r1" } as never },
     });
     const res = await handler.PUT!(ctx as never);
     assertEquals(res.status, 404);
   });
 
   it("renames and returns 200 when the entity exists", async () => {
-    // getEntities returns the entity row so updateEntity finds it.
+    // getEntities returns the entity row so updateEntity finds it; the
+    // membership-scoped UPDATE then gets rowCount 1 from the same stub.
     __setQueryResult(() => ({
       rows: [{ entities_json: [{ id: "e-1", name: "Old", color: "#000" }] }],
     }));
     const ctx = makeCtx({
       req: jsonRequest(URL, { name: "New Name" }),
       params: { id: "e-1" },
-      state: { activeRegistry: { id: "r1" } as never },
+      state: { user, activeRegistry: { id: "r1" } as never },
     });
     const res = await handler.PUT!(ctx as never);
     assertEquals(res.status, 200);
@@ -68,11 +80,21 @@ describe("entity PUT (rename)", () => {
 });
 
 describe("entity DELETE", () => {
+  it("rejects an anonymous request with 401", async () => {
+    const ctx = makeCtx({
+      req: jsonDelete(URL, {}),
+      params: { id: "e-1" },
+      state: { user: null },
+    });
+    const res = await handler.DELETE!(ctx as never);
+    assertEquals(res.status, 401);
+  });
+
   it("returns 400 when there is no active registry", async () => {
     const ctx = makeCtx({
       req: jsonDelete(URL, {}),
       params: { id: "e-1" },
-      state: { activeRegistry: null },
+      state: { user, activeRegistry: null },
     });
     const res = await handler.DELETE!(ctx as never);
     assertEquals(res.status, 400);
@@ -84,7 +106,7 @@ describe("entity DELETE", () => {
     const ctx = makeCtx({
       req: jsonDelete(URL, {}),
       params: { id: "e-1" },
-      state: { activeRegistry: { id: "r1" } as never },
+      state: { user, activeRegistry: { id: "r1" } as never },
     });
     const res = await handler.DELETE!(ctx as never);
     assertEquals(res.status, 409);
@@ -92,8 +114,9 @@ describe("entity DELETE", () => {
 
   it("returns 204 when the entity is deleted successfully", async () => {
     // deleteEntity makes 3 sequential queries: a tx-check (SELECT 1 FROM
-    // transactions...), getEntities (SELECT entities_json...), and an UPDATE.
-    // Return empty rows for the tx-check, the entity for getEntities.
+    // transactions...), getEntities (SELECT entities_json...), and a
+    // membership-scoped UPDATE. Return empty rows for the tx-check, the
+    // entity for getEntities, and rowCount 1 for the UPDATE.
     __setQueryResult((text) => {
       if (text.includes("SELECT 1 FROM transactions")) return { rows: [] };
       if (text.includes("SELECT entities_json")) {
@@ -101,12 +124,12 @@ describe("entity DELETE", () => {
           rows: [{ entities_json: [{ id: "e-1", name: "X", color: "#000" }] }],
         };
       }
-      return { rows: [] };
+      return { rows: [], rowCount: 1 };
     });
     const ctx = makeCtx({
       req: jsonDelete(URL, {}),
       params: { id: "e-1" },
-      state: { activeRegistry: { id: "r1" } as never },
+      state: { user, activeRegistry: { id: "r1" } as never },
     });
     const res = await handler.DELETE!(ctx as never);
     assertEquals(res.status, 204);

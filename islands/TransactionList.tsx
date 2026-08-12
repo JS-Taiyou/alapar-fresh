@@ -64,7 +64,6 @@ interface TransactionListProps {
   transactionPayments: Signal<TransactionPayment[]>;
   supabaseUrl?: string;
   supabaseAnonKey?: string;
-  accessToken?: string;
   isDemo?: boolean;
 }
 
@@ -410,9 +409,7 @@ export default function TransactionList(props: TransactionListProps) {
 
   useSignalEffect(() => {
     const rid = registryId.value;
-    if (
-      !rid || !props.supabaseUrl || !props.supabaseAnonKey || !props.accessToken
-    ) return;
+    if (!rid || !props.supabaseUrl || !props.supabaseAnonKey) return;
 
     setupRealtimeConfig(props.supabaseUrl, props.supabaseAnonKey);
 
@@ -517,7 +514,6 @@ export default function TransactionList(props: TransactionListProps) {
           allParticipants,
         );
       },
-      props.accessToken,
     );
 
     requestNotificationPermission().then((granted) => {
@@ -668,7 +664,7 @@ export default function TransactionList(props: TransactionListProps) {
       resubscribe().catch(() => {});
 
       try {
-        const stampRes = await fetch(`/api/stamp/${rid}`);
+        const stampRes = await fetch(`/api/stamp/${rid}`, { method: "POST" });
         if (rid !== registryId.value) return;
         if (!stampRes.ok) return;
         const { lastModified } = await stampRes.json() as {

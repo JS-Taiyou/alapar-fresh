@@ -3,7 +3,15 @@ import { getRegistryStamp, isMemberOfRegistry } from "../../../lib/store.ts";
 import { setUserActiveRegistry } from "../../../lib/server-cache.ts";
 
 export const handler = define.handlers({
-  async GET(ctx) {
+  // Switching the active registry is a side effect — POST only, never GET.
+  GET(_ctx) {
+    return new Response("Method Not Allowed", {
+      status: 405,
+      headers: { Allow: "POST" },
+    });
+  },
+
+  async POST(ctx) {
     const userId = ctx.state.user?.id;
     const registryId = ctx.params.id;
 

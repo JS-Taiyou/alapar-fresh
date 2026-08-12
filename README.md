@@ -62,7 +62,7 @@ direct payments between members.
 - **Security enforced in the database** — Postgres Row-Level Security isolates
   every group's data; the realtime channel can only deliver transactions from
   registries the authenticated user belongs to.
-- **Comprehensive test suite** — 53 suites, 352 steps covering the balance
+- **Comprehensive test suite** — 59 suites, 417 steps covering the balance
   engine, split math, route validation, and business rules, with a DB stub so
   tests run without a live database.
 
@@ -81,8 +81,9 @@ cd alapar-fresh
 cp .env.example .env   # fill in your Supabase + VAPID credentials
 ```
 
-Run the database migrations in `db/` against your Supabase project (in order:
-`schema.sql` first, then the `add_*.sql` files).
+Run the database migrations in `db/` against your Supabase project, in order:
+`schema.sql` first, then the `add_*.sql` files, then `enable_rls.sql`,
+`tighten_rls.sql`, and finally `enable_realtime.sql`.
 
 Start the dev server:
 

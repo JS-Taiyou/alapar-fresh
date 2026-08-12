@@ -105,7 +105,7 @@ export const handler = define.handlers({
     } else {
       const [users, ents] = await Promise.all([
         getUsers(registryId),
-        getEntities(registryId),
+        getEntities(registryId, userId),
       ]);
       participants = [
         ...users.map((u) => ({ id: u.id, name: u.name, color: u.color })),

@@ -1,6 +1,7 @@
 import { useComputed, useSignal, useSignalEffect } from "@preact/signals";
 import type { DefaultSplit, Entity, Registry, User } from "../lib/types.ts";
 import { cache } from "../lib/cache.ts";
+import { clearSupabaseBrowserStorage } from "./auth-storage.ts";
 import EntityManager from "./EntityManager.tsx";
 import DefaultSplitConfig from "./DefaultSplitConfig.tsx";
 
@@ -327,7 +328,9 @@ export default function Sidebar(props: SidebarProps) {
     gen: number,
   ) {
     try {
-      const stampRes = await fetch(`/api/stamp/${registryId}`);
+      const stampRes = await fetch(`/api/stamp/${registryId}`, {
+        method: "POST",
+      });
       if (gen !== switchGen.value) return;
       if (!stampRes.ok) return;
       const { lastModified } = await stampRes.json() as {
@@ -373,7 +376,28 @@ export default function Sidebar(props: SidebarProps) {
   }
 
   async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST" });
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // Server unreachable — proceed with client-side cleanup anyway.
+    }
+    // Drop every cached response so nothing authenticated lingers on a
+    // shared device. Done from the page directly (the Cache API is available
+    // to window contexts) and via the service worker's CLEAR_CACHES handler
+    // as a belt-and-braces backup.
+    try {
+      const names = await caches.keys();
+      await Promise.all(names.map((n) => caches.delete(n)));
+      const reg = await navigator.serviceWorker?.getRegistration();
+      reg?.active?.postMessage({ type: "CLEAR_CACHES" });
+    } catch {
+      // Cache/SW APIs unavailable — nothing more to clear.
+    }
+    // IndexedDB registry snapshots hold transaction data — drop them too.
+    cache.clearAll().catch(() => {});
+    // Defensive: no auth artifacts should be in localStorage, but wipe any
+    // leftovers (e.g. from older builds) before leaving.
+    clearSupabaseBrowserStorage();
     globalThis.location.href = "/login";
   }
 

@@ -60,10 +60,40 @@ function getSupabase(): SupabaseClient {
       .__SUPABASE_ANON_KEY__ as string;
     if (!url || !key) throw new Error("Supabase config missing");
     supabase = createClient(url, key, {
+      // No persisted session: the realtime socket is authenticated manually
+      // via setAuth() with tokens fetched from /api/auth/token — nothing
+      // auth-related belongs in localStorage.
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
       realtime: { params: { eventsPerSecond: 2 } },
     });
   }
   return supabase;
+}
+
+/**
+ * Fetch the current access token from the server.
+ *
+ * The token lives in an HttpOnly cookie (invisible to JS), so
+ * `/api/auth/token` is the seam the client uses both for the initial
+ * subscribe and for recovery after expiry. Returns null when the session is
+ * gone (401) or the request fails — callers treat that as "retry later".
+ */
+async function fetchAccessToken(): Promise<string | null> {
+  try {
+    const resp = await fetch("/api/auth/token");
+    if (!resp.ok) {
+      console.log("[realtime] token fetch failed:", resp.status);
+      return null;
+    }
+    const { accessToken } = await resp.json() as { accessToken: string };
+    return accessToken || null;
+  } catch {
+    return null;
+  }
 }
 
 export async function subscribeToRegistry(
@@ -80,8 +110,12 @@ export async function subscribeToRegistry(
   activeRegistryId = registryId;
   const client = getSupabase();
 
-  if (accessToken) {
-    await client.realtime.setAuth(accessToken);
+  // When no token is passed (initial subscribe), fetch the current one from
+  // the server — tokens are never serialized into page HTML. Recovery passes
+  // the fresh token it already fetched.
+  const token = accessToken ?? await fetchAccessToken();
+  if (token) {
+    await client.realtime.setAuth(token);
   }
 
   activeChannel = client
@@ -150,12 +184,7 @@ async function recoverChannel(): Promise<void> {
     await new Promise((r) => setTimeout(r, delay));
 
     try {
-      const resp = await fetch("/api/auth/token");
-      if (!resp.ok) {
-        console.log("[realtime] token fetch failed:", resp.status);
-        continue;
-      }
-      const { accessToken } = await resp.json() as { accessToken: string };
+      const accessToken = await fetchAccessToken();
       if (!accessToken) continue;
 
       // Resubscribe with the fresh token. We pass a flag so the SUBSCRIBED

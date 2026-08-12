@@ -93,18 +93,20 @@ describe("invitations join POST", () => {
 });
 
 describe("invitations revoke POST", () => {
-  it("returns 400 when invitationId, user, or activeRegistry is missing", async () => {
+  it("returns 400 when invitationId or user is missing", async () => {
     const ctx = makeCtx({
       req: jsonRequest(`${URL}/inv-1/revoke`, {}),
       params: { id: "inv-1" },
-      state: { user: null, activeRegistry: null },
+      state: { user: null },
     });
     const res = await revokeHandler.POST!(ctx as never);
     assertEquals(res.status, 400);
   });
 
-  it("returns 403 when the user is not the owner", async () => {
-    __setQueryResult(() => ({ rows: [{ role: "member" }] }));
+  it("returns 404 when the user doesn't own the invitation's registry (B5)", async () => {
+    // The ownership-scoped UPDATE no-ops (rowCount 0) — the route must not
+    // distinguish "unknown id" from "someone else's registry".
+    __setQueryResult(() => ({ rows: [], rowCount: 0 }));
     const ctx = makeCtx({
       req: jsonRequest(`${URL}/inv-1/revoke`, {}),
       params: { id: "inv-1" },
@@ -114,6 +116,21 @@ describe("invitations revoke POST", () => {
       },
     });
     const res = await revokeHandler.POST!(ctx as never);
-    assertEquals(res.status, 403);
+    assertEquals(res.status, 404);
+  });
+
+  it("returns ok when the ownership-scoped revoke lands", async () => {
+    __setQueryResult(() => ({ rows: [], rowCount: 1 }));
+    const ctx = makeCtx({
+      req: jsonRequest(`${URL}/inv-1/revoke`, {}),
+      params: { id: "inv-1" },
+      state: {
+        user: { id: "u1" } as never,
+        activeRegistry: { id: "r1" } as never,
+      },
+    });
+    const res = await revokeHandler.POST!(ctx as never);
+    assertEquals(res.status, 200);
+    assertEquals(await res.json(), { ok: true });
   });
 });

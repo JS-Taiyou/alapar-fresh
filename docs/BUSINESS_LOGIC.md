@@ -137,9 +137,12 @@ Alice's aggregate balance: $60.00 (sum of all pairwise nets).
 ## Cortar (Cut/Settle)
 
 The cut operation archives all active expenses into a historical period.
+**Owner-only** — closing an exercise is a destructive operation and the server
+rejects it for plain members (403).
 
-**Prerequisites**: Balance must be exactly $0.00 (all debts settled via
-payments).
+**Prerequisites**: None — unsettled balances are not a blocker. The cut
+automatically settles outstanding debts by creating carry-forward `ajuste`
+transactions in the new period, so nothing is lost (see Carry-Forward below).
 
 **Process**:
 
@@ -176,6 +179,10 @@ For each selected candidate:
 - **Parcialidad**: Clone with `installmentCurrent` incremented by the specified
   quantity (default 1). Users can carry multiple installments at once.
 
+**Server-side limits**: every selected item must belong to a registry the caller
+is a member of (all items are validated, not just the first), batches are capped
+at 100 items, and `quantity` must be an integer between 1 and 60.
+
 ### Disabling
 
 Users can permanently disable a recurring group by setting
@@ -189,8 +196,10 @@ lists.
 ### Creating Invitations
 
 - Only registry **owners** can create invitations
-- 8-character code generated from unambiguous characters (no I, O, 0, 1)
-- Optional: expiration time and max uses
+- 8-character code generated with `crypto.getRandomValues` (CSPRNG) from
+  unambiguous characters (no I, O, 0, 1)
+- Optional: expiration time and max uses. Invitations created without an
+  explicit expiry (e.g. from the UI) default to **7 days**
 
 ### Joining via Invitation
 
@@ -200,13 +209,15 @@ lists.
 - If new member:
   1. Added to `registry_members` as `member`
   2. User profile created in registry's `users` table
-  3. Invitation `current_uses` incremented
+  3. Invitation `current_uses` incremented — atomically: the UPDATE itself
+     enforces not-revoked and `max_uses`, so concurrent joins can't overshoot
   4. Active registry set to the joined registry
   5. Audit log entry created
 
 ### Revoking
 
-- Owner-only action
+- Owner-only action, scoped in SQL: the revoke only lands if the caller owns the
+  invitation's registry — a foreign or unknown id returns 404
 - Sets `revoked_at` timestamp
 - Audit log entry created
 
@@ -259,7 +270,7 @@ IndexedDB-backed snapshots per registry.
 
 ```
 Client wants data for registry X:
-  → GET /api/stamp/X  (1 query: SELECT last_modified FROM registries WHERE id = X)
+  → POST /api/stamp/X  (1 query: SELECT last_modified FROM registries WHERE id = X)
   → Compare with cached lastModified
   → Match → use cache (0 additional queries)
   → Mismatch → fetch fresh data + update cache
@@ -297,16 +308,24 @@ On PWA resume from background/minimized state:
 
 ```
 1. User visits /login or /signup
-2. AuthForm island handles Supabase auth client-side
-3. On success, POST to /api/auth/callback with tokens
-4. Server sets HttpOnly cookies:
+2. AuthForm island handles Supabase auth client-side (persistSession: false)
+3. On success, POST to /api/auth/callback with tokens (JSON only)
+4. Server validates the tokens with Supabase, then sets HttpOnly cookies:
    - sb-access-token (7 days)
    - sb-refresh-token (30 days)
 5. Redirect to /dashboard
 ```
 
-**Middleware** (`main.ts` State): Every request reads `sb-access-token` cookie,
-validates with Supabase, resolves user state. Lightweight paths (e.g.,
-`/api/stamp`) skip full `resolveUserState()`.
+Google OAuth uses the PKCE flow instead: `/auth/callback` receives a `?code=`
+query param (not `location.hash`), exchanges it for a session, then continues at
+step 3.
 
-**Logout**: Clears both cookies, redirects to `/login`.
+**Middleware** (`main.ts` State): Every request reads `sb-access-token` cookie,
+validates with Supabase (refreshing expired tokens single-flight), resolves user
+state. Lightweight paths (e.g., `/api/stamp`) skip full `resolveUserState()`.
+The email allowlist is enforced before a `users` row is created, even on the
+very first request.
+
+**Logout**: Revokes the session server-side (`auth.admin.signOut`), clears both
+cookies, and the client wipes service-worker caches / IndexedDB / `sb-*`
+localStorage keys before redirecting to `/login`.

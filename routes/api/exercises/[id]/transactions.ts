@@ -1,5 +1,8 @@
 import { define } from "../../../../utils.ts";
-import { getTransactionsByExercise } from "../../../../lib/store.ts";
+import {
+  getExerciseByIdForUser,
+  getTransactionsByExerciseForUser,
+} from "../../../../lib/store.ts";
 
 export const handler = define.handlers({
   async GET(ctx) {
@@ -13,7 +16,18 @@ export const handler = define.handlers({
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const transactions = await getTransactionsByExercise(exerciseId);
+    // Membership-scoped lookups: an exercise outside the user's registries
+    // resolves to 404 (no existence leak), and the transaction query is
+    // scoped the same way in SQL as defense in depth.
+    const exercise = await getExerciseByIdForUser(exerciseId, userId);
+    if (!exercise) {
+      return Response.json({ error: "Not found" }, { status: 404 });
+    }
+
+    const transactions = await getTransactionsByExerciseForUser(
+      exerciseId,
+      userId,
+    );
     return Response.json({ transactions });
   },
 });

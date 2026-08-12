@@ -15,7 +15,13 @@ export default function ForgotPassword(props: ForgotPasswordProps) {
 
   let client: SupabaseClient;
   try {
-    client = createClient(props.supabaseUrl, props.supabaseAnonKey);
+    client = createClient(props.supabaseUrl, props.supabaseAnonKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
   } catch {
     error.value = "Error al inicializar el cliente de auth";
   }

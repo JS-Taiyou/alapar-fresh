@@ -29,6 +29,12 @@ export const handler = define.handlers({
       };
     }
 
+    // IDOR guard: the exercise must belong to one of the caller's own
+    // registries — otherwise indistinguishable from "does not exist".
+    if (!ctx.state.registries.some((r) => r.id === exercise.registry_id)) {
+      return new Response("Not found", { status: 404 });
+    }
+
     const txs = await getTransactionsByExercise(id);
     const participantMap = new Map(
       ctx.state.participants.map((p) => [p.id, p]),
