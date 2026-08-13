@@ -965,10 +965,7 @@ export default function Sidebar(props: SidebarProps) {
           </span>
         </button>
         {(!collapsed.value || mobileOpen.value) && (
-          <LocaleToggle
-            locale={props.locale ?? "es"}
-            class="justify-center py-1"
-          />
+          <LocaleToggle locale={props.locale ?? "es"} full class="my-1" />
         )}
         <button
           type="button"
