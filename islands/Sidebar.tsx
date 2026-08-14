@@ -5,6 +5,7 @@ import { clearSupabaseBrowserStorage } from "./auth-storage.ts";
 import EntityManager from "./EntityManager.tsx";
 import DefaultSplitConfig from "./DefaultSplitConfig.tsx";
 import LocaleToggle from "./LocaleToggle.tsx";
+import UpgradeButton from "./UpgradeButton.tsx";
 import type { Locale } from "../lib/i18n.ts";
 
 interface SidebarProps {
@@ -20,6 +21,8 @@ interface SidebarProps {
   deletableRegistryIds: Set<string>;
   initialCollapsed?: boolean;
   locale?: Locale;
+  /** Show the "Upgrade to Pro" CTA (free-plan active registry only). */
+  showUpgrade?: boolean;
 }
 
 const REGISTRY_COLORS = [
@@ -964,6 +967,13 @@ export default function Sidebar(props: SidebarProps) {
             Nuevo Registro
           </span>
         </button>
+        {props.showUpgrade && props.activeRegistryId && (
+          <UpgradeButton
+            locale={props.locale ?? "es"}
+            registryId={props.activeRegistryId}
+            isOwner={props.isOwner}
+          />
+        )}
         {(!collapsed.value || mobileOpen.value) && (
           <LocaleToggle locale={props.locale ?? "es"} full class="my-1" />
         )}

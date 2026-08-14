@@ -12,6 +12,11 @@ import {
   invalidateRegistry,
 } from "../../../lib/server-cache.ts";
 import { sendPushToRegistry } from "../../../lib/push.ts";
+import {
+  countActiveTemplates,
+  getRegistryPlan,
+  upgradeRequired,
+} from "../../../lib/entitlements.ts";
 import type { TransactionSplit } from "../../../lib/types.ts";
 import { generateETag } from "../../../lib/etag.ts";
 
@@ -160,6 +165,19 @@ export const handler = define.handlers({
         return Response.json({ error: "Referencia inválida" }, {
           status: 400,
         });
+      }
+    }
+
+    // Free plan: cap on active recurring/installment templates. Only new
+    // template GROUPS count (a new recurring/parcialidad with a group id not
+    // yet present); same-group edits and clones stay free.
+    if (type === "parcialidad" || type === "recurrente") {
+      const planInfo = await getRegistryPlan(registryId);
+      if (planInfo && !planInfo.isPro) {
+        const activeTemplates = await countActiveTemplates(registryId);
+        if (activeTemplates >= planInfo.limits.maxActiveTemplates) {
+          return upgradeRequired("templates");
+        }
       }
     }
 

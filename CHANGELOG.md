@@ -4,6 +4,39 @@ All notable changes to this project are documented here. Dates are approximate.
 
 ---
 
+## 2026-08-14 — Pro tier with Polar billing
+
+Paid registry plan (owner pays, whole group benefits). See
+`docs/MONETIZATION.md` for the full design.
+
+- **DB** (`db/add_billing.sql`): `registries.plan`
+  (`free`|`pro`|`grandfathered`) — existing registries grandfathered to
+  unlimited forever; `registry_subscriptions` Polar mirror (server-only, RLS
+  with zero policies)
+- **`lib/entitlements.ts`**: plan resolution (column + subscription + past-due
+  grace) and free limits (2 owned registries, 4 members/registry, 3 active
+  recurring templates, newest closed exercise only)
+- **Enforcement** at 4 touchpoints, all returning `402 upgrade_required`:
+  registry creation cap, join member cap (localized "group full" message),
+  recurring/installment template cap, history depth (locked rows with upgrade
+  CTA instead of silently hidden)
+- **`lib/billing.ts`**: zero-dependency Polar REST client — Checkout Link
+  builder, `syncCheckout`, customer-portal sessions, Standard Webhooks HMAC
+  verifier (replay-protected, timing-safe), subscription-event upsert with 3-day
+  cancellation grace
+- **Routes**: `GET /api/billing/checkout` (owner-only 302), public
+  `POST /api/webhooks/polar` (csrf-exempt, HMAC-verified),
+  `POST /api/billing/portal`, `/billing/success` confirmation page
+- **UI**: `UpgradeButton` island (monthly/yearly picker, non-owner hint),
+  `PaywallCard` locked-history rows, sidebar CTA on free registries, billing
+  i18n strings (es/en)
+- **State**: middleware resolves the active registry's plan once per full-state
+  request (`ctx.state.activeRegistryPlan`)
+- Tests: 31 new steps (plan matrix, webhook signatures incl. tamper/replay,
+  event upsert mapping). 61 suites / 448 steps green.
+
+---
+
 ## 2026-08-12 — v1.0.0: Public launch + security hardening
 
 First public release. A full security-hardening pass landed ahead of opening the

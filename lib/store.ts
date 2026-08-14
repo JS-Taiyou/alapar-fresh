@@ -1,4 +1,5 @@
 import { query } from "./db.ts";
+import { countRegistryMembers, getRegistryPlan } from "./entitlements.ts";
 import type {
   Entity,
   Exercise,
@@ -1037,6 +1038,16 @@ export async function useInvitation(
   );
   if (claimed.rows.length === 0) {
     throw new Error("Invitation has reached max uses");
+  }
+
+  // Free plan: cap on members per registry. Joining is never gated by the
+  // JOINER's plan — only by the target registry's plan.
+  const planInfo = await getRegistryPlan(invitation.registryId);
+  if (planInfo && !planInfo.isPro) {
+    const members = await countRegistryMembers(invitation.registryId);
+    if (members >= planInfo.limits.maxMembers) {
+      throw new Error("GROUP_FULL");
+    }
   }
 
   await query(

@@ -212,4 +212,31 @@ export const es: Record<string, string> = {
   "join.joining": "Uniéndote...",
   "join.join_button": "Unirme al Registro",
   "join.code_placeholder": "Código (ej: K9X2M4B7)",
+
+  // --- Billing / Pro tier ---
+  "billing.upgrade": "Mejorar a Pro",
+  "billing.pro_badge": "PRO",
+  "billing.grandfathered_badge": "PRO",
+  "billing.upgrade_hint_owner":
+    "Desbloquea miembros y plantillas ilimitadas, e historial completo.",
+  "billing.upgrade_hint_member":
+    "Pídele al dueño del grupo que mejore a Pro para desbloquear esto.",
+  "billing.group_full":
+    "Este grupo llegó al límite de miembros del plan gratuito. El dueño puede mejorarlo a Pro para invitar a más personas.",
+  "billing.templates_full":
+    "Este grupo llegó al límite de plantillas recurrentes del plan gratuito. El dueño puede mejorarlo a Pro para agregar más.",
+  "billing.registries_full":
+    "Alcanzaste el límite de 2 grupos del plan gratuito. Mejora uno a Pro o elimina un grupo para crear otro.",
+  "billing.history_locked": "Cortes anteriores disponibles en Pro",
+  "billing.history_locked_cta": "Desbloquear historial completo",
+  "billing.monthly": "Mensual",
+  "billing.yearly": "Anual",
+  "billing.manage": "Administrar suscripción",
+  "billing.success_title": "¡Pro activado!",
+  "billing.success_desc":
+    "Tu grupo ahora tiene acceso ilimitado. Todos los miembros se benefician.",
+  "billing.success_pending_title": "Procesando pago…",
+  "billing.success_pending_desc":
+    "Tu pago está siendo confirmado. Esto puede tardar unos segundos; el Pro se activará automáticamente.",
+  "billing.back_to_dashboard": "Volver al dashboard",
 };

@@ -1,0 +1,187 @@
+# Plan — Paid tier ("Pro") with Polar billing
+
+## Decisions locked in (from discussion)
+
+- **Paid unit = registry (group), owner pays**, whole group benefits. Joining
+  groups is never gated.
+- **Free tier**: unlimited transactions/payments/cuts; own ≤ 2 registries; per
+  free registry: ≤ 4 members, ≤ 3 active recurring/installment templates,
+  history = current exercise + last closed one.
+- **Pro registry**: unlimited members, templates, full history. Price configured
+  in Polar dashboard (~US$1.99/mo, ~$15/yr, 14-day no-card trial — dashboard
+  config, not code).
+- **Grandfathering**: all registries existing at migration time get
+  `plan='grandfathered'` (unlimited forever).
+- **Processor: Polar only** (Merchant of Record — standalone, no Stripe). Thin
+  `lib/billing.ts` abstraction so Stripe/MercadoPago could be added later.
+- Polar integration style: **Checkout Links** (long-lived URLs, metadata
+  propagation) + webhooks — no programmatic checkout sessions needed.
+
+## Polar facts (from docs)
+
+- OAT (`polar_oat_…`) in `Authorization: Bearer`, server-side only; production
+  `https://api.polar.sh/v1`, sandbox `https://sandbox-api.polar.sh/v1`.
+- Checkout Link: configured in dashboard (monthly + yearly products on one
+  link), supports `metadata` (propagates to subscription/order), `reference_id`,
+  success URL with `{CHECKOUT_ID}` substitution, trial override,
+  `locale`/`theme` query params.
+- Webhooks: Standard Webhooks spec, HMAC signature, secret set in dashboard;
+  subscribe to subscription lifecycle events (active/canceled/revoked/updated —
+  confirm exact event names at implementation time). Polar CLI `polar listen`
+  tunnels webhooks for local dev.
+- Customer portal: hosted; server creates a session via
+  `POST /v1/customer-sessions/` and redirects the user to the returned
+  `customer_portal_url`.
+
+## Step 1 — DB migration `db/add_billing.sql`
+
+Following the new convention (self-contained RLS block, idempotent):
+
+- `ALTER TABLE registries ADD COLUMN plan TEXT NOT NULL DEFAULT 'free'` +
+  `CHECK (plan IN ('free','pro','grandfathered'))`; set `plan='grandfathered'`
+  for all existing rows in the same migration.
+- New table `registry_subscriptions`:
+  `registry_id UUID PK REFERENCES registries(id) ON DELETE CASCADE`,
+  `polar_subscription_id TEXT UNIQUE`, `polar_customer_id TEXT`,
+  `status TEXT NOT NULL` (`trialing|active|past_due|canceled|revoked`),
+  `current_period_end TIMESTAMPTZ`, `grace_until TIMESTAMPTZ`, `updated_at`. RLS
+  enabled + forced, **zero policies** (server-only, same posture as
+  `audit_log`/`allowed_emails`).
+- Update `docs/DATABASE.md` run order + table docs.
+
+## Step 2 — `lib/entitlements.ts` (pure, unit-tested)
+
+- `FREE_LIMITS = { maxOwnedRegistries: 2, maxMembers: 4, maxActiveTemplates: 3, maxClosedExercisesVisible: 1 }`.
+- `getRegistryPlan(registryId)` → reads `registries.plan` +
+  `registry_subscriptions` (pro = plan pro/grandfathered, or subscription status
+  trialing/active, or past_due within `grace_until`).
+- `entitlementsFor(plan)` → limit set (Infinity for pro/grandfathered).
+- Tests in `lib/entitlements_test.ts` (db stub).
+
+## Step 3 — Enforcement (4 touchpoints, all return 402 + `{ code: "upgrade_required", reason }`)
+
+- `routes/api/registries/index.ts` POST: count owned registries
+  (`SELECT count(*) FROM registry_members WHERE user_id=$1 AND role='owner'`) —
+  block 3rd for free users.
+- `lib/store.ts useInvitation` + `routes/api/invitations/join.ts`: member count
+  vs registry plan cap → join fails with "group is full; the owner can upgrade"
+  (i18n string). Surface a friendly message on `/join/[code]` too.
+- `routes/api/transactions/index.ts` POST: when `type` is
+  `parcialidad`/`recurrente`, count active templates (spawn-candidate query) for
+  the registry vs cap.
+- `routes/dashboard/history.tsx` + `getExercises`: free registries see the
+  newest closed exercise only; older rows render as locked placeholder rows with
+  an upgrade CTA (not hidden silently — the paywall _is_ the feature discovery).
+- `ctx.state`: middleware already loads registries; add plan/entitlements to
+  `State` (utils.ts) so pages/islands can render CTAs without extra queries.
+
+## Step 4 — `lib/billing.ts` (Polar, dependency-light)
+
+- Plain `fetch` REST client with OAT (no SDK — the SDK is `@next` public
+  preview; the 3 calls we need are simple; revisit if the surface grows).
+- `getCheckoutUrl(registryId, interval, locale)`: builds the
+  dashboard-configured Checkout Link URL +
+  `?metadata[registry_id]=…&reference_id=…&locale=es|en&theme=dark`. (If one
+  link can't carry both products the way we want, two env-configured links.)
+- `verifyWebhook(req)`: HMAC per Standard Webhooks (`webhook-id`,
+  `webhook-timestamp`, `webhook-signature` headers, ~25 lines or the tiny
+  `standardwebhooks` npm package — decide at implementation, prefer zero-dep).
+- `handleSubscriptionEvent(payload)`: upsert `registry_subscriptions` from
+  `metadata.registry_id`; on canceled/revoked set status +
+  `grace_until = now() + 3 days`; never hard-cut mid-paid-period.
+- `createPortalSession(registryId, userId)`: owner-only; POST
+  `/v1/customer-sessions/` → return portal URL.
+- `syncCheckout(checkoutId)`: fetch checkout/subscription by id for instant
+  confirmation on the success page (webhooks can lag seconds).
+
+## Step 5 — Routes
+
+- `GET /api/billing/checkout?registry_id&interval=monthly|yearly` — owner-only,
+  302 to Polar checkout link. (POST-only mutation rules don't apply — it's a
+  redirect, no state change; but make it POST→URL JSON if csrf gets in the way.)
+- `POST /api/webhooks/polar` — **public** (add to `PUBLIC_PREFIXES`
+  segment-aware list), **csrf exemption** in `main.ts` origin callback (safe:
+  HMAC-verified), **exempt from rate limiting** (Polar retries). Raw body needed
+  for signature — check Fresh body reading order.
+- `GET /billing/success?checkout_id=…` — page route: calls `syncCheckout`, shows
+  "Pro activado" state, links back to dashboard.
+- `POST /api/billing/portal` — owner-only, returns portal URL
+  (cancel/payment-method self-service).
+- Update `docs/ROUTES.md`.
+
+## Step 6 — Paywall UI + i18n
+
+- `islands/UpgradeButton.tsx`: owner sees "Mejorar a Pro" (sidebar footer above
+  LocaleToggle + contextual CTAs at each locked feature); non-owner members see
+  "ask the owner to upgrade" tooltip.
+- `components/PaywallCard.tsx` (server): used on history page locked rows,
+  full-group join error, template-limit error toast.
+- i18n keys in `lib/i18n.ts` (es + en) for all paywall/upgrade/success strings.
+- Demo route: unaffected (no billing on demo data).
+
+## Step 7 — Config, docs, ops
+
+- `.env.example`: `POLAR_ACCESS_TOKEN`, `POLAR_WEBHOOK_SECRET`, `POLAR_ENV`
+  (`sandbox`|`production`), `POLAR_CHECKOUT_LINK` (or monthly/yearly ids).
+- `README.md`/`README.es.md`: billing section; `docs/BUSINESS_LOGIC.md`:
+  plans/limits; `CHANGELOG.md` entry.
+- **User manual steps** (same pattern as DB runbook): create Polar org +
+  products (monthly/yearly) + checkout link, set OAT + webhook secret in Deno
+  Deploy env, register webhook URL `https://<app>/api/webhooks/polar`, run
+  `db/add_billing.sql` on prod BEFORE deploy.
+
+## Step 8 — Tests
+
+- `lib/entitlements_test.ts`: plan resolution incl. grace period, grandfathered.
+- Route tests (db stub): registry-create cap, join member cap (403/402 +
+  message), template cap, history depth shaping.
+- Webhook test: signature verify (valid/invalid/tampered), event→DB upsert
+  mapping.
+- `deno task check` green; verify no regression on the 417-step suite.
+
+## Explicitly out of scope
+
+- No Stripe/MercadoPago implementation (abstraction seam only).
+- No per-user billing, no seat pricing, no refunds UI (Polar dashboard covers
+  refunds).
+- No new paid-only features (export/charts) — future work.
+
+## Deployment order (critical)
+
+1. Run `db/add_billing.sql` on prod (grandfathers everyone → zero user-facing
+   change).
+2. Configure Polar sandbox → test end-to-end with `polar listen` locally.
+3. Switch to Polar production keys in Deno Deploy env.
+4. Push/deploy.
+
+---
+
+## Implementation status (2026-08-14)
+
+All steps implemented on branch `feat/monetization-pro-tier`. One deliberate
+deviation from the original plan:
+
+- **Template cap counts distinct recurring groups** (not transactions) via
+  `countActiveTemplates()` — clones of the same template (carry-forward) and
+  same-group edits stay free, only NEW template groups hit the cap.
+
+### User runbook (do these before enabling in production)
+
+1. Run `db/add_billing.sql` on prod **before** deploying the code (everyone is
+   grandfathered → zero user-facing change).
+2. Create a Polar **sandbox** org at sandbox.polar.sh:
+   - Products: monthly (~$1.99) + yearly (~$15) — one Checkout Link can carry
+     both, with the 14-day no-card trial configured on the link.
+   - Checkout Link success URL:
+     `https://<your-domain>/billing/success?checkout_id={CHECKOUT_ID}`
+   - Copy the Checkout Link URL → `POLAR_CHECKOUT_LINK`.
+   - Developer settings → create OAT → `POLAR_ACCESS_TOKEN`.
+   - Webhooks → add endpoint `https://<your-domain>/api/webhooks/polar`,
+     subscribe to subscription events → secret → `POLAR_WEBHOOK_SECRET`.
+3. Set the four `POLAR_*` vars in Deno Deploy env (`POLAR_ENV=sandbox`) and test
+   end-to-end. Local dev: `polar listen --background` tunnels webhooks.
+4. Go live: repeat in the production Polar org, flip `POLAR_ENV=production` and
+   the prod checkout link/token/secret in Deno Deploy, deploy.
+
+> Domain note: webhook + success URLs live in the Polar dashboard, so moving
+> from `*.deno.net` to a custom domain later is a dashboard-only change.

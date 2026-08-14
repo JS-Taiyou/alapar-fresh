@@ -206,4 +206,31 @@ export const en: Record<string, string> = {
   "join.joining": "Joining...",
   "join.join_button": "Join Group",
   "join.code_placeholder": "Code (e.g. K9X2M4B7)",
+
+  // --- Billing / Pro tier ---
+  "billing.upgrade": "Upgrade to Pro",
+  "billing.pro_badge": "PRO",
+  "billing.grandfathered_badge": "PRO",
+  "billing.upgrade_hint_owner":
+    "Unlock unlimited members and templates, plus full history.",
+  "billing.upgrade_hint_member":
+    "Ask the group owner to upgrade to Pro to unlock this.",
+  "billing.group_full":
+    "This group reached the free plan's member limit. The owner can upgrade to Pro to invite more people.",
+  "billing.templates_full":
+    "This group reached the free plan's recurring-template limit. The owner can upgrade to Pro to add more.",
+  "billing.registries_full":
+    "You reached the free plan's limit of 2 groups. Upgrade one to Pro or delete a group to create another.",
+  "billing.history_locked": "Older cuts available in Pro",
+  "billing.history_locked_cta": "Unlock full history",
+  "billing.monthly": "Monthly",
+  "billing.yearly": "Yearly",
+  "billing.manage": "Manage subscription",
+  "billing.success_title": "Pro activated!",
+  "billing.success_desc":
+    "Your group now has unlimited access. Every member benefits.",
+  "billing.success_pending_title": "Processing payment…",
+  "billing.success_pending_desc":
+    "Your payment is being confirmed. This can take a few seconds; Pro will activate automatically.",
+  "billing.back_to_dashboard": "Back to dashboard",
 };

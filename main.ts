@@ -10,6 +10,7 @@ import { getCookie } from "./lib/auth-cookies.ts";
 import { query } from "./lib/db.ts";
 import { needsFullState, routeGuard } from "./lib/routing.ts";
 import { resolveLocale } from "./lib/i18n.ts";
+import { getRegistryPlan } from "./lib/entitlements.ts";
 
 const isDev = !Deno.env.get("DENO_DEPLOYMENT_ID");
 function devLog(...args: unknown[]) {
@@ -19,10 +20,14 @@ function devLog(...args: unknown[]) {
 export const app = new App<State>();
 
 app.use(staticFiles());
-// No CSRF exemptions: every mutating endpoint must send a matching Origin.
-// The auth callback/check-email fetch calls are same-origin, so they pass.
+// No CSRF exemptions except the Polar webhook: Polar's server posts
+// cross-origin with no browser Origin header, and authenticity is enforced
+// by the Standard Webhooks HMAC signature (see lib/billing.ts), so CSRF
+// protection adds nothing there.
 app.use(csrf({
-  origin: (origin, ctx) => origin === ctx.url.origin,
+  origin: (origin, ctx) =>
+    ctx.url.pathname === "/api/webhooks/polar" ||
+    origin === ctx.url.origin,
 }));
 
 // Security headers on every (non-static) response. No CSP: islands rely on
@@ -102,6 +107,7 @@ app.use(define.middleware(async (ctx) => {
     getCookie(ctx.req.headers.get("cookie") ?? "", "alapar-locale"),
     ctx.req.headers.get("accept-language"),
   );
+  ctx.state.activeRegistryPlan = null;
 
   // /demo renders entirely from static JSON — skip auth + DB entirely.
   if (path === "/demo") {
@@ -252,6 +258,12 @@ app.use(define.middleware(async (ctx) => {
   ctx.state.participants = state.participants;
   ctx.state.isOwner = state.isOwner;
   ctx.state.ownerRegistryIds = state.ownerRegistryIds;
+
+  // Plan of the active registry (1 extra query on full-state paths only) —
+  // lets pages/islands render upgrade CTAs without re-querying.
+  ctx.state.activeRegistryPlan = state.activeRegistry
+    ? await getRegistryPlan(state.activeRegistry.id)
+    : null;
 
   const response = await ctx.next();
   if (authResult.refreshedTokens && response) {
