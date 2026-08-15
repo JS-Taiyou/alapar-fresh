@@ -66,17 +66,73 @@ describe("getRegistryPlan", () => {
     assertEquals(info!.limits, FREE_LIMITS);
   });
 
-  it("pro column → unlimited regardless of subscription", async () => {
+  it("pro column + canceled with NO grace → DEMOTES to free (revenue fix)", async () => {
+    // The webhook never writes plan='free' on cancel; this read is where
+    // cancellation takes effect. A 'pro' column with a dead subscription
+    // must not stay Pro forever.
     __setQueryResult({
       rows: [{ plan: "pro", sub_status: "canceled", grace_until: null }],
     });
     const info = await getRegistryPlan("r1");
-    assertEquals(info!.isPro, true);
+    assertEquals(info!.isPro, false);
+    assertEquals(info!.plan, "free");
+  });
+
+  it("pro column + canceled beyond grace → free", async () => {
+    const past = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    __setQueryResult({
+      rows: [{ plan: "pro", sub_status: "canceled", grace_until: past }],
+    });
+    assertEquals((await getRegistryPlan("r1"))!.isPro, false);
+  });
+
+  it("pro column + canceled WITHIN grace → still pro", async () => {
+    const future = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    __setQueryResult({
+      rows: [{ plan: "pro", sub_status: "canceled", grace_until: future }],
+    });
+    assertEquals((await getRegistryPlan("r1"))!.isPro, true);
+  });
+
+  it("pro column + revoked beyond grace → free", async () => {
+    const past = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    __setQueryResult({
+      rows: [{ plan: "pro", sub_status: "revoked", grace_until: past }],
+    });
+    assertEquals((await getRegistryPlan("r1"))!.isPro, false);
+  });
+
+  it("pro column + active subscription → pro", async () => {
+    __setQueryResult({
+      rows: [{ plan: "pro", sub_status: "active", grace_until: null }],
+    });
+    assertEquals((await getRegistryPlan("r1"))!.isPro, true);
+  });
+
+  it("pro column + NO subscription row → pro (nothing contradicts it)", async () => {
+    __setQueryResult({
+      rows: [{ plan: "pro", sub_status: null, grace_until: null }],
+    });
+    assertEquals((await getRegistryPlan("r1"))!.isPro, true);
   });
 
   it("grandfathered column → unlimited", async () => {
     __setQueryResult({
       rows: [{ plan: "grandfathered", sub_status: null, grace_until: null }],
+    });
+    const info = await getRegistryPlan("r1");
+    assertEquals(info!.isPro, true);
+    assertEquals(info!.plan, "grandfathered");
+  });
+
+  it("grandfathered column stays unlimited even with a dead subscription", async () => {
+    // Grandfathering is permanent by design — a subscription (e.g. an owner
+    // who upgraded anyway, then canceled) can never demote it.
+    const past = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    __setQueryResult({
+      rows: [
+        { plan: "grandfathered", sub_status: "canceled", grace_until: past },
+      ],
     });
     const info = await getRegistryPlan("r1");
     assertEquals(info!.isPro, true);
@@ -120,6 +176,14 @@ describe("getRegistryPlan", () => {
     });
     assertEquals((await getRegistryPlan("r1"))!.isPro, false);
   });
+
+  it("free column + canceled WITHIN grace → pro (grace covers un-flipped column)", async () => {
+    const future = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    __setQueryResult({
+      rows: [{ plan: "free", sub_status: "canceled", grace_until: future }],
+    });
+    assertEquals((await getRegistryPlan("r1"))!.isPro, true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -127,10 +191,15 @@ describe("getRegistryPlan", () => {
 // ---------------------------------------------------------------------------
 
 describe("count helpers", () => {
-  it("countOwnedRegistries counts owner rows", async () => {
+  it("countOwnedRegistries counts only owner rows on effectively-FREE registries", async () => {
+    // Pro/grandfathered owned groups must NOT consume the create cap —
+    // otherwise every post-migration user with 2 grandfathered registries
+    // (i.e. all early users) would be locked out of creating any new group.
     __setQueryResult({ rows: [{ cnt: 2 }] });
     assertEquals(await countOwnedRegistries("u1"), 2);
-    assertEquals(__queryLog[0].text.includes("role = 'owner'"), true);
+    const sql = __queryLog[0].text;
+    assertEquals(sql.includes("role = 'owner'"), true);
+    assertEquals(sql.includes("r.plan = 'free'"), true); // the cap fix
   });
 
   it("countRegistryMembers counts membership rows", async () => {

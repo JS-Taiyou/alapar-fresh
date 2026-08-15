@@ -44,13 +44,9 @@ export const handler = define.handlers({
     // hiding history silently would just look like data loss).
     //
     // This shapes the VIEW, not the data: `exercises` still holds everything
-    // (needed for lockedCount + the empty-state check); only `grouped`/years
-    // below are filtered to the visible slice. getExercises orders by
-    // end_date DESC, so slice(0, N) is "the N newest cuts".
-    //
-    // NOTE: `lockedCount > 0` is also what suppresses personalTotals work on
-    // locked rows in spirit — totals are computed for all exercises above,
-    // but locked ones simply never get a card rendered to read them.
+    // (needed for lockedCount + the empty-state check); only `visible` feeds
+    // the per-exercise work below. getExercises orders by end_date DESC, so
+    // slice(0, N) is "the N newest cuts".
     const planInfo = await getRegistryPlan(registryId);
     let lockedCount: number | null = null;
     if (
@@ -60,9 +56,16 @@ export const handler = define.handlers({
       lockedCount = exercises.length -
         planInfo.limits.maxClosedExercisesVisible;
     }
+    const visible = lockedCount === null
+      ? exercises
+      : exercises.slice(0, planInfo!.limits.maxClosedExercisesVisible);
 
+    // Personal totals run ONLY for visible exercises: each one costs a
+    // per-exercise transaction query, so including locked rows on a free
+    // registry with years of history would be an unbounded N+1 pile for
+    // numbers that are never rendered.
     const personalTotals = new Map<string, number>();
-    await Promise.all(exercises.map(async (ex) => {
+    await Promise.all(visible.map(async (ex) => {
       const txs = await getTransactionsByExercise(ex.id);
       const total = txs.reduce((sum, tx) => {
         if (tx.type === "pago" || tx.type === "ajuste") {
@@ -94,9 +97,6 @@ export const handler = define.handlers({
 
     // Group only the visible (newest) exercises; locked ones render as a
     // single locked-rows block, not as hidden history.
-    const visible = lockedCount === null
-      ? exercises
-      : exercises.slice(0, planInfo!.limits.maxClosedExercisesVisible);
     const grouped: Record<number, typeof exercises> = {};
     for (const ex of visible) {
       const year = ex.endDate.getFullYear();

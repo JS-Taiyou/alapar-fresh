@@ -1,6 +1,7 @@
 import { define } from "../../../utils.ts";
 import { useInvitation as acceptInvitation } from "../../../lib/store.ts";
 import { t } from "../../../lib/i18n.ts";
+import { GroupFullError } from "../../../lib/entitlements.ts";
 
 export const handler = define.handlers({
   async POST(ctx) {
@@ -16,9 +17,10 @@ export const handler = define.handlers({
       const registryId = await acceptInvitation(code, systemUserId);
       return Response.json({ registryId });
     } catch (err) {
-      // Map the plan-limit sentinel to a 402 upgrade signal with a friendly
-      // localized message; everything else stays a plain 400.
-      if (err instanceof Error && err.message === "GROUP_FULL") {
+      // Map the member-cap error to a 402 upgrade signal with a friendly
+      // localized message; every other failure stays a plain 400.
+      // instanceof (vs message matching) keeps the contract drift-proof.
+      if (err instanceof GroupFullError) {
         return Response.json({
           code: "upgrade_required",
           reason: "members",

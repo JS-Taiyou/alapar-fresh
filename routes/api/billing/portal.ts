@@ -4,6 +4,13 @@ import { createPortalSession } from "../../../lib/billing.ts";
 /**
  * POST /api/billing/portal — owner-only; returns a hosted Polar customer
  * portal URL (cancel / update payment method self-service).
+ *
+ * Body: `{ registry_id }`. Ownership is resolved server-side from
+ * `ctx.state.ownerRegistryIds` (populated by the middleware) — the client
+ * cannot claim a registry it doesn't own.
+ *
+ * 404 when the registry has no subscription row / Polar customer id yet
+ * (nothing to manage — e.g. the "manage" action reached a free registry).
  */
 export const handler = define.handlers({
   async POST(ctx) {
@@ -21,11 +28,11 @@ export const handler = define.handlers({
       );
     }
 
-    const url = await createPortalSession();
+    const url = await createPortalSession(registryId);
     if (!url) {
       return Response.json(
-        { error: "Could not create portal session" },
-        { status: 502 },
+        { error: "No subscription found for this registry" },
+        { status: 404 },
       );
     }
     return Response.json({ url });

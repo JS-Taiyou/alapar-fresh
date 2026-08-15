@@ -37,17 +37,19 @@ getRegistryPlan(registryId) — the single source of truth:
 
 ## Key design decisions and why
 
-| Decision                                               | Rationale                                                                                                                               |
-| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| Registry is the paid unit (owner pays, group benefits) | Members shouldn't need payment setup to participate; one payer per group keeps the billing surface tiny                                 |
-| Joining never gated by the joiner's plan               | Network effects: every free user can still join Pro groups                                                                              |
-| Grandfathered = permanent, webhook can't touch it      | Trust promise to early users; activation UPDATE is `WHERE plan = 'free'`                                                                |
-| Subscription JOIN _and_ plan column                    | Webhooks lag; entitlements must be correct at payment time. Column = fast path, JOIN = safety net (activation lag + cancellation grace) |
-| 3-day grace on cancel/revoke                           | Covers dunning and "paid period not over"; max time a lapsed payment still grants access                                                |
-| Locked rows instead of hidden history                  | The paywall IS feature discovery; silent hiding looks like data loss                                                                    |
-| Templates = distinct recurring groups                  | Carry-forward clones of existing commitments must never be blocked                                                                      |
-| Polar only, no SDK                                     | Merchant of Record (they own cards/tax/VAT); the 3 API calls we need don't justify a preview SDK                                        |
-| Checkout Links + webhooks (no programmatic sessions)   | Pricing/trial changes stay dashboard-only, no deploy                                                                                    |
+| Decision                                                           | Rationale                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Registry is the paid unit (owner pays, group benefits)             | Members shouldn't need payment setup to participate; one payer per group keeps the billing surface tiny                                                                                                                                                                                                                                                    |
+| Joining never gated by the joiner's plan                           | Network effects: every free user can still join Pro groups                                                                                                                                                                                                                                                                                                 |
+| Grandfathered = permanent, webhook can't touch it                  | Trust promise to early users; activation UPDATE is `WHERE plan = 'free'`                                                                                                                                                                                                                                                                                   |
+| Subscription JOIN _and_ plan column                                | Webhooks lag; entitlements must be correct at payment time. Column = fast path; the JOIN is the safety net in BOTH directions: it lifts a just-paid registry before the flip webhook lands, AND demotes a canceled one once grace lapses (the webhook never writes plan='free' — demotion happens on read in `getRegistryPlan`, so no cron sweeper exists) |
+| Owned-registry cap counts only effectively-FREE registries         | Grandfathered/Pro groups don't consume the cap — early users keep their pre-billing "unlimited creates", and a customer with 2 Pro groups can still start a 3rd (upgrade happens per-registry, after creation)                                                                                                                                             |
+| 3-day grace on cancel/revoke/past_due                              | Covers dunning (one failed charge ≠ instant cut) and "paid period not over"; the window IS the max time any lapsed payment grants access                                                                                                                                                                                                                   |
+| Locked rows instead of hidden history                              | The paywall IS feature discovery; silent hiding looks like data loss                                                                                                                                                                                                                                                                                       |
+| Templates = distinct recurring groups                              | Carry-forward clones of existing commitments must never be blocked                                                                                                                                                                                                                                                                                         |
+| Polar only, no SDK                                                 | Merchant of Record (they own cards/tax/VAT); the 3 API calls we need don't justify a preview SDK                                                                                                                                                                                                                                                           |
+| Checkout Links + webhooks (no programmatic sessions)               | Pricing/trial changes stay dashboard-only, no deploy                                                                                                                                                                                                                                                                                                       |
+| Registry mapping: metadata.registry_id with reference_id fallbacks | Polar's documented link params list `reference_id` but not `metadata[…]`; the webhook handler accepts both so the mapping survives either dashboard behavior                                                                                                                                                                                               |
 
 ## Security notes (where the sensitive parts live)
 
@@ -246,18 +248,28 @@ deviation from the original plan:
 1. Run `db/add_billing.sql` on prod **before** deploying the code (everyone is
    grandfathered → zero user-facing change).
 2. Create a Polar **sandbox** org at sandbox.polar.sh:
-   - Products: monthly (~$1.99) + yearly (~$15) — one Checkout Link can carry
-     both, with the 14-day no-card trial configured on the link.
+   - Products: monthly (~$1.99) + yearly (~$15), with the 14-day no-card trial
+     configured on the checkout link(s).
+   - Checkout Link(s): one per product. Polar's documented query params do NOT
+     include `interval` preselection — to reliably offer yearly, create a second
+     link on the yearly product and set it as `POLAR_CHECKOUT_LINK_YEARLY`.
    - Checkout Link success URL:
      `https://<your-domain>/billing/success?checkout_id={CHECKOUT_ID}`
-   - Copy the Checkout Link URL → `POLAR_CHECKOUT_LINK`.
+   - Copy the monthly link URL → `POLAR_CHECKOUT_LINK`.
    - Developer settings → create OAT → `POLAR_ACCESS_TOKEN`.
    - Webhooks → add endpoint `https://<your-domain>/api/webhooks/polar`,
      subscribe to subscription events → secret → `POLAR_WEBHOOK_SECRET`.
-3. Set the four `POLAR_*` vars in Deno Deploy env (`POLAR_ENV=sandbox`) and test
+3. Set the `POLAR_*` vars in Deno Deploy env (`POLAR_ENV=sandbox`) and test
    end-to-end. Local dev: `polar listen --background` tunnels webhooks.
-4. Go live: repeat in the production Polar org, flip `POLAR_ENV=production` and
-   the prod checkout link/token/secret in Deno Deploy, deploy.
+4. **Sandbox verification (the one thing unit tests can't cover):** complete a
+   test purchase and confirm the subscription webhook actually carries
+   `metadata.registry_id` (or at minimum the `reference_id` fallback — check the
+   payload with `polar listen`). If neither field reaches the subscription
+   object, upgrades will never activate: the webhook handler ignores events it
+   can't map to a registry. Also verify a cancel flow end-to-end: Pro should
+   persist for 3 days, then drop to free.
+5. Go live: repeat in the production Polar org, flip `POLAR_ENV=production` and
+   the prod checkout link(s)/token/secret in Deno Deploy, deploy.
 
 > Domain note: webhook + success URLs live in the Polar dashboard, so moving
 > from `*.deno.net` to a custom domain later is a dashboard-only change.

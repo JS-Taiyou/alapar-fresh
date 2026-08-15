@@ -80,8 +80,16 @@ export function getCheckoutUrl(
   interval: "monthly" | "yearly",
   locale: string,
 ): string {
-  const base = Deno.env.get("POLAR_CHECKOUT_LINK");
-  if (!base) throw new Error("POLAR_CHECKOUT_LINK env var is required");
+  const monthly = Deno.env.get("POLAR_CHECKOUT_LINK");
+  if (!monthly) throw new Error("POLAR_CHECKOUT_LINK env var is required");
+  // Yearly uses a dedicated link when configured. Polar's documented query
+  // params do NOT include `interval`, so reliably preselecting the yearly
+  // product means a second Checkout Link pointed at the yearly product
+  // (POLAR_CHECKOUT_LINK_YEARLY). The ?interval=yearly param below is still
+  // appended for dashboards/links that do honor it — harmless if dropped.
+  const base = interval === "yearly"
+    ? Deno.env.get("POLAR_CHECKOUT_LINK_YEARLY") ?? monthly
+    : monthly;
   const url = new URL(base);
   url.searchParams.set("metadata[registry_id]", registryId);
   url.searchParams.set("reference_id", registryId);
@@ -153,18 +161,33 @@ export async function syncCheckout(
  * expires quickly, which is why we hand it back as JSON for an immediate
  * redirect instead of 302-ing (the fetch is same-origin from the island).
  *
- * Note: Polar scopes customer sessions to the CUSTOMER (polar_customer_id),
- * not to a registry. We store that id per registry; a user owning two Pro
- * registries gets the portal listing both, which is the correct UX.
+ * Polar REQUIRES a customer identifier on this call — an empty body 422s,
+ * which is why we look up the `polar_customer_id` we stored at webhook time
+ * (`registry_subscriptions.polar_customer_id`) and send it as `customer_id`.
+ * Returns null when the registry has no subscription row yet (nothing to
+ * manage) or the Polar call fails; the route maps both to an error.
+ *
+ * Note: Polar scopes customer sessions to the CUSTOMER, not to a registry.
+ * A user owning two Pro registries (same Polar customer) gets a portal
+ * listing both subscriptions — which is the correct UX.
  */
-export async function createPortalSession(): Promise<string | null> {
+export async function createPortalSession(
+  registryId: string,
+): Promise<string | null> {
+  const sub = await query(
+    `SELECT polar_customer_id FROM registry_subscriptions WHERE registry_id = $1`,
+    [registryId],
+  );
+  const customerId = sub.rows[0]?.polar_customer_id as string | undefined;
+  if (!customerId) return null;
+
   const res = await fetch(`${apiBase()}/customer-sessions/`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${oat()}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({}),
+    body: JSON.stringify({ customer_id: customerId }),
   });
   if (!res.ok) return null;
   const data = await res.json() as { customer_portal_url?: string };
@@ -306,40 +329,41 @@ function timingSafeEqual(a: string, b: string): boolean {
 // ---------------------------------------------------------------------------
 
 /**
- * How long a canceled/revoked registry keeps Pro after the webhook lands.
- * Covers dunning (card retry flows) and honest "I canceled but the period I
- * paid for isn't over" — we never hard-cut mid-paid-period. Three days
- * matches Polar's own failed-payment retry cadence closely enough for our
- * small scale; it's deliberately short because `getRegistryPlan` treats
- * past_due-within-grace as Pro, so this window is also the maximum time a
- * lapsed payment still grants access.
+ * How long a dead-or-dying subscription keeps Pro after the webhook lands.
+ * Covers dunning (past_due: a single failed charge gets a retry window —
+ * we never hard-cut a paying customer over one declined card) and honest
+ * "I canceled but the period I paid for isn't over". Three days matches
+ * Polar's failed-payment retry cadence closely enough at our scale; it's
+ * deliberately short because getRegistryPlan treats within-grace as Pro —
+ * this window IS the maximum time any lapsed payment still grants access.
  */
 const GRACE_DAYS = 3;
 
 /**
  * Upsert `registry_subscriptions` from a subscription lifecycle webhook.
  *
- * Mapping: Polar echoes the checkout's `metadata.registry_id` on every
- * subscription object — that's how a payment finds its registry. Events
- * WITHOUT that metadata are not ours (another product on the same org, or a
- * subscription created outside our checkout) and are ignored.
+ * Mapping: the registry comes from `metadata.registry_id` with
+ * `reference_id` fallbacks (see the inline comment in the body). Events
+ * mapping to no registry are not ours (another product on the same org, or
+ * a subscription created outside our checkout) and are ignored.
  *
  * Idempotency: the upsert is keyed on registry_id (PK), so Polar's at-least-
  * once redelivery just overwrites the same row with the same values.
  *
  * Status → effect:
- *   trialing / active   → row upserted; registries.plan flipped 'free'→'pro'
- *                         (the plan COLUMN is a fast path; the subscription
- *                         JOIN in getRegistryPlan remains authoritative and
- *                         covers webhook lag in the other direction)
- *   past_due            → row upserted; still counts as Pro while grace_until
- *                         holds (see GRACE_DAYS above)
+ *   trialing / active   → row upserted (no grace); registries.plan flipped
+ *                         'free'→'pro'. The column is a fast path — the
+ *                         subscription JOIN in getRegistryPlan stays
+ *                         authoritative in BOTH directions.
+ *   past_due            → row upserted with grace_until = now + 3d; Pro
+ *                         continues while grace holds (dunning window).
  *   canceled / revoked  → row upserted with grace_until = now + 3d; the plan
- *                         column is intentionally LEFT AS-IS — the JOIN check
- *                         stops covering the registry when grace lapses, so
- *                         entitlements fall back to free without a sweeper.
- *                         (No cron job needed; the column self-heals on the
- *                         next resubscribe webhook.)
+ *                         column is intentionally LEFT AS-IS — no cron
+ *                         sweeper exists because none is needed:
+ *                         getRegistryPlan demotes plan='pro' to free once
+ *                         grace_until lapses (its matrix checks the
+ *                         subscription before trusting the column). The
+ *                         column self-heals on the next resubscribe.
  */
 export async function handleSubscriptionEvent(
   payload: Record<string, unknown>,
@@ -348,8 +372,19 @@ export async function handleSubscriptionEvent(
   if (!data) return;
 
   const metadata = (data.metadata ?? {}) as Record<string, string>;
-  const registryId = metadata.registry_id;
-  if (!registryId) return; // not ours — no registry mapping, ignore
+  // Map the payment back to a registry. `metadata[registry_id]` on the
+  // checkout link is the primary channel, but Polar's DOCUMENTED query-param
+  // list for checkout links does not include metadata[…] — only
+  // `reference_id`. reference_id propagates from checkout to the order AND
+  // (per the subscriptions API) to the subscription object, so we accept it
+  // from three positions, in order of preference. The runbook requires an
+  // end-to-end sandbox check of which channel actually fires — this fallback
+  // makes the mapping robust either way. Events with none of them are not
+  // ours (another product on the org, or a checkout created elsewhere).
+  const registryId = metadata.registry_id ??
+    (typeof data.reference_id === "string" ? data.reference_id : undefined) ??
+    metadata.reference_id;
+  if (!registryId) return;
 
   const subscriptionId = data.id as string | undefined;
   const status = data.status as string | undefined;
@@ -361,7 +396,12 @@ export async function handleSubscriptionEvent(
   const currentPeriodEnd = (data.current_period_end as string | undefined) ??
     null;
 
-  const graceUntil = status === "canceled" || status === "revoked"
+  // Grace is set on past_due too, not just canceled/revoked: a single failed
+  // charge (card expired, bank decline) must not hard-cut a paying customer
+  // while Polar retries. The window bounds the maximum time ANY lapsed
+  // payment still grants access — see getRegistryPlan's matrix.
+  const graceUntil = status === "canceled" || status === "revoked" ||
+      status === "past_due"
     ? new Date(Date.now() + GRACE_DAYS * 24 * 60 * 60 * 1000).toISOString()
     : null;
 
@@ -397,6 +437,8 @@ export async function handleSubscriptionEvent(
       [registryId],
     );
   }
-  // canceled/revoked: deliberately no plan-column write. See the doc comment
-  // above — the subscription JOIN is authoritative and time-limits access.
+  // canceled/revoked/past_due beyond grace: deliberately no plan-column
+  // write. getRegistryPlan demotes plan='pro' → free when the subscription
+  // row is dead and grace has lapsed, so entitlements expire on READ with
+  // zero background jobs. (See the matrix in lib/entitlements.ts.)
 }

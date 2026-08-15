@@ -216,13 +216,20 @@ registry.
 
 A registry is effectively Pro when ANY of:
 
-1. `registries.plan` is `pro` or `grandfathered` (fast path, flipped by the
-   webhook), OR
+1. `registries.plan` is `grandfathered` (permanent — nothing can demote it), OR
 2. its Polar subscription is `trialing`/`active`, OR
-3. the subscription is `past_due` **and** `grace_until` is in the future.
+3. the subscription is `past_due`/`canceled`/`revoked` **and** `grace_until` is
+   in the future (3-day grace: dunning and "paid period not over" — never a hard
+   cut), OR
+4. `registries.plan` is `pro` **and** no subscription row contradicts it.
 
-Rules 2–3 cover webhook lag (paid but the flip event hasn't landed) and dunning
-(canceled → 3-day grace, never a hard cut mid-paid-period). See
+Otherwise free — including the revenue-critical case: `plan='pro'` with a
+`canceled`/`revoked`/`past_due` subscription **beyond grace**. The webhook
+deliberately never writes `plan='free'` on cancel, so **demotion happens on
+read, here** — no cron sweeper exists.
+
+Rules 2–3 cover webhook lag in BOTH directions (paid but the flip event hasn't
+landed → lifted; canceled but grace holds → not yet cut). See
 `lib/entitlements.ts` — this resolution is the single source of truth;
 enforcement always goes through it (directly or via
 `ctx.state.activeRegistryPlan`).
@@ -232,10 +239,14 @@ enforcement always goes through it (directly or via
 All return `402 {code: "upgrade_required", reason}` (JSON) or a redirect with
 `?upgrade=…` (form fallback):
 
-- **3rd owned registry** → `POST /api/registries` blocked
-- **Joining a full free group** → `useInvitation` throws the `GROUP_FULL`
-  sentinel; the join route maps it to a localized 402. Checked AFTER the
-  invitation-uses claim so a full group never burns an invite use.
+- **3rd owned FREE registry** → `POST /api/registries` blocked. Only
+  effectively-free registries consume the cap — grandfathered and Pro groups
+  don't (early users keep unlimited creates; a 3rd group can be upgraded after
+  creation).
+- **Joining a full free group** → `useInvitation` throws a typed
+  `GroupFullError`; the join route maps it (via instanceof) to a localized 402.
+  Checked AFTER the invitation-uses claim so a full group never burns an invite
+  use.
 - **4th distinct recurring group** → transaction POST blocked. Templates count
   as distinct `recurring_group_id`s: carry-forward clones and edits of existing
   templates stay free.

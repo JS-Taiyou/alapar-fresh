@@ -154,6 +154,32 @@ describe("handleSubscriptionEvent", () => {
     assertEquals(flip!.params[0], "reg-1");
   });
 
+  it("past_due ALSO sets the grace window (one failed charge ≠ instant cut)", async () => {
+    await handleSubscriptionEvent({
+      type: "subscription.updated",
+      data: { ...activeEvent.data, status: "past_due" },
+    });
+    const upsert = __queryLog.find((c) =>
+      c.text.includes("INSERT INTO registry_subscriptions")
+    );
+    assert(upsert!.params[5], "past_due events must set grace_until");
+  });
+
+  it("falls back to top-level reference_id when metadata is empty", async () => {
+    // Polar's documented checkout-link params include reference_id but NOT
+    // metadata[…] — if metadata is dropped, the mapping must still work.
+    const { metadata: _drop, ...dataNoMeta } = activeEvent.data;
+    await handleSubscriptionEvent({
+      type: "subscription.active",
+      data: { ...dataNoMeta, reference_id: "reg-via-ref" },
+    });
+    const upsert = __queryLog.find((c) =>
+      c.text.includes("INSERT INTO registry_subscriptions")
+    );
+    assert(upsert, "expected an upsert via reference_id fallback");
+    assertEquals(upsert!.params[0], "reg-via-ref");
+  });
+
   it("canceled sets a 3-day grace window instead of cutting immediately", async () => {
     await handleSubscriptionEvent({
       type: "subscription.canceled",

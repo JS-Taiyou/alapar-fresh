@@ -1,5 +1,9 @@
 import { query } from "./db.ts";
-import { countRegistryMembers, getRegistryPlan } from "./entitlements.ts";
+import {
+  countRegistryMembers,
+  getRegistryPlan,
+  GroupFullError,
+} from "./entitlements.ts";
 import type {
   Entity,
   Exercise,
@@ -1051,9 +1055,9 @@ export async function useInvitation(
   // "joining groups is never gated" is a product invariant. A free-plan user
   // joining a Pro group is fine; only the group's own plan sets its limits.
   //
-  // GROUP_FULL is a sentinel message — the join route maps it to a localized
-  // 402 {code:'upgrade_required'} payload. An ordinary Error message would
-  // leak to the client as a raw string; the sentinel keeps the mapping exact.
+  // GroupFullError is a typed error — the join route maps it (via
+  // instanceof) to a localized 402 {code:'upgrade_required'} payload, so a
+  // plain Error message never leaks to the client as a raw string.
   //
   // TOCTOU: two racing joins could both pass the count and land N+1 members.
   // Accepted risk (product limit, not a security boundary). The atomic
@@ -1063,7 +1067,7 @@ export async function useInvitation(
   if (planInfo && !planInfo.isPro) {
     const members = await countRegistryMembers(invitation.registryId);
     if (members >= planInfo.limits.maxMembers) {
-      throw new Error("GROUP_FULL");
+      throw new GroupFullError();
     }
   }
 

@@ -32,8 +32,29 @@ Paid registry plan (owner pays, whole group benefits). See
   i18n strings (es/en)
 - **State**: middleware resolves the active registry's plan once per full-state
   request (`ctx.state.activeRegistryPlan`)
-- Tests: 31 new steps (plan matrix, webhook signatures incl. tamper/replay,
-  event upsert mapping). 61 suites / 448 steps green.
+- Tests: plan matrix (incl. cancel-demotion, grace windows, grandfathered
+  immunity), webhook signatures (tamper/replay/missing/multi-scheme), event
+  upsert mapping, past_due grace, reference_id fallback. 61 suites / 457 steps
+  green.
+
+Post-review fixes (senior review, pre-merge):
+
+- **Revenue leak**: canceled subscriptions kept Pro forever — the plan column
+  was trusted unconditionally. `getRegistryPlan` now demotes `plan='pro'` to
+  free when the subscription row is dead and grace has lapsed (grandfathered is
+  immune by checking it first).
+- **Portal always failed**: customer-session creation now sends the stored
+  `polar_customer_id` (Polar requires a customer identifier).
+- **Owned-registry cap punished loyal users**: the count now includes only
+  effectively-free registries, so grandfathered/Pro groups don't consume it.
+- Registry mapping accepts `reference_id` fallbacks (Polar's documented
+  checkout-link params don't include `metadata[…]`); yearly preselect uses a
+  dedicated `POLAR_CHECKOUT_LINK_YEARLY` when configured. Runbook requires a
+  sandbox end-to-end check of which channel the webhook actually carries.
+- Grace is also set on `past_due` (one failed charge ≠ instant cut).
+- History personal totals computed for visible exercises only (removes an
+  unbounded N+1 on free registries with long history).
+- `GROUP_FULL` string sentinel replaced by a typed `GroupFullError`.
 
 ---
 
