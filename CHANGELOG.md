@@ -56,6 +56,28 @@ Post-review fixes (senior review, pre-merge):
   unbounded N+1 on free registries with long history).
 - `GROUP_FULL` string sentinel replaced by a typed `GroupFullError`.
 
+Type-checking restored to CI (second review follow-up):
+
+- Fixed the `Uint8Array<ArrayBufferLike>` → `BufferSource` type error in
+  `billing.ts` `base64Decode` (crypto.subtle rejected the widened type; the
+  widening came from a bare `Uint8Array` annotation, not from `Uint8Array.from`
+  as first assumed — comment documents the distinction).
+- Root-caused why `--no-check` had hidden a whole class of errors: `db.ts`'s
+  `query()` returned an unannotated `pool.query()` result whose row type varies
+  by pg overload/version (`any[]`/`{}[]`), cascading implicit-any errors. Pinned
+  to `QueryResult<Record<string, unknown>>` — version-independent and stable for
+  every caller.
+- New `deno.check.jsonc` + `deno task check:types`: a type-check-only config
+  that omits tailwind/daisyui/vite (only vite.config.ts imports them, and the
+  npm registry's corrupted `@tailwindcss/oxide-wasm32-wasi` metadata breaks any
+  install resolving them). `deno install --no-lock` against this config succeeds
+  on CI and gives `deno check` REAL npm type declarations — restoring full
+  type-checking of everything except vite.config.ts TODAY, not "once the
+  registry bug resolves". CI regains the step; `deno task check` includes it.
+- Fixed the two latent errors that real typing then surfaced:
+  `billing/success.tsx` (ctx.render data payload → `{ data }` object pattern)
+  and `push.ts` (subscriptions row cast through unknown).
+
 ---
 
 ## 2026-08-12 — v1.0.0: Public launch + security hardening

@@ -87,7 +87,9 @@ export async function sendPushToRegistry(
     [registryId, excludeUserId ?? null],
   );
 
-  const subscriptions: PushSubscription[] = result.rows;
+  // query() is pinned to Record<string, unknown>[] rows; the SELECT is ps.*,
+  // so every row IS a PushSubscription — assert through unknown.
+  const subscriptions = result.rows as unknown as PushSubscription[];
   console.log("[push] Found", subscriptions.length, "subscriptions to notify");
 
   for (const sub of subscriptions) {

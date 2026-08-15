@@ -305,11 +305,24 @@ function base64Encode(bytes: Uint8Array): string {
   return btoa(bin);
 }
 
-/** base64 → bytes. Standard Webhooks secrets are unpadded — re-pad first. */
-function base64Decode(b64: string): Uint8Array {
+/**
+ * base64 → bytes. Standard Webhooks secrets are unpadded — re-pad first.
+ *
+ * GOTCHA (bit us once): the return type must be `Uint8Array<ArrayBuffer>`.
+ * TS 5.7+ makes Uint8Array generic over its backing buffer, and a bare
+ * `Uint8Array` annotation means `Uint8Array<ArrayBufferLike>` — which crypto
+ * .subtle rejects as BufferSource (ArrayBufferView<ArrayBuffer>). Note the
+ * widening only happens via an EXPLICIT bare annotation; un-annotated
+ * `Uint8Array.from(...)` correctly infers `<ArrayBuffer>` (which is why the
+ * same pattern in lib/encoding.ts never errored). `new Uint8Array(n)` is
+ * always backed by a plain ArrayBuffer, so the constructor guarantees it.
+ */
+function base64Decode(b64: string): Uint8Array<ArrayBuffer> {
   const padded = b64 + "=".repeat((4 - b64.length % 4) % 4);
   const bin = atob(padded);
-  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
 }
 
 /**

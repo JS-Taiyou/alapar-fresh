@@ -1,4 +1,5 @@
 import pg from "pg";
+import type { QueryResult } from "pg";
 
 const connectionString = Deno.env.get("DATABASE_URL");
 if (!connectionString) throw new Error("DATABASE_URL env var is required");
@@ -17,7 +18,18 @@ export function getPool() {
   return pool;
 }
 
-export async function query(text: string, params?: unknown[]) {
+/**
+ * Run a parameterized query. The explicit return type is load-bearing: pg's
+ * `pool.query` overloads infer the row generic inconsistently across
+ * versions (sometimes `any[]`, sometimes `{}[]`), and an unannotated return
+ * let that inconsistency cascade through every caller. Pinning
+ * `QueryResult<Record<string, unknown>>` gives every call site a stable
+ * row shape; row mappers cast individual fields as needed.
+ */
+export async function query(
+  text: string,
+  params?: unknown[],
+): Promise<QueryResult<Record<string, unknown>>> {
   const start = Date.now();
   if (isDev) {
     console.log(`[DB] >> ${text.replace(/\n/g, " ").substring(0, 120)}`);

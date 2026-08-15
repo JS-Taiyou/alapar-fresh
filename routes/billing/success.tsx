@@ -20,7 +20,9 @@ export const handler = define.handlers({
         console.error("[billing] syncCheckout failed:", err);
       }
     }
-    return ctx.render({ activated });
+    // { data } object pattern (same as the demo route) — ctx.render's VNode
+    // overload doesn't accept a plain data payload here.
+    return { data: { activated } };
   },
 });
 

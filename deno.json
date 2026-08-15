@@ -2,7 +2,8 @@
   "nodeModulesDir": "manual",
   "tasks": {
     "test": "deno test --config deno.test.json --allow-env",
-    "check": "deno fmt --check . && deno lint . && deno check && deno test --config deno.test.json --allow-env",
+    "check:types": "deno install --no-lock --config deno.check.jsonc && deno check --no-lock --config deno.check.jsonc main.ts utils.ts client.ts lib/ islands/ components/ routes/ test/",
+    "check": "deno fmt --check . && deno lint . && deno task check:types && deno test --config deno.test.json --allow-env",
     "dev": "vite",
     "build": "vite build",
     "start": "deno serve -A _fresh/server.js",
