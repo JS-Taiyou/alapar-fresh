@@ -39,8 +39,18 @@ export const handler = define.handlers({
     const exercises = await getExercises(registryId);
     const currentUserId = ctx.state.user ? ctx.state.user.id : "";
 
-    // Free plan: only the newest closed exercise is visible; older ones
-    // render as locked placeholder rows (the paywall IS the discovery).
+    // Free plan: only the NEWEST closed exercise is visible; older ones
+    // render as locked placeholder rows (the paywall IS the discovery —
+    // hiding history silently would just look like data loss).
+    //
+    // This shapes the VIEW, not the data: `exercises` still holds everything
+    // (needed for lockedCount + the empty-state check); only `grouped`/years
+    // below are filtered to the visible slice. getExercises orders by
+    // end_date DESC, so slice(0, N) is "the N newest cuts".
+    //
+    // NOTE: `lockedCount > 0` is also what suppresses personalTotals work on
+    // locked rows in spirit — totals are computed for all exercises above,
+    // but locked ones simply never get a card rendered to read them.
     const planInfo = await getRegistryPlan(registryId);
     let lockedCount: number | null = null;
     if (

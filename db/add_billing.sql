@@ -27,8 +27,16 @@ ALTER TABLE registries ADD CONSTRAINT registries_plan_check
   CHECK (plan IN ('free', 'pro', 'grandfathered'));
 
 -- Grandfather: every registry that exists before billing goes live keeps
--- unlimited access forever. (WHERE NOT EXISTS keeps re-runs from flipping a
--- registry that an owner deliberately downgraded later back to grandfathered.)
+-- unlimited access forever. This is a TRUST promise, not just a default:
+-- early users built history under "unlimited" rules, and 'grandfathered'
+-- makes that permanent and explicit (never touched by webhook plan flips —
+-- see lib/billing.ts: the activation UPDATE is WHERE plan = 'free').
+--
+-- The WHERE NOT EXISTS guard keeps RE-RUNS safe: once a registry has a
+-- billing history (subscription row exists), it is managed by Polar from
+-- then on — re-running this file must not resurrect 'grandfathered' over a
+-- deliberate downgrade. Registries that never interacted with billing stay
+-- eligible (idempotent for them: already 'grandfathered', no-op).
 UPDATE registries
 SET plan = 'grandfathered'
 WHERE plan = 'free'

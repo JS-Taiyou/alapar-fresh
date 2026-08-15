@@ -168,9 +168,21 @@ export const handler = define.handlers({
       }
     }
 
-    // Free plan: cap on active recurring/installment templates. Only new
-    // template GROUPS count (a new recurring/parcialidad with a group id not
-    // yet present); same-group edits and clones stay free.
+    // Free plan: cap on active recurring/installment TEMPLATES.
+    //
+    // A "template" is a distinct recurring_group_id (countActiveTemplates
+    // counts groups, not transactions). This deliberately means:
+    //   - Creating the 4th distinct recurring/parcialidad group → 402.
+    //   - Cloning via carry-forward (same group id) → allowed: the user
+    //     already "owns" that template; re-cutting a period must never lock
+    //     them out of an existing commitment.
+    //   - Plain unico/pago transactions → never counted or blocked.
+    // One-time (unico) transactions and payments are never limited — the
+    // free tier must remain genuinely usable for its core job.
+    //
+    // TOCTOU note: two racing creates could both pass the count check and
+    // land N+1 templates. Accepted risk — the cap is a product limit, not a
+    // security boundary; the worst case is one extra template on free.
     if (type === "parcialidad" || type === "recurrente") {
       const planInfo = await getRegistryPlan(registryId);
       if (planInfo && !planInfo.isPro) {

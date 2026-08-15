@@ -1040,8 +1040,25 @@ export async function useInvitation(
     throw new Error("Invitation has reached max uses");
   }
 
-  // Free plan: cap on members per registry. Joining is never gated by the
-  // JOINER's plan — only by the target registry's plan.
+  // Free plan: cap on members per registry.
+  //
+  // Placement matters: this runs AFTER the invitation-validity checks and the
+  // current_uses claim above, but BEFORE the member INSERT — so a full group
+  // never consumes an invitation use (the joiner can retry once the owner
+  // upgrades, without wasting the code).
+  //
+  // The check is on the TARGET registry's plan, never the joiner's:
+  // "joining groups is never gated" is a product invariant. A free-plan user
+  // joining a Pro group is fine; only the group's own plan sets its limits.
+  //
+  // GROUP_FULL is a sentinel message — the join route maps it to a localized
+  // 402 {code:'upgrade_required'} payload. An ordinary Error message would
+  // leak to the client as a raw string; the sentinel keeps the mapping exact.
+  //
+  // TOCTOU: two racing joins could both pass the count and land N+1 members.
+  // Accepted risk (product limit, not a security boundary). The atomic
+  // invitation-uses claim above is the check that MUST be race-proof, and it
+  // already is (UPDATE ... WHERE current_uses < max_uses).
   const planInfo = await getRegistryPlan(invitation.registryId);
   if (planInfo && !planInfo.isPro) {
     const members = await countRegistryMembers(invitation.registryId);

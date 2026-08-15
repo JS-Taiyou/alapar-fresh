@@ -35,7 +35,12 @@ export const handler = define.handlers({
 
     const userId = ctx.state.user?.id;
     if (name && userId) {
-      // Free plan: cap on owned registries.
+      // Free plan: cap on OWNED registries (memberships in others' groups are
+      // never limited — a user can join any number of Pro groups for free).
+      //
+      // Dual response shape: JSON clients (Sidebar island) get the 402 +
+      // {code:'upgrade_required'} contract; the form-post fallback (no-JS /
+      // registries/new page) gets a redirect so the dashboard can toast it.
       const owned = await countOwnedRegistries(userId);
       if (owned >= FREE_LIMITS.maxOwnedRegistries) {
         if (isJson) return upgradeRequired("owned_registries");

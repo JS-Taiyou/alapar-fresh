@@ -53,9 +53,34 @@ export interface RegistryPlanInfo {
 }
 
 /**
- * Resolve the effective plan for a registry. Reads registries.plan plus the
- * subscription mirror in one round trip. Returns null when the registry
+ * Resolve the effective plan for a registry. Returns null when the registry
  * doesn't exist.
+ *
+ * One round trip: `registries.plan` LEFT JOINed with the subscription mirror.
+ * The resolution matrix (first match wins):
+ *
+ *   registries.plan = 'pro'           → PRO     (webhook already flipped it)
+ *   registries.plan = 'grandfathered' → PRO     (pre-billing registry, forever)
+ *   subscription = trialing|active    → PRO     (covers webhook LAG: payment
+ *                                               succeeded but the
+ *                                               plan-flip webhook hasn't
+ *                                               landed yet)
+ *   subscription = past_due AND
+ *     grace_until > now               → PRO     (dunning window — see
+ *                                               GRACE_DAYS in billing.ts)
+ *   anything else                     → FREE
+ *
+ * Why the subscription JOIN exists when the webhook also writes the plan
+ * column: webhooks are asynchronous and can arrive seconds late, lag, or be
+ * redelivered. Entitlements must be correct AT PAYMENT TIME (the user just
+ * paid and immediately reloads), so the read checks both. The column is the
+ * fast path; the JOIN is the safety net in both directions (activation lag
+ * AND cancellation grace).
+ *
+ * AUTHORITY: this function (via the DB rows) is the single source of truth
+ * for "is this registry Pro". UI hints may be stale; enforcement MUST call
+ * this (or use ctx.state.activeRegistryPlan, which the middleware populates
+ * with this same function on full-state paths).
  */
 export async function getRegistryPlan(
   registryId: string,
