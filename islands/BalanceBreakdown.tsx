@@ -33,9 +33,9 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
   // Display waiver: amounts under $0.02 are shown as $0.00 to avoid
   // showing a meaningless 1-cent remainder after a full payment.
   const displayBalance = Math.abs(balance) < 0.02 ? 0 : balance;
-  // Keep the minus sign for negative balances (sign before the $, matching
-  // the popover's +$/-$ convention); Math.abs on the number only.
-  const balanceStr = (displayBalance < 0 ? "-" : "") +
+  // Sign before the $ ("-$11.99", never "$-11.99"), matching the popover's
+  // +$/-$ convention and the transaction cards.
+  const balanceStr = (displayBalance < 0 ? "-$" : "$") +
     Math.abs(displayBalance).toLocaleString("en-US", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
@@ -80,7 +80,7 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
             displayBalance >= 0 ? "text-green-500" : "text-red-500"
           }`}
         >
-          ${balanceStr}
+          {balanceStr}
         </p>
       </button>
 
