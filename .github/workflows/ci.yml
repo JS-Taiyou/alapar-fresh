@@ -8,7 +8,7 @@ on:
 
 jobs:
   check:
-    name: fmt, lint & tests
+    name: fmt, lint, type-check & tests
     runs-on: ubuntu-latest
 
     steps:
@@ -24,6 +24,15 @@ jobs:
 
       - name: Lint
         run: deno lint .
+
+      # Scoped type-check with REAL npm types via deno.check.jsonc (which
+      # omits tailwind/daisyui/vite — the npm registry currently serves
+      # corrupted metadata for @tailwindcss/oxide-wasm32-wasi, breaking any
+      # install that resolves them; the app runtime never imports them).
+      # Covers everything except vite.config.ts. Revert to plain
+      # `deno install && deno check` once the registry bug resolves.
+      - name: Type-check (scoped)
+        run: deno task check:types
 
       - name: Test
         run: deno test --no-check --config deno.test.json --allow-env

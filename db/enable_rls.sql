@@ -358,20 +358,11 @@ ALTER TABLE audit_log FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS audit_log_insert ON audit_log;
 
 -- ===========================================================================
--- allowed_emails (server-only allowlist)
+-- allowed_emails: REMOVED — the registration allowlist was dropped when the
+-- app went public (see drop_allowed_emails.sql). This block previously
+-- enabled RLS with zero client policies; it was deleted because ALTER TABLE
+-- on the (now nonexistent) table would fail fresh installs.
 -- ===========================================================================
-
--- Drop the pre-existing permissive policy (allowed anon reads).
-DROP POLICY IF EXISTS "Enable read access for all users" ON allowed_emails;
-
-ALTER TABLE allowed_emails ENABLE ROW LEVEL SECURITY;
-ALTER TABLE allowed_emails FORCE ROW LEVEL SECURITY;
-
--- R6: NO client SELECT policy — the old allowed_emails_select policy leaked
--- the entire allowlist to any authenticated user. The list is only consulted
--- server-side (main.ts / lib/store.ts). The DROP removes the old policy when
--- re-running on a project that has it.
-DROP POLICY IF EXISTS allowed_emails_select ON allowed_emails;
 
 -- ===========================================================================
 -- push_subscriptions

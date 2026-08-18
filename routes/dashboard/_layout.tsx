@@ -47,6 +47,8 @@ export default define.layout(async function DashboardLayout(ctx) {
         deletableRegistryIds={deletableRegistryIds}
         initialCollapsed={sidebarCollapsed}
         locale={ctx.state.locale}
+        showUpgrade={ctx.state.activeRegistryPlan !== null &&
+          !ctx.state.activeRegistryPlan.isPro}
       />
       <div class="flex-1 flex flex-col min-w-0">
         <ctx.Component />

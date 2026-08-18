@@ -12,6 +12,11 @@ import {
   invalidateRegistry,
 } from "../../../lib/server-cache.ts";
 import { sendPushToRegistry } from "../../../lib/push.ts";
+import {
+  countActiveTemplates,
+  getRegistryPlan,
+  upgradeRequired,
+} from "../../../lib/entitlements.ts";
 import type { TransactionSplit } from "../../../lib/types.ts";
 import { generateETag } from "../../../lib/etag.ts";
 
@@ -160,6 +165,31 @@ export const handler = define.handlers({
         return Response.json({ error: "Referencia inválida" }, {
           status: 400,
         });
+      }
+    }
+
+    // Free plan: cap on active recurring/installment TEMPLATES.
+    //
+    // A "template" is a distinct recurring_group_id (countActiveTemplates
+    // counts groups, not transactions). This deliberately means:
+    //   - Creating the 4th distinct recurring/parcialidad group → 402.
+    //   - Cloning via carry-forward (same group id) → allowed: the user
+    //     already "owns" that template; re-cutting a period must never lock
+    //     them out of an existing commitment.
+    //   - Plain unico/pago transactions → never counted or blocked.
+    // One-time (unico) transactions and payments are never limited — the
+    // free tier must remain genuinely usable for its core job.
+    //
+    // TOCTOU note: two racing creates could both pass the count check and
+    // land N+1 templates. Accepted risk — the cap is a product limit, not a
+    // security boundary; the worst case is one extra template on free.
+    if (type === "parcialidad" || type === "recurrente") {
+      const planInfo = await getRegistryPlan(registryId);
+      if (planInfo && !planInfo.isPro) {
+        const activeTemplates = await countActiveTemplates(registryId);
+        if (activeTemplates >= planInfo.limits.maxActiveTemplates) {
+          return upgradeRequired("templates");
+        }
       }
     }
 

@@ -1,4 +1,9 @@
 import { query } from "./db.ts";
+import {
+  countRegistryMembers,
+  getRegistryPlan,
+  GroupFullError,
+} from "./entitlements.ts";
 import type {
   Entity,
   Exercise,
@@ -109,7 +114,6 @@ export async function createUserFromSupabase(
 
 export async function resolveUserState(supabaseAuthId: string): Promise<{
   user: User | null;
-  isEmailAllowed: boolean;
   activeRegistry: Registry | null;
   isOwner: boolean;
   ownerRegistryIds: Set<string>;
@@ -119,16 +123,12 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
   participants: Participant[];
 }> {
   const userResult = await query(
-    `SELECT u.*, ae.id IS NOT NULL as is_email_allowed
-     FROM users u
-     LEFT JOIN allowed_emails ae ON ae.email = u.email
-     WHERE u.supabase_auth_id = $1`,
+    `SELECT u.* FROM users u WHERE u.supabase_auth_id = $1`,
     [supabaseAuthId],
   );
   if (userResult.rows.length === 0) {
     return {
       user: null,
-      isEmailAllowed: false,
       activeRegistry: null,
       isOwner: false,
       ownerRegistryIds: new Set<string>(),
@@ -141,21 +141,6 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
 
   const row = userResult.rows[0];
   const user = rowToUser(row);
-  const isEmailAllowed = row.is_email_allowed as boolean;
-
-  if (!isEmailAllowed) {
-    return {
-      user,
-      isEmailAllowed: false,
-      activeRegistry: null,
-      isOwner: false,
-      ownerRegistryIds: new Set<string>(),
-      registries: [],
-      registryUsers: [],
-      entities: [],
-      participants: [],
-    };
-  }
 
   const registriesResult = await query(
     `SELECT r.*, rm.role as membership_role FROM registries r
@@ -204,7 +189,6 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
 
   return {
     user,
-    isEmailAllowed: true,
     activeRegistry,
     isOwner,
     ownerRegistryIds,
@@ -1039,6 +1023,33 @@ export async function useInvitation(
     throw new Error("Invitation has reached max uses");
   }
 
+  // Free plan: cap on members per registry.
+  //
+  // Placement matters: this runs AFTER the invitation-validity checks and the
+  // current_uses claim above, but BEFORE the member INSERT — so a full group
+  // never consumes an invitation use (the joiner can retry once the owner
+  // upgrades, without wasting the code).
+  //
+  // The check is on the TARGET registry's plan, never the joiner's:
+  // "joining groups is never gated" is a product invariant. A free-plan user
+  // joining a Pro group is fine; only the group's own plan sets its limits.
+  //
+  // GroupFullError is a typed error — the join route maps it (via
+  // instanceof) to a localized 402 {code:'upgrade_required'} payload, so a
+  // plain Error message never leaks to the client as a raw string.
+  //
+  // TOCTOU: two racing joins could both pass the count and land N+1 members.
+  // Accepted risk (product limit, not a security boundary). The atomic
+  // invitation-uses claim above is the check that MUST be race-proof, and it
+  // already is (UPDATE ... WHERE current_uses < max_uses).
+  const planInfo = await getRegistryPlan(invitation.registryId);
+  if (planInfo && !planInfo.isPro) {
+    const members = await countRegistryMembers(invitation.registryId);
+    if (members >= planInfo.limits.maxMembers) {
+      throw new GroupFullError();
+    }
+  }
+
   await query(
     "INSERT INTO registry_members (registry_id, user_id, role) VALUES ($1, $2, 'member') ON CONFLICT DO NOTHING",
     [invitation.registryId, userId],
@@ -1112,14 +1123,6 @@ export async function revokeInvitation(
     ],
   );
   return true;
-}
-
-export async function isEmailAllowed(email: string): Promise<boolean> {
-  const result = await query(
-    "SELECT 1 FROM allowed_emails WHERE email = $1",
-    [email.toLowerCase()],
-  );
-  return result.rows.length > 0;
 }
 
 export async function getRegistryStamp(

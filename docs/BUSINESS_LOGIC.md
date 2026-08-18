@@ -191,6 +191,85 @@ lists.
 
 ---
 
+## Plans & Limits (Pro tier)
+
+The paid unit is the **registry (group)**: the owner pays, the whole group
+benefits. Joining groups is never gated by the joiner's plan — only by the
+target group's plan.
+
+|                                        | Free     | Pro       | Grandfathered |
+| -------------------------------------- | -------- | --------- | ------------- |
+| Owned registries                       | 2        | unlimited | unlimited     |
+| Members per registry                   | 4        | unlimited | unlimited     |
+| Active recurring/installment templates | 3        | unlimited | unlimited     |
+| Closed exercises visible in history    | newest 1 | all       | all           |
+
+Everything else — transactions, payments, cuts, entities — is unlimited on every
+plan. The free tier must stay genuinely usable for its core job.
+
+**Grandfathering** is a trust promise: every registry existing when
+`add_billing.sql` ran is `grandfathered` forever. The webhook's activation
+update only ever writes `'free' → 'pro'`, so it can never touch a grandfathered
+registry.
+
+### Plan resolution
+
+A registry is effectively Pro when ANY of:
+
+1. `registries.plan` is `grandfathered` (permanent — nothing can demote it), OR
+2. its Polar subscription is `trialing`/`active`, OR
+3. the subscription is `past_due`/`canceled`/`revoked` **and** `grace_until` is
+   in the future (3-day grace: dunning and "paid period not over" — never a hard
+   cut), OR
+4. `registries.plan` is `pro` **and** no subscription row contradicts it.
+
+Otherwise free — including the revenue-critical case: `plan='pro'` with a
+`canceled`/`revoked`/`past_due` subscription **beyond grace**. The webhook
+deliberately never writes `plan='free'` on cancel, so **demotion happens on
+read, here** — no cron sweeper exists.
+
+Rules 2–3 cover webhook lag in BOTH directions (paid but the flip event hasn't
+landed → lifted; canceled but grace holds → not yet cut). See
+`lib/entitlements.ts` — this resolution is the single source of truth;
+enforcement always goes through it (directly or via
+`ctx.state.activeRegistryPlan`).
+
+### Enforcement points
+
+All return `402 {code: "upgrade_required", reason}` (JSON) or a redirect with
+`?upgrade=…` (form fallback):
+
+- **3rd owned FREE registry** → `POST /api/registries` blocked. Only
+  effectively-free registries consume the cap — grandfathered and Pro groups
+  don't (early users keep unlimited creates; a 3rd group can be upgraded after
+  creation).
+- **Joining a full free group** → `useInvitation` throws a typed
+  `GroupFullError`; the join route maps it (via instanceof) to a localized 402.
+  Checked AFTER the invitation-uses claim so a full group never burns an invite
+  use.
+- **4th distinct recurring group** → transaction POST blocked. Templates count
+  as distinct `recurring_group_id`s: carry-forward clones and edits of existing
+  templates stay free.
+- **History depth** → view-level shaping only: older cuts render as locked rows
+  with an upgrade CTA (visible teaser, never silent hiding).
+
+### Payment flow (Polar, Merchant of Record)
+
+```
+UpgradeButton (owner, free registry)
+  → GET /api/billing/checkout?registry_id&interval   (owner-checked 302)
+  → Polar-hosted checkout (card, tax handled by Polar)
+  → success redirect → /billing/success?checkout_id  (syncCheckout, display-only)
+  → Polar webhook POST /api/webhooks/polar           (HMAC-verified, authoritative)
+      subscription.active → upsert mirror + flip plan to 'pro'
+  → user's group is Pro on next request (entitlements read)
+```
+
+Checkout Link, products, pricing, and trial length live in the Polar dashboard —
+pricing changes never require a deploy. The webhook carries
+`metadata.registry_id` from checkout to subscription, which is how a payment
+finds its registry.
+
 ## Invitation System
 
 ### Creating Invitations

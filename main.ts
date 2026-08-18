@@ -1,15 +1,12 @@
 import { App, csrf, staticFiles } from "fresh";
 import { define, type State } from "./utils.ts";
-import {
-  createUserFromSupabase,
-  isEmailAllowed,
-  resolveUserState,
-} from "./lib/store.ts";
+import { createUserFromSupabase, resolveUserState } from "./lib/store.ts";
 import { getUserFromRequest, setAuthCookies } from "./lib/supabase.ts";
 import { getCookie } from "./lib/auth-cookies.ts";
 import { query } from "./lib/db.ts";
 import { needsFullState, routeGuard } from "./lib/routing.ts";
 import { resolveLocale } from "./lib/i18n.ts";
+import { getRegistryPlan } from "./lib/entitlements.ts";
 
 const isDev = !Deno.env.get("DENO_DEPLOYMENT_ID");
 function devLog(...args: unknown[]) {
@@ -19,10 +16,14 @@ function devLog(...args: unknown[]) {
 export const app = new App<State>();
 
 app.use(staticFiles());
-// No CSRF exemptions: every mutating endpoint must send a matching Origin.
-// The auth callback/check-email fetch calls are same-origin, so they pass.
+// No CSRF exemptions except the Polar webhook: Polar's server posts
+// cross-origin with no browser Origin header, and authenticity is enforced
+// by the Standard Webhooks HMAC signature (see lib/billing.ts), so CSRF
+// protection adds nothing there.
 app.use(csrf({
-  origin: (origin, ctx) => origin === ctx.url.origin,
+  origin: (origin, ctx) =>
+    ctx.url.pathname === "/api/webhooks/polar" ||
+    origin === ctx.url.origin,
 }));
 
 // Security headers on every (non-static) response. No CSP: islands rely on
@@ -38,7 +39,7 @@ app.use(define.middleware(async (ctx) => {
 }));
 
 // Minimal per-IP sliding-window rate limit for the most abuse-prone public
-// endpoints (invite acceptance + auth token/check-email endpoints).
+// endpoints (invite acceptance + auth endpoints).
 // Caveat: on Deno Deploy each isolate keeps its own Map, so the limit is
 // per-isolate rather than global — a first-line throttle, not a hard cap.
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -52,7 +53,6 @@ function isRateLimitedRoute(path: string, method: string): boolean {
   }
   if (method !== "POST") return false;
   return path === "/api/invitations/join" ||
-    path === "/api/auth/check-email" ||
     path === "/api/auth/callback";
 }
 
@@ -102,6 +102,7 @@ app.use(define.middleware(async (ctx) => {
     getCookie(ctx.req.headers.get("cookie") ?? "", "alapar-locale"),
     ctx.req.headers.get("accept-language"),
   );
+  ctx.state.activeRegistryPlan = null;
 
   // /demo renders entirely from static JSON — skip auth + DB entirely.
   if (path === "/demo") {
@@ -138,21 +139,12 @@ app.use(define.middleware(async (ctx) => {
   if (!fullStateNeeded) {
     devLog("  Lightweight path, querying user...");
     const userResult = await query(
-      `SELECT u.*, ae.id IS NOT NULL as is_email_allowed
-       FROM users u
-       LEFT JOIN allowed_emails ae ON ae.email = u.email
-       WHERE u.supabase_auth_id = $1`,
+      `SELECT u.* FROM users u WHERE u.supabase_auth_id = $1`,
       [authUser.id],
     );
     if (userResult.rows.length === 0) {
-      // First request from a never-seen Supabase user: enforce the allowlist
-      // BEFORE inserting the users row (previously the row was created first
-      // and the check only caught up on the next request).
-      const allowed = await isEmailAllowed(authUser.email);
-      if (!allowed) {
-        devLog("  Email not allowed (first request), redirecting to login");
-        return ctx.redirect("/login?error=unauthorized");
-      }
+      // First request from a never-seen Supabase user: open signup (the app
+      // is public — any authenticated Google user gets a profile).
       const user = await createUserFromSupabase(
         authUser.id,
         authUser.email,
@@ -162,10 +154,6 @@ app.use(define.middleware(async (ctx) => {
       devLog("  Created new user:", user.email);
     } else {
       const row = userResult.rows[0];
-      if (!row.is_email_allowed) {
-        devLog("  Email not allowed, redirecting to login");
-        return ctx.redirect("/login?error=unauthorized");
-      }
       if (authUser.name && row.name !== authUser.name) {
         await query(
           "UPDATE users SET name = $1 WHERE supabase_auth_id = $2",
@@ -202,19 +190,12 @@ app.use(define.middleware(async (ctx) => {
   devLog(
     "  State resolved, user:",
     state.user?.email,
-    "emailAllowed:",
-    state.isEmailAllowed,
     "hasRegistry:",
     !!state.activeRegistry,
   );
 
   if (!state.user) {
-    // Same first-request allowlist gate as the lightweight branch above:
-    // never insert a users row for an email that isn't in allowed_emails.
-    const allowed = await isEmailAllowed(authUser.email);
-    if (!allowed) {
-      return ctx.redirect("/login?error=unauthorized");
-    }
+    // First request from a never-seen Supabase user: open signup.
     const user = await createUserFromSupabase(
       authUser.id,
       authUser.email,
@@ -230,10 +211,6 @@ app.use(define.middleware(async (ctx) => {
       );
     }
     return response;
-  }
-
-  if (!state.isEmailAllowed) {
-    return ctx.redirect("/login?error=unauthorized");
   }
 
   if (authUser.name && state.user.name !== authUser.name) {
@@ -252,6 +229,12 @@ app.use(define.middleware(async (ctx) => {
   ctx.state.participants = state.participants;
   ctx.state.isOwner = state.isOwner;
   ctx.state.ownerRegistryIds = state.ownerRegistryIds;
+
+  // Plan of the active registry (1 extra query on full-state paths only) —
+  // lets pages/islands render upgrade CTAs without re-querying.
+  ctx.state.activeRegistryPlan = state.activeRegistry
+    ? await getRegistryPlan(state.activeRegistry.id)
+    : null;
 
   const response = await ctx.next();
   if (authResult.refreshedTokens && response) {

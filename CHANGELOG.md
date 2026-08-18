@@ -4,6 +4,99 @@ All notable changes to this project are documented here. Dates are approximate.
 
 ---
 
+## 2026-08-18 — Open signup (allowlist removed) + Pro tier merged
+
+The app is public: any authenticated Google/email account can sign up.
+
+- Removed the `allowed_emails` registration gate end-to-end: middleware checks
+  (lightweight + full-state), `resolveUserState`'s is_email_allowed, the
+  `/api/auth/check-email` endpoint (+ its test), the AuthForm pre-signup check,
+  the login `?error=unauthorized` banner, the rate-limit and public-path
+  entries, and the es/en i18n keys.
+- `db/drop_allowed_emails.sql` drops the table. DEPLOY ORDER: run it AFTER the
+  code deploy (the old code JOINs the table on every request); it's a no-op on
+  fresh installs since `schema.sql` no longer creates it.
+- Merged `feat/monetization-pro-tier` (Pro tier, see the 2026-08-14 entry below)
+  into main alongside this change.
+
+---
+
+## 2026-08-14 — Pro tier with Polar billing
+
+Paid registry plan (owner pays, whole group benefits). See
+`docs/MONETIZATION.md` for the full design.
+
+- **DB** (`db/add_billing.sql`): `registries.plan`
+  (`free`|`pro`|`grandfathered`) — existing registries grandfathered to
+  unlimited forever; `registry_subscriptions` Polar mirror (server-only, RLS
+  with zero policies)
+- **`lib/entitlements.ts`**: plan resolution (column + subscription + past-due
+  grace) and free limits (2 owned registries, 4 members/registry, 3 active
+  recurring templates, newest closed exercise only)
+- **Enforcement** at 4 touchpoints, all returning `402 upgrade_required`:
+  registry creation cap, join member cap (localized "group full" message),
+  recurring/installment template cap, history depth (locked rows with upgrade
+  CTA instead of silently hidden)
+- **`lib/billing.ts`**: zero-dependency Polar REST client — Checkout Link
+  builder, `syncCheckout`, customer-portal sessions, Standard Webhooks HMAC
+  verifier (replay-protected, timing-safe), subscription-event upsert with 3-day
+  cancellation grace
+- **Routes**: `GET /api/billing/checkout` (owner-only 302), public
+  `POST /api/webhooks/polar` (csrf-exempt, HMAC-verified),
+  `POST /api/billing/portal`, `/billing/success` confirmation page
+- **UI**: `UpgradeButton` island (monthly/yearly picker, non-owner hint),
+  `PaywallCard` locked-history rows, sidebar CTA on free registries, billing
+  i18n strings (es/en)
+- **State**: middleware resolves the active registry's plan once per full-state
+  request (`ctx.state.activeRegistryPlan`)
+- Tests: plan matrix (incl. cancel-demotion, grace windows, grandfathered
+  immunity), webhook signatures (tamper/replay/missing/multi-scheme), event
+  upsert mapping, past_due grace, reference_id fallback. 61 suites / 457 steps
+  green.
+
+Post-review fixes (senior review, pre-merge):
+
+- **Revenue leak**: canceled subscriptions kept Pro forever — the plan column
+  was trusted unconditionally. `getRegistryPlan` now demotes `plan='pro'` to
+  free when the subscription row is dead and grace has lapsed (grandfathered is
+  immune by checking it first).
+- **Portal always failed**: customer-session creation now sends the stored
+  `polar_customer_id` (Polar requires a customer identifier).
+- **Owned-registry cap punished loyal users**: the count now includes only
+  effectively-free registries, so grandfathered/Pro groups don't consume it.
+- Registry mapping accepts `reference_id` fallbacks (Polar's documented
+  checkout-link params don't include `metadata[…]`); yearly preselect uses a
+  dedicated `POLAR_CHECKOUT_LINK_YEARLY` when configured. Runbook requires a
+  sandbox end-to-end check of which channel the webhook actually carries.
+- Grace is also set on `past_due` (one failed charge ≠ instant cut).
+- History personal totals computed for visible exercises only (removes an
+  unbounded N+1 on free registries with long history).
+- `GROUP_FULL` string sentinel replaced by a typed `GroupFullError`.
+
+Type-checking restored to CI (second review follow-up):
+
+- Fixed the `Uint8Array<ArrayBufferLike>` → `BufferSource` type error in
+  `billing.ts` `base64Decode` (crypto.subtle rejected the widened type; the
+  widening came from a bare `Uint8Array` annotation, not from `Uint8Array.from`
+  as first assumed — comment documents the distinction).
+- Root-caused why `--no-check` had hidden a whole class of errors: `db.ts`'s
+  `query()` returned an unannotated `pool.query()` result whose row type varies
+  by pg overload/version (`any[]`/`{}[]`), cascading implicit-any errors. Pinned
+  to `QueryResult<Record<string, unknown>>` — version-independent and stable for
+  every caller.
+- New `deno.check.jsonc` + `deno task check:types`: a type-check-only config
+  that omits tailwind/daisyui/vite (only vite.config.ts imports them, and the
+  npm registry's corrupted `@tailwindcss/oxide-wasm32-wasi` metadata breaks any
+  install resolving them). `deno install --no-lock` against this config succeeds
+  on CI and gives `deno check` REAL npm type declarations — restoring full
+  type-checking of everything except vite.config.ts TODAY, not "once the
+  registry bug resolves". CI regains the step; `deno task check` includes it.
+- Fixed the two latent errors that real typing then surfaced:
+  `billing/success.tsx` (ctx.render data payload → `{ data }` object pattern)
+  and `push.ts` (subscriptions row cast through unknown).
+
+---
+
 ## 2026-08-12 — v1.0.0: Public launch + security hardening
 
 First public release. A full security-hardening pass landed ahead of opening the

@@ -194,15 +194,6 @@ Called by `AuthForm` island after successful Supabase login/signup, and by
 `AuthCallback` after the OAuth PKCE code exchange. Rate-limited (20 req/min per
 IP).
 
-### `/api/auth/check-email` — Allowlist Check (POST)
-
-**File**: `routes/api/auth/check-email.ts`
-
-Receives JSON `{ email }`. Always returns 200 with `{ allowed: boolean }` — the
-uniform response avoids leaking probe details (the per-IP rate limit is the
-actual enumeration mitigation). Used by the signup form before calling Supabase
-`signUp()`.
-
 ### `/api/auth/token` — Current Access Token (GET)
 
 **File**: `routes/api/auth/token.ts`
@@ -424,3 +415,40 @@ Deletes the caller's push subscription by endpoint.
 Returns the VAPID public key the client needs to subscribe. The server signs
 push JWTs with `aud` derived from each subscription's endpoint origin (RFC
 8292), so non-FCM push services (Firefox, Safari) work.
+
+## Billing (Pro tier)
+
+### `/api/billing/checkout` — Start Polar Checkout (GET)
+
+**File**: `routes/api/billing/checkout.ts`
+
+Owner-only. Query: `registry_id`, `interval=monthly|yearly`. 302-redirects to
+the dashboard-configured Polar Checkout Link with
+`metadata[registry_id]`/`reference_id`/`locale`/`theme` appended so the webhook
+can map the subscription back to the registry. 503 when billing env is not
+configured.
+
+### `/api/webhooks/polar` — Polar Webhook (POST, public)
+
+**File**: `routes/api/webhooks/polar.ts`
+
+Public endpoint (public-path list + csrf-exempt — authenticity comes from the
+Standard Webhooks HMAC signature). Handles `subscription.*` events: upserts
+`registry_subscriptions`, sets a 3-day `grace_until` on cancel/revoke, flips
+`registries.plan` on activation. Invalid signature → 401 (no retry); handler
+error → 500 (Polar retries).
+
+### `/api/billing/portal` — Customer Portal Session (POST)
+
+**File**: `routes/api/billing/portal.ts`
+
+Owner-only. Body: `{ registry_id }`. Creates a Polar customer-session and
+returns `{ url }` for cancel/payment-method self-service.
+
+### `/billing/success` — Checkout Success Page (GET, public)
+
+**File**: `routes/billing/success.tsx`
+
+Polar redirects here with `?checkout_id=…`. Calls `syncCheckout` for instant Pro
+confirmation (webhooks can lag seconds); shows a pending state when the payment
+is still processing.

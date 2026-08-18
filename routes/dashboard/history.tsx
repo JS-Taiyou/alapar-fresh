@@ -5,7 +5,9 @@ import {
   getMonthNameEs,
   getTransactionsByExercise,
 } from "../../lib/store.ts";
+import { getRegistryPlan } from "../../lib/entitlements.ts";
 import ExerciseCard from "../../components/ExerciseCard.tsx";
+import PaywallCard from "../../components/PaywallCard.tsx";
 import SearchBar from "../../islands/SearchBar.tsx";
 
 interface HistoryData {
@@ -13,6 +15,8 @@ interface HistoryData {
   years: number[];
   exercises: Awaited<ReturnType<typeof getExercises>>;
   personalTotals: Map<string, number>;
+  /** Null when the registry has full history (pro/grandfathered). */
+  lockedCount: number | null;
 }
 
 export const handler = define.handlers({
@@ -35,8 +39,33 @@ export const handler = define.handlers({
     const exercises = await getExercises(registryId);
     const currentUserId = ctx.state.user ? ctx.state.user.id : "";
 
+    // Free plan: only the NEWEST closed exercise is visible; older ones
+    // render as locked placeholder rows (the paywall IS the discovery —
+    // hiding history silently would just look like data loss).
+    //
+    // This shapes the VIEW, not the data: `exercises` still holds everything
+    // (needed for lockedCount + the empty-state check); only `visible` feeds
+    // the per-exercise work below. getExercises orders by end_date DESC, so
+    // slice(0, N) is "the N newest cuts".
+    const planInfo = await getRegistryPlan(registryId);
+    let lockedCount: number | null = null;
+    if (
+      planInfo && !planInfo.isPro && exercises.length >
+        planInfo.limits.maxClosedExercisesVisible
+    ) {
+      lockedCount = exercises.length -
+        planInfo.limits.maxClosedExercisesVisible;
+    }
+    const visible = lockedCount === null
+      ? exercises
+      : exercises.slice(0, planInfo!.limits.maxClosedExercisesVisible);
+
+    // Personal totals run ONLY for visible exercises: each one costs a
+    // per-exercise transaction query, so including locked rows on a free
+    // registry with years of history would be an unbounded N+1 pile for
+    // numbers that are never rendered.
     const personalTotals = new Map<string, number>();
-    await Promise.all(exercises.map(async (ex) => {
+    await Promise.all(visible.map(async (ex) => {
       const txs = await getTransactionsByExercise(ex.id);
       const total = txs.reduce((sum, tx) => {
         if (tx.type === "pago" || tx.type === "ajuste") {
@@ -66,20 +95,23 @@ export const handler = define.handlers({
       personalTotals.set(ex.id, total);
     }));
 
+    // Group only the visible (newest) exercises; locked ones render as a
+    // single locked-rows block, not as hidden history.
     const grouped: Record<number, typeof exercises> = {};
-    for (const ex of exercises) {
+    for (const ex of visible) {
       const year = ex.endDate.getFullYear();
       if (!grouped[year]) grouped[year] = [];
       grouped[year].push(ex);
     }
     const years = Object.keys(grouped).map(Number).sort((a, b) => b - a);
 
-    return { data: { grouped, years, exercises, personalTotals } };
+    return { data: { grouped, years, exercises, personalTotals, lockedCount } };
   },
 });
 
 export default define.page(function HistoryPage(ctx) {
   const data = ctx.data as HistoryData;
+  const locale = ctx.state.locale;
 
   return (
     <>
@@ -140,6 +172,9 @@ export default define.page(function HistoryPage(ctx) {
           />
 
           <section class="space-y-4 mt-6">
+            {data.lockedCount !== null && data.lockedCount > 0 && (
+              <PaywallCard locale={locale} lockedCount={data.lockedCount} />
+            )}
             {data.years.map((year) => (
               <div key={year} class="space-y-2">
                 <h2 class="text-xs font-semibold text-zinc-500 uppercase tracking-widest px-2 py-1">

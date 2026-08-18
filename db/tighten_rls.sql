@@ -150,12 +150,10 @@ CREATE POLICY transactions_delete_member ON transactions
 DROP POLICY IF EXISTS audit_log_insert ON audit_log;
 
 -- ===========================================================================
--- R6 — allowed_emails: drop the client SELECT policy
+-- R6 — allowed_emails: REMOVED. The allowlist was dropped when the app went
+-- public (drop_allowed_emails.sql); the policy drops were deleted with it so
+-- fresh installs don't fail on the nonexistent table.
 -- ===========================================================================
--- The allowlist is only consulted server-side (main.ts / lib/store.ts).
--- Exposing it to any authenticated user leaks which emails may register.
-DROP POLICY IF EXISTS "Enable read access for all users" ON allowed_emails;
-DROP POLICY IF EXISTS allowed_emails_select ON allowed_emails;
 
 -- ===========================================================================
 -- R7 + R8 — transaction_payments

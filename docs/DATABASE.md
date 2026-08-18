@@ -39,17 +39,18 @@ for client (JWT) callers while still allowing server-side sync — see
 
 ### `registries` — Expense Groups
 
-| Column                     | Type        | Constraints             | Description                                                    |
-| -------------------------- | ----------- | ----------------------- | -------------------------------------------------------------- |
-| id                         | UUID        | PK, auto                | Unique identifier                                              |
-| name                       | TEXT        | NOT NULL                | Display name (e.g., "Viaje a la playa")                        |
-| is_default                 | BOOLEAN     | NOT NULL, default false | Legacy field                                                   |
-| latest_accessed            | TIMESTAMPTZ | NOT NULL, default now() | Last access time                                               |
-| default_split_json         | JSONB       | nullable                | Custom default split percentages                               |
-| default_split_member_count | INTEGER     | nullable                | Member count when default was set (auto-invalidates on change) |
-| entities_json              | JSONB       | default '[]'            | Third-party entities stored as JSON array                      |
-| last_modified              | TIMESTAMPTZ | NOT NULL, default now() | Updated by trigger on any transaction CUD                      |
-| created_at                 | TIMESTAMPTZ | NOT NULL, default now() | Creation timestamp                                             |
+| Column                     | Type        | Constraints                                                      | Description                                                    |
+| -------------------------- | ----------- | ---------------------------------------------------------------- | -------------------------------------------------------------- |
+| id                         | UUID        | PK, auto                                                         | Unique identifier                                              |
+| name                       | TEXT        | NOT NULL                                                         | Display name (e.g., "Viaje a la playa")                        |
+| is_default                 | BOOLEAN     | NOT NULL, default false                                          | Legacy field                                                   |
+| latest_accessed            | TIMESTAMPTZ | NOT NULL, default now()                                          | Last access time                                               |
+| default_split_json         | JSONB       | nullable                                                         | Custom default split percentages                               |
+| default_split_member_count | INTEGER     | nullable                                                         | Member count when default was set (auto-invalidates on change) |
+| entities_json              | JSONB       | default '[]'                                                     | Third-party entities stored as JSON array                      |
+| last_modified              | TIMESTAMPTZ | NOT NULL, default now()                                          | Updated by trigger on any transaction CUD                      |
+| plan                       | TEXT        | NOT NULL, default 'free', CHECK (`free`\|`pro`\|`grandfathered`) | Billing tier (owner pays, group benefits)                      |
+| created_at                 | TIMESTAMPTZ | NOT NULL, default now()                                          | Creation timestamp                                             |
 
 **Purpose**: Central hub for each expense group.
 
@@ -193,16 +194,6 @@ that enforces not-revoked and `max_uses` in SQL.
 
 ---
 
-### `allowed_emails` — Registration Allowlist
-
-| Column     | Type        | Constraints             | Description           |
-| ---------- | ----------- | ----------------------- | --------------------- |
-| id         | UUID        | PK, auto                | Unique identifier     |
-| email      | TEXT        | NOT NULL, UNIQUE        | Allowed email address |
-| created_at | TIMESTAMPTZ | NOT NULL, default now() | Creation timestamp    |
-
----
-
 ## Split JSON Format
 
 The `split_json` JSONB field in transactions:
@@ -308,9 +299,19 @@ Migrations must be run in order:
    the whole chain). See [Row-Level Security](#row-level-security) below
 5. **`enable_realtime.sql`** — Codifies
    `ALTER PUBLICATION supabase_realtime ADD TABLE transactions` (idempotent)
+6. **`add_billing.sql`** — Pro-tier billing: `registries.plan` column
+   (`free`|`pro`|`grandfathered`, existing rows grandfathered) and the
+   `registry_subscriptions` mirror table (server-only, zero RLS policies).
+   **Must run before deploying billing code.**
+7. **`drop_allowed_emails.sql`** — Drops the registration allowlist (the app
+   went public; signup is open). **Must run AFTER deploying the code that stops
+   reading it** — the previously deployed code JOINs the table on every
+   authenticated request. No-op on fresh installs (schema.sql no longer creates
+   the table).
 
 Run order: `schema.sql` → `add_*.sql` → `enable_rls.sql` → `tighten_rls.sql` →
-`enable_realtime.sql`.
+`enable_realtime.sql` → `add_billing.sql` → `drop_allowed_emails.sql` (the last
+one deploy-gated as noted).
 
 ---
 
@@ -341,7 +342,7 @@ Key policy points (final state after `tighten_rls.sql`):
 - `transactions`: per-command policies — SELECT by membership; INSERT also
   requires `creator_id = app_user_id()`; UPDATE/DELETE only while
   `exercise_id IS NULL` (settled transactions are immutable for clients)
-- `audit_log`, `allowed_emails`: no client policies at all (server-only tables)
+- `audit_log`: no client policies at all (server-only table)
 - `transaction_payments`: expense and pago must belong to the **same** registry
 - `transaction_balances`, `push_subscriptions`: membership/self-scoped (their
   `add_*.sql` migrations carry matching RLS blocks)
@@ -377,3 +378,27 @@ between users after a full payment. Deltas are computed by the pure
 `computeDeltas()` function in `lib/balances.ts` and written at transaction
 creation/update time. `ON DELETE CASCADE` handles cleanup when a transaction is
 deleted.
+
+---
+
+## `registry_subscriptions` — Polar Subscription Mirror
+
+| Column                | Type        | Constraints                                                               | Description                                      |
+| --------------------- | ----------- | ------------------------------------------------------------------------- | ------------------------------------------------ |
+| registry_id           | UUID        | PK, FK → registries ON DELETE CASCADE                                     | The billed registry (paid unit)                  |
+| polar_subscription_id | TEXT        | UNIQUE                                                                    | Polar subscription id                            |
+| polar_customer_id     | TEXT        | nullable                                                                  | Polar customer id (portal sessions)              |
+| status                | TEXT        | NOT NULL, CHECK (`trialing`\|`active`\|`past_due`\|`canceled`\|`revoked`) | Mirrored Polar status                            |
+| current_period_end    | TIMESTAMPTZ | nullable                                                                  | End of the paid period                           |
+| grace_until           | TIMESTAMPTZ | nullable                                                                  | Cancellation grace (3 days) — no mid-period cuts |
+| updated_at            | TIMESTAMPTZ | NOT NULL, default now()                                                   | Last webhook update                              |
+
+**Purpose**: Server-side mirror of the Polar subscription state for a registry.
+Written exclusively by the webhook handler (`POST /api/webhooks/polar`) and
+`syncCheckout`. RLS is enabled and forced with **zero policies** — client roles
+see no rows (same posture as `audit_log`).
+
+Plan resolution (`lib/entitlements.ts`): a registry is effectively Pro when
+`registries.plan IN ('pro','grandfathered')` OR the subscription is
+`trialing`/`active` OR `past_due` with an unexpired `grace_until`. The
+subscription check covers webhook lag and dunning without hard-cutting.

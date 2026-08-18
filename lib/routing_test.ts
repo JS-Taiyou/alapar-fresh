@@ -44,7 +44,6 @@ describe("needsFullState", () => {
       "/api/push/unsubscribe",
       "/api/auth/callback",
       "/api/auth/logout",
-      "/api/auth/check-email",
       "/login",
       "/signup",
       "/join/ABCDEF",
@@ -99,7 +98,6 @@ describe("isPublicPath", () => {
     "/auth/callback",
     "/api/auth/callback",
     "/api/auth/logout",
-    "/api/auth/check-email",
     "/demo",
   ];
 

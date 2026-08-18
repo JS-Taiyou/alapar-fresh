@@ -9,9 +9,6 @@ export default define.page(function Login(ctx) {
   const t = (key: string, params?: Record<string, string | number>) =>
     translate(locale, key, params);
 
-  const url = new URL(ctx.req.url);
-  const errorMsg = url.searchParams.get("error");
-
   return (
     <AuthCardLayout pageTitle={`A la par - ${t("auth.login")}`}>
       <div class="text-center mb-8">
@@ -35,12 +32,6 @@ export default define.page(function Login(ctx) {
           {t("auth.login_subtitle")}
         </p>
       </div>
-
-      {errorMsg === "unauthorized" && (
-        <div class="text-sm text-red-300 bg-red-500/20 border border-red-500/30 rounded-custom px-4 py-2 mb-4">
-          {t("auth.not_authorized")}
-        </div>
-      )}
 
       <AuthForm
         mode="login"
