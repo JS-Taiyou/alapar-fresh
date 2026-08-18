@@ -128,7 +128,6 @@ petición falso y una capa de queries simulada.
 
 - [ ] Publicación en Android vía TWA (Google Play)
 - [ ] Dominio propio
-- [ ] Interfaz en inglés
 
 ## Licencia
 

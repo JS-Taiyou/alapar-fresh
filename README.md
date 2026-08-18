@@ -126,7 +126,6 @@ stubbed query layer.
 
 - [ ] Android release via TWA (Google Play)
 - [ ] Custom domain
-- [ ] English UI
 
 ## License
 
