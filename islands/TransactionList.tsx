@@ -757,7 +757,18 @@ export default function TransactionList(props: TransactionListProps) {
     }
     if (searchQuery.value.trim()) {
       const q = searchQuery.value.trim().toLowerCase();
-      list = list.filter((tx) => tx.description.toLowerCase().includes(q));
+      // Amount search: digits-only view of the query (strips $, commas,
+      // decimals) matched against the CENTS representation of the amounts
+      // shown on the card — so "1613", "$1,613" and "1,613.00" all find a
+      // $1,613 transaction (161300 cents contains every prefix of those).
+      const digits = q.replace(/[^0-9]/g, "");
+      const centsContains = (n: number) =>
+        String(Math.round(n * 100)).includes(digits);
+      list = list.filter((tx) =>
+        tx.description.toLowerCase().includes(q) ||
+        (digits.length > 0 &&
+          (centsContains(tx.originalAmount) || centsContains(tx.amount)))
+      );
     }
     return [...list].sort((a, b) => {
       const da = a.createdAt instanceof Date ? a.createdAt.getTime() : 0;
@@ -874,7 +885,7 @@ export default function TransactionList(props: TransactionListProps) {
                 <button
                   type="button"
                   onClick={() => filterUserId.value = null}
-                  class={`text-xs font-semibold px-3 py-1.5 rounded transition-colors ${
+                  class={`text-xs font-semibold px-3 py-1.5 rounded transition-colors cursor-pointer ${
                     filterUserId.value === null
                       ? "bg-primary text-white shadow-sm"
                       : "text-zinc-400 hover:text-white hover:bg-white/5 border border-white/10"
@@ -887,23 +898,23 @@ export default function TransactionList(props: TransactionListProps) {
                     "",
                   )
                     .substring(0, 2).toUpperCase();
+                  // Active state: colored BORDER + white name, NOT a solid
+                  // fill — filling with user.color made the initials avatar
+                  // (same color on same color) invisible.
+                  const active = filterUserId.value === user.id;
                   return (
                     <button
                       key={user.id}
                       type="button"
                       onClick={() => {
-                        filterUserId.value = filterUserId.value === user.id
-                          ? null
-                          : user.id;
+                        filterUserId.value = active ? null : user.id;
                       }}
-                      class={`text-xs font-semibold px-3 py-1.5 rounded transition-colors flex items-center gap-1.5 ${
-                        filterUserId.value === user.id
+                      class={`text-xs font-semibold px-3 py-1.5 rounded transition-colors flex items-center gap-1.5 cursor-pointer border ${
+                        active
                           ? "text-white shadow-sm"
-                          : "text-zinc-400 hover:text-white hover:bg-white/5 border border-white/10"
+                          : "text-zinc-400 hover:text-white hover:bg-white/5 border-white/10"
                       }`}
-                      style={filterUserId.value === user.id
-                        ? `background-color: ${user.color}`
-                        : ""}
+                      style={active ? `border-color: ${user.color}` : ""}
                     >
                       <div
                         class="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold"
@@ -940,7 +951,7 @@ export default function TransactionList(props: TransactionListProps) {
                 value={searchQuery.value}
                 onInput={(e) =>
                   searchQuery.value = (e.target as HTMLInputElement).value}
-                class="w-full bg-surface border-border-custom rounded-custom pl-10 text-white placeholder-zinc-500 focus:ring-primary focus:border-primary py-2.5"
+                class="w-full bg-white/5 border border-white/15 rounded-custom pl-10 text-white placeholder-zinc-500 focus:ring-primary focus:border-primary py-2.5"
               />
               {searchQuery.value && (
                 <button

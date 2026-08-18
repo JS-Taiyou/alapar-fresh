@@ -33,10 +33,13 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
   // Display waiver: amounts under $0.02 are shown as $0.00 to avoid
   // showing a meaningless 1-cent remainder after a full payment.
   const displayBalance = Math.abs(balance) < 0.02 ? 0 : balance;
-  const balanceStr = Math.abs(displayBalance).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  // Keep the minus sign for negative balances (sign before the $, matching
+  // the popover's +$/-$ convention); Math.abs on the number only.
+  const balanceStr = (displayBalance < 0 ? "-" : "") +
+    Math.abs(displayBalance).toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
 
   return (
     <div class="relative min-w-0 shrink">
