@@ -17,9 +17,8 @@ Client-side authentication form using Supabase JS SDK directly in the browser.
 - Creates a Supabase client with the provided URL and anon key, with
   `persistSession: false` — sessions live in `HttpOnly` cookies, never in
   browser storage
-- **Signup flow**: Checks the email against the server-side allowlist via
-  `POST /api/auth/check-email`, calls `signUp()`, then sends tokens to
-  `/api/auth/callback` via POST
+- **Signup flow**: Calls `signUp()`, then sends tokens to `/api/auth/callback`
+  via POST (open signup — no allowlist)
 - **Login flow**: Calls `signInWithPassword()`, then sends tokens to
   `/api/auth/callback`
 - **Google OAuth**: Uses a dedicated PKCE client (`flowType: "pkce"`,

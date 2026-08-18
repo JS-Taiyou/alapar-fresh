@@ -194,15 +194,6 @@ Called by `AuthForm` island after successful Supabase login/signup, and by
 `AuthCallback` after the OAuth PKCE code exchange. Rate-limited (20 req/min per
 IP).
 
-### `/api/auth/check-email` — Allowlist Check (POST)
-
-**File**: `routes/api/auth/check-email.ts`
-
-Receives JSON `{ email }`. Always returns 200 with `{ allowed: boolean }` — the
-uniform response avoids leaking probe details (the per-IP rate limit is the
-actual enumeration mitigation). Used by the signup form before calling Supabase
-`signUp()`.
-
 ### `/api/auth/token` — Current Access Token (GET)
 
 **File**: `routes/api/auth/token.ts`

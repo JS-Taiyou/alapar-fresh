@@ -44,7 +44,6 @@ const PUBLIC_PREFIXES = [
   "/auth/callback",
   "/api/auth/callback",
   "/api/auth/logout",
-  "/api/auth/check-email",
   "/api/webhooks/polar",
   "/billing/success",
   "/demo",

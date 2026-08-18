@@ -4,6 +4,23 @@ All notable changes to this project are documented here. Dates are approximate.
 
 ---
 
+## 2026-08-18 — Open signup (allowlist removed) + Pro tier merged
+
+The app is public: any authenticated Google/email account can sign up.
+
+- Removed the `allowed_emails` registration gate end-to-end: middleware checks
+  (lightweight + full-state), `resolveUserState`'s is_email_allowed, the
+  `/api/auth/check-email` endpoint (+ its test), the AuthForm pre-signup check,
+  the login `?error=unauthorized` banner, the rate-limit and public-path
+  entries, and the es/en i18n keys.
+- `db/drop_allowed_emails.sql` drops the table. DEPLOY ORDER: run it AFTER the
+  code deploy (the old code JOINs the table on every request); it's a no-op on
+  fresh installs since `schema.sql` no longer creates it.
+- Merged `feat/monetization-pro-tier` (Pro tier, see the 2026-08-14 entry below)
+  into main alongside this change.
+
+---
+
 ## 2026-08-14 — Pro tier with Polar billing
 
 Paid registry plan (owner pays, whole group benefits). See

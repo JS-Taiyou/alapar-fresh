@@ -114,7 +114,6 @@ export async function createUserFromSupabase(
 
 export async function resolveUserState(supabaseAuthId: string): Promise<{
   user: User | null;
-  isEmailAllowed: boolean;
   activeRegistry: Registry | null;
   isOwner: boolean;
   ownerRegistryIds: Set<string>;
@@ -124,16 +123,12 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
   participants: Participant[];
 }> {
   const userResult = await query(
-    `SELECT u.*, ae.id IS NOT NULL as is_email_allowed
-     FROM users u
-     LEFT JOIN allowed_emails ae ON ae.email = u.email
-     WHERE u.supabase_auth_id = $1`,
+    `SELECT u.* FROM users u WHERE u.supabase_auth_id = $1`,
     [supabaseAuthId],
   );
   if (userResult.rows.length === 0) {
     return {
       user: null,
-      isEmailAllowed: false,
       activeRegistry: null,
       isOwner: false,
       ownerRegistryIds: new Set<string>(),
@@ -146,21 +141,6 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
 
   const row = userResult.rows[0];
   const user = rowToUser(row);
-  const isEmailAllowed = row.is_email_allowed as boolean;
-
-  if (!isEmailAllowed) {
-    return {
-      user,
-      isEmailAllowed: false,
-      activeRegistry: null,
-      isOwner: false,
-      ownerRegistryIds: new Set<string>(),
-      registries: [],
-      registryUsers: [],
-      entities: [],
-      participants: [],
-    };
-  }
 
   const registriesResult = await query(
     `SELECT r.*, rm.role as membership_role FROM registries r
@@ -209,7 +189,6 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
 
   return {
     user,
-    isEmailAllowed: true,
     activeRegistry,
     isOwner,
     ownerRegistryIds,
@@ -1144,14 +1123,6 @@ export async function revokeInvitation(
     ],
   );
   return true;
-}
-
-export async function isEmailAllowed(email: string): Promise<boolean> {
-  const result = await query(
-    "SELECT 1 FROM allowed_emails WHERE email = $1",
-    [email.toLowerCase()],
-  );
-  return result.rows.length > 0;
 }
 
 export async function getRegistryStamp(

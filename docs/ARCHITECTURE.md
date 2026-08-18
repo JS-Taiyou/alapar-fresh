@@ -172,8 +172,8 @@ so tests run without `DATABASE_URL` or a live database.
 5. Subsequent requests: middleware reads cookie → validates with Supabase →
    resolves `State` (refreshing expired tokens single-flight, so concurrent
    requests share one refresh)
-6. First-ever request from a new Supabase user: the email allowlist is checked
-   **before** the `users` row is created — disallowed emails never get a row
+6. First-ever request from a new Supabase user: a `users` profile row is
+   created (open signup — the app is public)
 7. Logout: `/api/auth/logout` revokes the session server-side
    (`auth.admin.signOut`) and clears cookies; the client also wipes
    service-worker caches, IndexedDB snapshots, and any `sb-*` localStorage
@@ -209,10 +209,9 @@ so tests run without `DATABASE_URL` or a live database.
 
 ## Authorization
 
-- **Email allowlist**: signup is gated on the `allowed_emails` table — checked
-  client-side via `POST /api/auth/check-email` (which always returns 200
-  `{ allowed }`) and enforced again server-side in the middleware **before** a
-  `users` row is created, even on the very first request
+- **Open signup**: any authenticated Supabase account (Google OAuth or email +
+  password) gets a `users` profile on first visit — the registration allowlist
+  was removed when the app went public (`db/drop_allowed_emails.sql`)
 - **Role-based access**: Registry membership tracked in `registry_members` with
   `owner` or `member` roles
 - **Owner-only actions**: Creating/revoking invitations, configuring default
@@ -227,7 +226,7 @@ so tests run without `DATABASE_URL` or a live database.
   (`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
   `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`);
   per-IP rate limit (20 req/min → 429) on `/join`,
-  `/api/invitations/join`, `/api/auth/check-email`, `/api/auth/callback`;
+  `/api/invitations/join`, `/api/auth/callback`;
   public-path matching is segment-aware so `/joinville`-style prefixes can't
   slip through
 

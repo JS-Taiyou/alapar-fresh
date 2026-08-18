@@ -60,11 +60,7 @@ export const es: Record<string, string> = {
   "auth.signup_link": "Regístrate",
   "auth.has_account": "Ya tienes cuenta?",
   "auth.login_link": "Inicia sesión",
-  "auth.not_authorized":
-    "Tu email no está autorizado para usar esta aplicación.",
-  "auth.email_not_allowed": "Este email no está autorizado para registrarse.",
   "auth.check_email": "Revisa tu email para confirmar tu cuenta.",
-  "auth.email_verify_error": "Error al verificar email.",
   "auth.session_error": "Error al guardar la sesión",
 
   // --- Forgot password ---

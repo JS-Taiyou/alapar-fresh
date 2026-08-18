@@ -194,16 +194,6 @@ that enforces not-revoked and `max_uses` in SQL.
 
 ---
 
-### `allowed_emails` — Registration Allowlist
-
-| Column     | Type        | Constraints             | Description           |
-| ---------- | ----------- | ----------------------- | --------------------- |
-| id         | UUID        | PK, auto                | Unique identifier     |
-| email      | TEXT        | NOT NULL, UNIQUE        | Allowed email address |
-| created_at | TIMESTAMPTZ | NOT NULL, default now() | Creation timestamp    |
-
----
-
 ## Split JSON Format
 
 The `split_json` JSONB field in transactions:
@@ -313,9 +303,15 @@ Migrations must be run in order:
    (`free`|`pro`|`grandfathered`, existing rows grandfathered) and the
    `registry_subscriptions` mirror table (server-only, zero RLS policies).
    **Must run before deploying billing code.**
+7. **`drop_allowed_emails.sql`** — Drops the registration allowlist (the app
+   went public; signup is open). **Must run AFTER deploying the code that stops
+   reading it** — the previously deployed code JOINs the table on every
+   authenticated request. No-op on fresh installs (schema.sql no longer creates
+   the table).
 
 Run order: `schema.sql` → `add_*.sql` → `enable_rls.sql` → `tighten_rls.sql` →
-`enable_realtime.sql` → `add_billing.sql`.
+`enable_realtime.sql` → `add_billing.sql` → `drop_allowed_emails.sql` (the last
+one deploy-gated as noted).
 
 ---
 
@@ -346,7 +342,7 @@ Key policy points (final state after `tighten_rls.sql`):
 - `transactions`: per-command policies — SELECT by membership; INSERT also
   requires `creator_id = app_user_id()`; UPDATE/DELETE only while
   `exercise_id IS NULL` (settled transactions are immutable for clients)
-- `audit_log`, `allowed_emails`: no client policies at all (server-only tables)
+- `audit_log`: no client policies at all (server-only table)
 - `transaction_payments`: expense and pago must belong to the **same** registry
 - `transaction_balances`, `push_subscriptions`: membership/self-scoped (their
   `add_*.sql` migrations carry matching RLS blocks)
@@ -400,7 +396,7 @@ deleted.
 **Purpose**: Server-side mirror of the Polar subscription state for a registry.
 Written exclusively by the webhook handler (`POST /api/webhooks/polar`) and
 `syncCheckout`. RLS is enabled and forced with **zero policies** — client roles
-see no rows (same posture as `audit_log` / `allowed_emails`).
+see no rows (same posture as `audit_log`).
 
 Plan resolution (`lib/entitlements.ts`): a registry is effectively Pro when
 `registries.plan IN ('pro','grandfathered')` OR the subscription is

@@ -95,23 +95,6 @@ export default function AuthForm(props: AuthFormProps) {
 
     try {
       if (props.mode === "signup") {
-        try {
-          const res = await fetch("/api/auth/check-email", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: email.value }),
-          });
-          const data = await res.json();
-          if (!data.allowed) {
-            error.value = t("auth.email_not_allowed");
-            loading.value = false;
-            return;
-          }
-        } catch {
-          error.value = t("auth.email_verify_error");
-          loading.value = false;
-          return;
-        }
         const { data, error: signUpError } = await client.auth.signUp({
           email: email.value,
           password: password.value,
