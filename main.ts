@@ -286,6 +286,16 @@ app.use(define.middleware(async (ctx) => {
 
   const redirect = routeGuard(path2, { hasUser, hasRegistry });
   if (redirect) {
+    // API paths answer 401 JSON instead of redirecting: the dashboard's
+    // data path is fetch(), which follows redirects transparently — a 302
+    // to /login would arrive as status-200 HTML, JSON parsing would throw
+    // into silent catch blocks, and a dead session would just freeze the
+    // UI. A 401 is a visible signal the client turns into a real logout
+    // navigation (lib/auth-client.ts). Page routes keep the redirect.
+    if (path2.startsWith("/api/")) {
+      devLog(`<< ROUTING 401 (api, no user)`);
+      return Response.json({ error: "unauthorized" }, { status: 401 });
+    }
     devLog(`<< ROUTING redirect to ${redirect}`);
     return ctx.redirect(redirect);
   }

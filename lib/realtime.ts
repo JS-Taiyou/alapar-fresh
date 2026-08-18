@@ -3,6 +3,7 @@ import {
   type RealtimeChannel,
   type SupabaseClient,
 } from "@supabase/supabase-js";
+import { redirectToLogin } from "./auth-client.ts";
 
 let supabase: SupabaseClient | null = null;
 let activeChannel: RealtimeChannel | null = null;
@@ -79,12 +80,23 @@ function getSupabase(): SupabaseClient {
  *
  * The token lives in an HttpOnly cookie (invisible to JS), so
  * `/api/auth/token` is the seam the client uses both for the initial
- * subscribe and for recovery after expiry. Returns null when the session is
- * gone (401) or the request fails — callers treat that as "retry later".
+ * subscribe and for recovery after expiry. Returns null when the request
+ * fails — callers treat that as "retry later".
+ *
+ * A 401 is different: the middleware already attempted a server-side token
+ * refresh before answering, so 401 means the session is DEFINITIVELY dead
+ * (refresh token expired/revoked). Retrying is pointless — navigate to
+ * /login so the user lands where a manual reload would have taken them,
+ * instead of staring at a frozen screen.
  */
 async function fetchAccessToken(): Promise<string | null> {
   try {
     const resp = await fetch("/api/auth/token");
+    if (resp.status === 401) {
+      console.log("[realtime] session expired — redirecting to login");
+      redirectToLogin();
+      return null;
+    }
     if (!resp.ok) {
       console.log("[realtime] token fetch failed:", resp.status);
       return null;

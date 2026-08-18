@@ -31,6 +31,7 @@ import {
   subscribeToRegistry,
   unsubscribeAll,
 } from "../lib/realtime.ts";
+import { isAuthFailure, redirectToLogin } from "../lib/auth-client.ts";
 import {
   requestNotificationPermission,
   subscribeToPush,
@@ -665,6 +666,12 @@ export default function TransactionList(props: TransactionListProps) {
       try {
         const stampRes = await fetch(`/api/stamp/${rid}`, { method: "POST" });
         if (rid !== registryId.value) return;
+        // Dead session (expired refresh token): go to login instead of
+        // silently leaving the screen frozen on stale data.
+        if (isAuthFailure(stampRes)) {
+          redirectToLogin();
+          return;
+        }
         if (!stampRes.ok) return;
         const { lastModified } = await stampRes.json() as {
           lastModified: string | null;
@@ -675,6 +682,10 @@ export default function TransactionList(props: TransactionListProps) {
 
         const dashRes = await fetch(`/api/dashboard?registryId=${rid}`);
         if (rid !== registryId.value) return;
+        if (isAuthFailure(dashRes)) {
+          redirectToLogin();
+          return;
+        }
         if (!dashRes.ok) return;
         const data = await dashRes.json() as {
           transactions: unknown[];
