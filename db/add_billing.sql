@@ -26,6 +26,24 @@ ALTER TABLE registries DROP CONSTRAINT IF EXISTS registries_plan_check;
 ALTER TABLE registries ADD CONSTRAINT registries_plan_check
   CHECK (plan IN ('free', 'pro', 'grandfathered'));
 
+  -- ---------------------------------------------------------------------------
+  -- registry_subscriptions — server-only mirror of Polar subscription state.
+  -- Zero RLS policies: read/written exclusively by the Fresh server (superuser
+  -- pool + webhook handler), same posture as audit_log / allowed_emails.
+  -- ---------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS registry_subscriptions (
+    registry_id UUID PRIMARY KEY
+      REFERENCES registries(id) ON DELETE CASCADE,
+    polar_subscription_id TEXT UNIQUE,
+    polar_customer_id TEXT,
+    status TEXT NOT NULL
+      CHECK (status IN ('trialing', 'active', 'past_due', 'canceled', 'revoked')),
+    current_period_end TIMESTAMPTZ,
+    grace_until TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+
+
 -- Grandfather: every registry that exists before billing goes live keeps
 -- unlimited access forever. This is a TRUST promise, not just a default:
 -- early users built history under "unlimited" rules, and 'grandfathered'
@@ -45,22 +63,6 @@ WHERE plan = 'free'
     WHERE rs.registry_id = registries.id
   );
 
--- ---------------------------------------------------------------------------
--- registry_subscriptions — server-only mirror of Polar subscription state.
--- Zero RLS policies: read/written exclusively by the Fresh server (superuser
--- pool + webhook handler), same posture as audit_log / allowed_emails.
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS registry_subscriptions (
-  registry_id UUID PRIMARY KEY
-    REFERENCES registries(id) ON DELETE CASCADE,
-  polar_subscription_id TEXT UNIQUE,
-  polar_customer_id TEXT,
-  status TEXT NOT NULL
-    CHECK (status IN ('trialing', 'active', 'past_due', 'canceled', 'revoked')),
-  current_period_end TIMESTAMPTZ,
-  grace_until TIMESTAMPTZ,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
 
 CREATE INDEX IF NOT EXISTS idx_registry_subscriptions_polar_customer
   ON registry_subscriptions(polar_customer_id);
