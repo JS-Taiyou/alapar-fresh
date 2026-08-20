@@ -404,12 +404,11 @@ driver.js.
 
 ## `UpgradeButton` — `islands/UpgradeButton.tsx`
 
-**Props**: `{ locale: Locale, registryId: string, isOwner: boolean }`
+**Props**: `{ locale: Locale, isOwner: boolean }`
 
-"Mejorar a Pro" CTA in the sidebar footer (rendered only for the free active
-registry). Owner variant opens a monthly/yearly picker modal (shared `Modal`
-scaffold) and redirects to the Polar checkout; non-owners see a hint to ask the
-owner instead.
+"Mejorar a Pro" CTA in the sidebar footer (rendered only when the active
+registry isn't Pro). Both variants are plain links to the public `/pricing`
+page; non-owners get an ask-the-owner hint that links there for information.
 
 ---
 
@@ -440,3 +439,31 @@ New-password form on `/reset-password`: establishes the recovery session in
 memory only (`setSession` — never persisted), updates the password via
 `updateUser`, then shows a success card linking to `/login` (the recovery
 session is intentionally not turned into an app session).
+
+---
+
+## `Toaster` — `islands/Toaster.tsx`
+
+**Props**: none (mounted once, inside `Sidebar`, so it covers every dashboard
+page).
+
+The 402 funnel: when a paywalled action fails inside a form context (4th
+recurring template, 3rd owned registry), the data rolls back and
+`showUpgradeToast(locale, messageKey)` — exported from this module, callable
+from anywhere client-side — pushes a dismissible toast (auto-dismiss 6s)
+carrying the localized limit message plus a "Ver planes →" link to `/pricing`.
+Module-level signal store (shared-signals pattern); producers:
+`Sidebar.handleCreateRegistry`, `TransactionModal` submit (templates cap).
+
+---
+
+## `BillingActions` — `islands/BillingActions.tsx`
+
+**Props**:
+`{ locale: Locale, activeUntil: string | null, cancelScheduled: boolean }`
+
+The discrete billing controls for live subscribers, shown on `/pricing`:
+"Cancelar suscripción" opens a confirm modal (shared `Modal`) stating that
+access continues until `activeUntil`; "Reactivar" undoes a scheduled cancel;
+"Administrar suscripción" opens the hosted Polar portal. Talks to
+`POST /api/billing/cancel` and `POST /api/billing/portal`.

@@ -29,7 +29,8 @@ export interface PlanLimits {
 
 export const FREE_LIMITS: PlanLimits = {
   maxOwnedRegistries: 2,
-  maxMembers: 4,
+  // TOTAL members including the owner (a couple/pair fits free).
+  maxMembers: 2,
   maxActiveTemplates: 3,
   maxClosedExercisesVisible: 1,
 };
@@ -53,40 +54,74 @@ export interface RegistryPlanInfo {
 }
 
 /**
+ * Pure plan-resolution matrix, extracted so callers that already hold the DB
+ * fields (getRegistryPlan, the pricing page's one-query listing) share the
+ * exact same semantics. First match wins:
+ *
+ *   plan = 'grandfathered'                      → PRO (permanent)
+ *   subscription trialing|active                → PRO
+ *   subscription canceled AND paid-through
+ *     (current_period_end > now)                → PRO (cancel-at-period-end
+ *                                                  keeps access until the
+ *                                                  period the user paid for)
+ *   subscription past_due|canceled|revoked
+ *     AND grace_until > now                     → PRO (dunning/cancel grace)
+ *   plan = 'pro' AND no subscription row        → PRO (no contradiction)
+ *   anything else                               → FREE
+ *
+ * The canceled-paid-through row matters because Polar's
+ * cancel_at_period_end keeps the subscription alive until current_period_end;
+ * if a `subscription.canceled` webhook lands while that date is still in the
+ * future, the user must keep Pro for the time they paid for — the 3-day grace
+ * alone would cut them off early.
+ */
+export function resolveEffectivePlan(
+  plan: RegistryPlan,
+  subStatus: string | null,
+  graceUntil: Date | null,
+  currentPeriodEnd: Date | null,
+  now: number = Date.now(),
+): RegistryPlan {
+  if (plan === "grandfathered") {
+    // Permanent by design — checked FIRST so no subscription state, however
+    // dead, can ever demote it (the webhook's flip is WHERE plan='free').
+    return "grandfathered";
+  }
+  const subLive = subStatus === "trialing" || subStatus === "active";
+  if (subLive) {
+    // A live subscription is Pro regardless of what the column says: covers
+    // activation webhook lag (column still 'free').
+    return "pro";
+  }
+  const paidThrough = subStatus === "canceled" && !!currentPeriodEnd &&
+    currentPeriodEnd.getTime() > now;
+  if (paidThrough) return "pro";
+  const inGrace = !!graceUntil && graceUntil.getTime() > now &&
+    (subStatus === "past_due" || subStatus === "canceled" ||
+      subStatus === "revoked");
+  if (inGrace) return "pro";
+  if (plan === "pro" && subStatus === null) {
+    // Column says pro and there is no subscription row contradicting it.
+    // (In practice the flip webhook always writes both; this branch is the
+    // defensive no-contradiction case.)
+    return "pro";
+  }
+  // plan='free' with no live sub → free.
+  // plan='pro' with a DEAD sub (canceled/revoked/past_due beyond grace and
+  // beyond paid-through) → free. This is where cancellation takes effect.
+  return "free";
+}
+
+/**
  * Resolve the effective plan for a registry. Returns null when the registry
  * doesn't exist.
  *
- * One round trip: `registries.plan` LEFT JOINed with the subscription mirror.
- * The resolution matrix (first match wins):
- *
- *   registries.plan = 'grandfathered' → PRO     (permanent; a subscription
- *                                               can never demote it — see
- *                                               GRANDFATHERING below)
- *   subscription = trialing|active    → PRO     (covers webhook LAG in BOTH
- *   subscription = past_due/canceled/            directions: a payment that
- *     revoked AND grace_until > now   → PRO      succeeded before the plan-
- *                                               flip webhook landed, AND a
- *                                               cancellation still inside
- *                                               its grace window)
- *   registries.plan = 'pro' AND
- *     NO subscription row             → PRO     (column says pro, nothing
- *                                               contradicts it)
- *   anything else                     → FREE    (free column, OR pro column
- *                                               with a dead subscription:
- *                                               canceled/revoked/past_due
- *                                               beyond grace)
- *
- * The last row is the REVENUE-CRITICAL one: the webhook deliberately never
- * writes plan='free' on cancel (no cron sweeper), so this read is where a
- * canceled subscription demotes to free — once grace_until lapses, the
- * "grace" branch stops matching and the matrix falls through to FREE.
- * Grandfathered rows are immune because they short-circuit at the top and
- * (by migration design) carry no subscription history.
- *
- * AUTHORITY: this function (via the DB rows) is the single source of truth
- * for "is this registry Pro". UI hints may be stale; enforcement MUST call
- * this (or use ctx.state.activeRegistryPlan, which the middleware populates
- * with this same function on full-state paths).
+ * One round trip: `registries.plan` plus the subscription mirror of the
+ * registry's OWNER — a subscription is per-user and unlocks every registry
+ * the subscriber owns (grandfathering stays per-registry via the plan
+ * column). Semantics live in {@link resolveEffectivePlan} — the single
+ * source of truth the UI reads via ctx.state.activeRegistryPlan (populated
+ * with this same function on full-state paths) and enforcement must call.
  */
 export async function getRegistryPlan(
   registryId: string,
@@ -94,48 +129,31 @@ export async function getRegistryPlan(
   const result = await query(
     `SELECT r.plan,
             rs.status AS sub_status,
-            rs.grace_until
+            rs.grace_until,
+            rs.current_period_end
      FROM registries r
-     LEFT JOIN registry_subscriptions rs ON rs.registry_id = r.id
+     LEFT JOIN LATERAL (
+       SELECT rs.status, rs.grace_until, rs.current_period_end
+       FROM registry_subscriptions rs
+       WHERE rs.user_id = (
+         SELECT rm.user_id FROM registry_members rm
+         WHERE rm.registry_id = r.id AND rm.role = 'owner'
+         ORDER BY rm.joined_at
+         LIMIT 1
+       )
+     ) rs ON true
      WHERE r.id = $1`,
     [registryId],
   );
   if (result.rows.length === 0) return null;
 
   const row = result.rows[0];
-  const plan = row.plan as RegistryPlan;
-  const subStatus = row.sub_status as string | null;
-  const graceUntil = row.grace_until
-    ? new Date(row.grace_until as string)
-    : null;
-  const now = Date.now();
-
-  const subLive = subStatus === "trialing" || subStatus === "active";
-  const inGrace = !!graceUntil && graceUntil.getTime() > now &&
-    (subStatus === "past_due" || subStatus === "canceled" ||
-      subStatus === "revoked");
-
-  let effective: RegistryPlan;
-  if (plan === "grandfathered") {
-    // Permanent by design — checked FIRST so no subscription state, however
-    // dead, can ever demote it (the webhook's flip is WHERE plan='free').
-    effective = "grandfathered";
-  } else if (subLive || inGrace) {
-    // A live or graced subscription is Pro regardless of what the column
-    // says: covers activation webhook lag (column still 'free') AND the
-    // cancellation/dunning grace window.
-    effective = "pro";
-  } else if (plan === "pro" && subStatus === null) {
-    // Column says pro and there is no subscription row contradicting it.
-    // (In practice the flip webhook always writes both; this branch is the
-    // defensive no-contradiction case.)
-    effective = "pro";
-  } else {
-    // plan='free' with no live sub → free.
-    // plan='pro' with a DEAD sub (canceled/revoked/past_due beyond grace)
-    // → free. This is where cancellation actually takes effect.
-    effective = "free";
-  }
+  const effective = resolveEffectivePlan(
+    row.plan as RegistryPlan,
+    row.sub_status as string | null,
+    row.grace_until ? new Date(row.grace_until as string) : null,
+    row.current_period_end ? new Date(row.current_period_end as string) : null,
+  );
 
   return {
     plan: effective,
@@ -157,16 +175,17 @@ export async function getRegistryPlan(
  *     3rd (they can upgrade it after creating — the upgrade flow is
  *     per-registry and runs AFTER creation).
  *
- * "Effectively free" = plan 'free' AND the subscription (if any) is not
- * live/graced — mirroring getRegistryPlan's matrix in SQL so a canceled-but-
- * unflipped registry correctly counts against the cap again.
+ * "Effectively free" = plan 'free' AND the OWNER's subscription (if any) is
+ * not live/graced/paid-through — mirroring resolveEffectivePlan's matrix in
+ * SQL. A subscribed owner's registries never count against the cap (Pro
+ * unlocks all of them); neither do grandfathered/Pro-column ones.
  */
 export async function countOwnedRegistries(userId: string): Promise<number> {
   const result = await query(
     `SELECT count(*)::int AS cnt
      FROM registry_members rm
      JOIN registries r ON r.id = rm.registry_id
-     LEFT JOIN registry_subscriptions rs ON rs.registry_id = r.id
+     LEFT JOIN registry_subscriptions rs ON rs.user_id = rm.user_id
      WHERE rm.user_id = $1
        AND rm.role = 'owner'
        AND r.plan = 'free'
@@ -175,6 +194,9 @@ export async function countOwnedRegistries(userId: string): Promise<number> {
          OR (
            rs.status IN ('past_due', 'canceled', 'revoked')
            AND (rs.grace_until IS NULL OR rs.grace_until <= now())
+           AND (rs.status <> 'canceled'
+             OR rs.current_period_end IS NULL
+             OR rs.current_period_end <= now())
          )
        )`,
     [userId],

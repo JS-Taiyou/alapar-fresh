@@ -64,6 +64,24 @@ a validated relative `next` param (open-redirect guard — absolute paths fall
 back to `/dashboard`), exchanges the code, then POSTs tokens to
 `/api/auth/callback`.
 
+### `/pricing` — Public Pricing Page
+
+**File**: `routes/pricing.tsx`
+
+Public (no auth). The funnel target for every upgrade CTA in the app. Two tier
+cards — Gratis (features rendered from `FREE_LIMITS`, so the page can't drift
+from enforcement) and Pro ("todo lo del plan gratuito, más:") with a
+monthly/yearly switcher (SSR `?interval=` links). Prices are fetched from Polar
+(`GET /v1/products/`, cached 10 min; dashboard stays the source of truth) with
+static fallbacks when unreachable.
+
+Session-aware CTAs: anonymous → signup/login with `?redirect=/pricing`
+round-trip (a subscription requires an account that owns a registry); logged-in
+owner of free registries → direct checkout link (ONE per-user subscription
+unlocks every registry they own); live subscriber → "Activo" badge plus discrete
+cancel/reactivate (`BillingActions` island) and portal link; member-only →
+ask-the-owner hint; no registries → create-first CTA.
+
 ### `/demo` — Guided Demo
 
 **File**: `routes/demo/index.tsx`
@@ -260,8 +278,8 @@ localStorage keys before leaving (see `Sidebar` island).
 header decides). `createRegistry(name, userId)` inserts the registry and the
 owner membership in one DB transaction. Free-plan cap on **owned effectively-
 free** registries (2) enforced first — JSON clients get `402 upgrade_required`,
-the form fallback gets a redirect with `?upgrade=…`. Returns `{ registry }`
-(JSON) or redirects to `/dashboard` (form).
+the form fallback redirects to `/pricing`. Returns `{ registry }` (JSON) or
+redirects to `/dashboard` (form).
 
 ### `/api/registries/[id]` — Rename/Delete Registry
 
@@ -434,7 +452,8 @@ Logs to audit log.
 Receives JSON `{ locale: "es" | "en" }` (anything non-`en` resolves to `es`) and
 sets the year-long `alapar-locale` cookie. The client reloads after the response
 so SSR re-renders in the new language. Locale for any request is resolved in
-`ctx.state.locale` (cookie → `Accept-Language` → `es`).
+`ctx.state.locale` (cookie → `Accept-Language` → `es`). Public path — anonymous
+visitors can switch the language on `/demo` and `/pricing`.
 
 ### `/api/push/subscribe` — Push Subscription (POST)
 
@@ -466,10 +485,11 @@ push JWTs with `aud` derived from each subscription's endpoint origin (RFC
 
 **File**: `routes/api/billing/checkout.ts`
 
-Owner-only. Query: `registry_id`, `interval=monthly|yearly`. 302-redirects to
-the dashboard-configured Polar Checkout Link with
-`metadata[registry_id]`/`reference_id`/`locale`/`theme` appended so the webhook
-can map the subscription back to the registry. 503 when billing env is not
+Authenticated (session user — nothing forgeable in the query). Query:
+`interval=monthly|yearly`. 302-redirects to the dashboard-configured Polar
+Checkout Link with `metadata[user_id]`/`reference_id`/`locale`/`theme` appended
+so the webhook can map the subscription back to the subscribing USER — one
+subscription unlocks every registry they own. 503 when billing env is not
 configured.
 
 ### `/api/webhooks/polar` — Polar Webhook (POST, public)
@@ -482,11 +502,25 @@ Standard Webhooks HMAC signature). Handles `subscription.*` events: upserts
 `registries.plan` on activation. Invalid signature → 401 (no retry); handler
 error → 500 (Polar retries).
 
+### `/api/billing/cancel` — Cancel at Period End (POST)
+
+**File**: `routes/api/billing/cancel.ts`
+
+Authenticated (acts on the CURRENT user's subscription — subscriptions are
+per-user). Body: `{ undo?: boolean }`. Calls Polar
+`PATCH /v1/subscriptions/{id}` with `cancel_at_period_end` — the subscription
+(and Pro, on ALL the subscriber's registries) stays active until
+`current_period_end`; `undo` reactivates. On Polar success the mirror's
+`cancel_at_period_end` flag is updated locally (the webhook stays authoritative
+for everything else). 404 when the user has no subscription; 502 when Polar
+rejects the call (mirror untouched); 503 when billing isn't configured. Used by
+the `BillingActions` island on `/pricing`.
+
 ### `/api/billing/portal` — Customer Portal Session (POST)
 
 **File**: `routes/api/billing/portal.ts`
 
-Owner-only. Body: `{ registry_id }`. Creates a Polar customer-session and
+Authenticated (session user). No body. Creates a Polar customer-session and
 returns `{ url }` for cancel/payment-method self-service.
 
 ### `/billing/success` — Checkout Success Page (GET, public)

@@ -68,8 +68,8 @@ translate-x animation.
 Server-rendered locked-history placeholder for closed exercises beyond the free
 plan's history depth (newest closed exercise only on free registries). Renders
 blurred "hidden rows" silhouettes, the locked count, and an upgrade CTA
-(`/dashboard?upgrade=history`) — the paywall doubles as feature discovery;
-history is never silently hidden.
+funneling to `/pricing?registry_id=…` — the paywall doubles as feature
+discovery; history is never silently hidden.
 
 ---
 

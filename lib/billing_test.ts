@@ -129,7 +129,7 @@ describe("handleSubscriptionEvent", () => {
       status: "active",
       customer: { id: "cust_1" },
       current_period_end: "2026-09-01T00:00:00Z",
-      metadata: { registry_id: "reg-1" },
+      metadata: { user_id: "user-1" },
     },
   };
 
@@ -139,19 +139,36 @@ describe("handleSubscriptionEvent", () => {
       c.text.includes("INSERT INTO registry_subscriptions")
     );
     assert(insert, "expected an upsert query");
-    assertEquals(insert!.params[0], "reg-1"); // registry_id
+    assertEquals(insert!.params[0], "user-1"); // user_id (PK — per-user sub)
     assertEquals(insert!.params[1], "sub_123"); // polar_subscription_id
     assertEquals(insert!.params[2], "cust_1"); // polar_customer_id
     assertEquals(insert!.params[3], "active"); // status
     assertEquals(insert!.params[4], "2026-09-01T00:00:00Z");
     assertEquals(insert!.params[5], null); // no grace on active
+    assertEquals(insert!.params[6], false); // cancel_at_period_end absent
   });
 
-  it("flips registries.plan to pro on active", async () => {
+  it("persists cancel_at_period_end from the event", async () => {
+    await handleSubscriptionEvent({
+      type: "subscription.updated",
+      data: { ...activeEvent.data, cancel_at_period_end: true },
+    });
+    const upsert = __queryLog.find((c) =>
+      c.text.includes("INSERT INTO registry_subscriptions")
+    );
+    assertEquals(upsert!.params[6], true);
+  });
+
+  it("flips plan to pro on EVERY registry the subscriber owns", async () => {
     await handleSubscriptionEvent(activeEvent);
     const flip = __queryLog.find((c) => c.text.includes("SET plan = 'pro'"));
     assert(flip, "expected plan flip to pro");
-    assertEquals(flip!.params[0], "reg-1");
+    // Scoped to the user's OWNED registries via the subselect.
+    assertEquals(flip!.params[0], "user-1");
+    assertEquals(
+      flip!.text.includes("rm.role = 'owner'"),
+      true,
+    );
   });
 
   it("past_due ALSO sets the grace window (one failed charge ≠ instant cut)", async () => {
@@ -171,13 +188,13 @@ describe("handleSubscriptionEvent", () => {
     const { metadata: _drop, ...dataNoMeta } = activeEvent.data;
     await handleSubscriptionEvent({
       type: "subscription.active",
-      data: { ...dataNoMeta, reference_id: "reg-via-ref" },
+      data: { ...dataNoMeta, reference_id: "user-via-ref" },
     });
     const upsert = __queryLog.find((c) =>
       c.text.includes("INSERT INTO registry_subscriptions")
     );
     assert(upsert, "expected an upsert via reference_id fallback");
-    assertEquals(upsert!.params[0], "reg-via-ref");
+    assertEquals(upsert!.params[0], "user-via-ref");
   });
 
   it("canceled sets a 3-day grace window instead of cutting immediately", async () => {

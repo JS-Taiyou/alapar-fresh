@@ -5,7 +5,11 @@ import { type Locale, t } from "../lib/i18n.ts";
  * upgrade. Rendered by the history page for free registries.
  */
 export default function PaywallCard(
-  { locale, lockedCount }: { locale: Locale; lockedCount: number },
+  { locale, lockedCount, registryId }: {
+    locale: Locale;
+    lockedCount: number;
+    registryId?: string;
+  },
 ) {
   return (
     <div class="relative rounded-custom border border-dashed border-white/15 bg-white/[0.02] p-5 text-center overflow-hidden">
@@ -23,7 +27,7 @@ export default function PaywallCard(
           {t(locale, "billing.history_locked")} ({lockedCount})
         </p>
         <a
-          href="/dashboard?upgrade=history"
+          href={registryId ? `/pricing?registry_id=${registryId}` : "/pricing"}
           class="inline-block mt-2 px-4 py-2 text-sm btn-primary rounded-custom transition-all shadow-lg active:scale-95"
         >
           {t(locale, "billing.history_locked_cta")}

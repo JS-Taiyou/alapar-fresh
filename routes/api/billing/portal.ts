@@ -2,15 +2,15 @@ import { define } from "../../../utils.ts";
 import { createPortalSession } from "../../../lib/billing.ts";
 
 /**
- * POST /api/billing/portal — owner-only; returns a hosted Polar customer
- * portal URL (cancel / update payment method self-service).
+ * POST /api/billing/portal — returns a hosted Polar customer portal URL
+ * (cancel / update payment method self-service) for the CURRENT user's
+ * subscription.
  *
- * Body: `{ registry_id }`. Ownership is resolved server-side from
- * `ctx.state.ownerRegistryIds` (populated by the middleware) — the client
- * cannot claim a registry it doesn't own.
+ * No body needed: the subscription is per-user, and the identity comes from
+ * the session — the client cannot ask for someone else's portal.
  *
- * 404 when the registry has no subscription row / Polar customer id yet
- * (nothing to manage — e.g. the "manage" action reached a free registry).
+ * 404 when the user has no subscription row / Polar customer id yet
+ * (nothing to manage — e.g. the "manage" action reached a free account).
  */
 export const handler = define.handlers({
   async POST(ctx) {
@@ -19,19 +19,10 @@ export const handler = define.handlers({
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await ctx.req.json().catch(() => ({}));
-    const registryId = (body as { registry_id?: string }).registry_id ?? "";
-    if (!registryId || !ctx.state.ownerRegistryIds.has(registryId)) {
-      return Response.json(
-        { error: "Only the owner can manage this registry's plan" },
-        { status: 403 },
-      );
-    }
-
-    const url = await createPortalSession(registryId);
+    const url = await createPortalSession(userId);
     if (!url) {
       return Response.json(
-        { error: "No subscription found for this registry" },
+        { error: "No subscription found for this account" },
         { status: 404 },
       );
     }

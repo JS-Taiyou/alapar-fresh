@@ -27,6 +27,7 @@ import {
   sanitizeInteger,
 } from "../lib/format.ts";
 import Modal from "./Modal.tsx";
+import { showUpgradeToast } from "../islands/Toaster.tsx";
 import { formatDate, type Locale, t as translate } from "../lib/i18n.ts";
 
 interface TransactionModalProps {
@@ -649,6 +650,12 @@ export default function TransactionModal(props: TransactionModalProps) {
           // Non-JSON error body — the generic message is all we can show.
         }
         rollbackSubmit(prevTransactions, prevTps, wasEditing);
+        if (res.status === 402) {
+          // Free-plan recurring-template cap: the toast (with its /pricing
+          // link) replaces the generic alert — it carries the explanation.
+          showUpgradeToast(props.locale ?? "es", "billing.templates_full");
+          return;
+        }
         alert(
           detail
             ? `${t("modal.save_error")}\n${detail}`

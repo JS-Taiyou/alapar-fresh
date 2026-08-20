@@ -225,7 +225,7 @@ target group's plan.
 |                                        | Free     | Pro       | Grandfathered |
 | -------------------------------------- | -------- | --------- | ------------- |
 | Owned registries                       | 2        | unlimited | unlimited     |
-| Members per registry                   | 4        | unlimited | unlimited     |
+| Members per registry (incl. owner)     | 2        | unlimited | unlimited     |
 | Active recurring/installment templates | 3        | unlimited | unlimited     |
 | Closed exercises visible in history    | newest 1 | all       | all           |
 
@@ -243,17 +243,19 @@ A registry is effectively Pro when ANY of:
 
 1. `registries.plan` is `grandfathered` (permanent — nothing can demote it), OR
 2. its Polar subscription is `trialing`/`active`, OR
-3. the subscription is `past_due`/`canceled`/`revoked` **and** `grace_until` is
-   in the future (3-day grace: dunning and "paid period not over" — never a hard
-   cut), OR
-4. `registries.plan` is `pro` **and** no subscription row contradicts it.
+3. the subscription is `canceled` **and** `current_period_end` is still in the
+   future (paid through — in-app cancel is cancel-at-period-end, so the user
+   keeps Pro for the cycle they paid for), OR
+4. the subscription is `past_due`/`canceled`/`revoked` **and** `grace_until` is
+   in the future (3-day grace: dunning — never a hard cut), OR
+5. `registries.plan` is `pro` **and** no subscription row contradicts it.
 
 Otherwise free — including the revenue-critical case: `plan='pro'` with a
 `canceled`/`revoked`/`past_due` subscription **beyond grace**. The webhook
 deliberately never writes `plan='free'` on cancel, so **demotion happens on
 read, here** — no cron sweeper exists.
 
-Rules 2–3 cover webhook lag in BOTH directions (paid but the flip event hasn't
+Rules 2–4 cover webhook lag in BOTH directions (paid but the flip event hasn't
 landed → lifted; canceled but grace holds → not yet cut). See
 `lib/entitlements.ts` — this resolution is the single source of truth;
 enforcement always goes through it (directly or via
@@ -280,8 +282,13 @@ All return `402 {code: "upgrade_required", reason}` (JSON) or a redirect with
 
 ### Payment flow (Polar, Merchant of Record)
 
+Every upgrade CTA funnels through the public **`/pricing`** page (tier
+comparison rendered from `FREE_LIMITS`, monthly/yearly switcher, prices fetched
+from Polar with fallbacks). 402s inside form contexts surface an upgrade toast
+with a "Ver planes" link.
+
 ```
-UpgradeButton (owner, free registry)
+/pricing (owner of a free registry)
   → GET /api/billing/checkout?registry_id&interval   (owner-checked 302)
   → Polar-hosted checkout (card, tax handled by Polar)
   → success redirect → /billing/success?checkout_id  (syncCheckout, display-only)
@@ -289,6 +296,14 @@ UpgradeButton (owner, free registry)
       subscription.active → upsert mirror + flip plan to 'pro'
   → user's group is Pro on next request (entitlements read)
 ```
+
+### Cancellation (in-app, at period end)
+
+The pricing page offers subscribers a discrete cancel link → confirm modal
+stating until when the subscription stays active → `POST /api/billing/cancel` →
+Polar `PATCH cancel_at_period_end: true`. Pro persists on ALL the subscriber's
+registries until `current_period_end`; `undo` reactivates. The Polar hosted
+portal ("Administrar suscripción") remains for payment method / invoices.
 
 Checkout Link, products, pricing, and trial length live in the Polar dashboard —
 pricing changes never require a deploy. The webhook carries

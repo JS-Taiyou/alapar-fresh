@@ -25,6 +25,7 @@
 /** Paths that require the full resolved state (user + registry + participants). */
 const FULL_STATE_PREFIXES = [
   "/dashboard",
+  "/api/billing",
   "/api/registries",
   "/api/transactions",
   "/api/entities",
@@ -45,7 +46,9 @@ const PUBLIC_PREFIXES = [
   "/api/auth/callback",
   "/api/auth/logout",
   "/api/webhooks/polar",
+  "/api/locale",
   "/billing/success",
+  "/pricing",
   "/demo",
 ] as const;
 

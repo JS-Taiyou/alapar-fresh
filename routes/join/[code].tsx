@@ -107,7 +107,7 @@ export default define.page(function JoinPage(ctx) {
           </div>
         )
         : isLoggedIn
-        ? <JoinButton code={inv.code} />
+        ? <JoinButton code={inv.code} locale={ctx.state.locale} />
         : (
           <div class="space-y-3">
             <a

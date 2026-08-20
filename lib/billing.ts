@@ -61,22 +61,23 @@ export function billingConfigured(): boolean {
  * The link itself (which products, prices, trial length, success URL) is
  * configured once in the Polar dashboard. We append:
  *
- *   metadata[registry_id] — the critical piece: Polar echoes this back on
+ *   metadata[user_id]    — the critical piece: Polar echoes this back on
  *                           every subscription webhook, letting us map a
- *                           payment to the billed registry with no lookup
- *                           table of our own.
+ *                           payment to the subscribing USER (one
+ *                           subscription unlocks every registry they own)
+ *                           with no lookup table of our own.
  *   reference_id          — same value; shown in the Polar dashboard on the
  *                           order/subscription for human debugging.
  *   locale / theme        — match the app language and dark palette.
  *   interval=yearly       — only when the user picked yearly; monthly is the
  *                           link's default.
  *
- * SECURITY: `registryId` here comes from our own owner-checked route — a user
- * cannot pass an arbitrary registry via the query string of the checkout
- * route (the route validates ownership before calling this).
+ * SECURITY: `userId` here comes from the session (ctx.state.user.id) — the
+ * client cannot pass an arbitrary id via the query string of the checkout
+ * route.
  */
 export function getCheckoutUrl(
-  registryId: string,
+  userId: string,
   interval: "monthly" | "yearly",
   locale: string,
 ): string {
@@ -91,8 +92,8 @@ export function getCheckoutUrl(
     ? Deno.env.get("POLAR_CHECKOUT_LINK_YEARLY") ?? monthly
     : monthly;
   const url = new URL(base);
-  url.searchParams.set("metadata[registry_id]", registryId);
-  url.searchParams.set("reference_id", registryId);
+  url.searchParams.set("metadata[user_id]", userId);
+  url.searchParams.set("reference_id", userId);
   url.searchParams.set("locale", locale === "en" ? "en" : "es");
   url.searchParams.set("theme", "dark");
   if (interval === "yearly") url.searchParams.set("interval", "yearly");
@@ -164,7 +165,7 @@ export async function syncCheckout(
  * Polar REQUIRES a customer identifier on this call — an empty body 422s,
  * which is why we look up the `polar_customer_id` we stored at webhook time
  * (`registry_subscriptions.polar_customer_id`) and send it as `customer_id`.
- * Returns null when the registry has no subscription row yet (nothing to
+ * Returns null when the user has no subscription row yet (nothing to
  * manage) or the Polar call fails; the route maps both to an error.
  *
  * Note: Polar scopes customer sessions to the CUSTOMER, not to a registry.
@@ -172,11 +173,11 @@ export async function syncCheckout(
  * listing both subscriptions — which is the correct UX.
  */
 export async function createPortalSession(
-  registryId: string,
+  userId: string,
 ): Promise<string | null> {
   const sub = await query(
-    `SELECT polar_customer_id FROM registry_subscriptions WHERE registry_id = $1`,
-    [registryId],
+    `SELECT polar_customer_id FROM registry_subscriptions WHERE user_id = $1`,
+    [userId],
   );
   const customerId = sub.rows[0]?.polar_customer_id as string | undefined;
   if (!customerId) return null;
@@ -192,6 +193,124 @@ export async function createPortalSession(
   if (!res.ok) return null;
   const data = await res.json() as { customer_portal_url?: string };
   return data.customer_portal_url ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Subscription management (cancel at period end / reactivate)
+// ---------------------------------------------------------------------------
+
+/**
+ * Schedule (or undo) a cancellation at the end of the current billing period.
+ *
+ * Polar semantics: `cancel_at_period_end: true` keeps the subscription ACTIVE
+ * — benefits included — until `current_period_end`, then it lapses for good.
+ * The same PATCH with `false` reactivates (uncancel) at any point before the
+ * period ends. We never revoke (immediate cancel): the user paid for the
+ * period, so they keep Pro through it.
+ *
+ * Returns true on HTTP success. The DB mirror's `cancel_at_period_end` flag
+ * is updated by the CALLER (route) only on success — the webhook remains the
+ * authoritative writer for everything else it carries.
+ */
+export async function cancelSubscriptionAtPeriodEnd(
+  subscriptionId: string,
+  cancel: boolean,
+): Promise<boolean> {
+  const res = await fetch(`${apiBase()}/subscriptions/${subscriptionId}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${oat()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ cancel_at_period_end: cancel }),
+  });
+  return res.ok;
+}
+
+// ---------------------------------------------------------------------------
+// Pricing (public /pricing page)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fallback prices shown when Polar is unreachable or billing isn't configured
+ * (local dev, outage). Kept in sync manually with the Polar dashboard — the
+ * fetched values are always preferred when available.
+ */
+export const FALLBACK_PRICES = {
+  monthly: 1.99,
+  yearly: 15,
+};
+
+export interface PolarPrices {
+  monthly: number | null;
+  yearly: number | null;
+}
+
+/** Cache lifetime for fetched prices (the dashboard is the source of truth —
+ * a price change must not require a deploy, but hammering the API on every
+ * public page view isn't right either). */
+const PRICE_CACHE_MS = 10 * 60 * 1000;
+
+let priceCache: { at: number; prices: PolarPrices } | null = null;
+
+/**
+ * Fetch the org's monthly/yearly recurring prices from Polar for display on
+ * the public pricing page.
+ *
+ * The OAT is org-scoped, so `GET /v1/products/` returns our products; we match
+ * each interval (`month` / `year`) to its product's recurring price. If the
+ * org ever has multiple products on one interval, the lowest amount wins
+ * (deterministic, and the conservative choice for a displayed price).
+ *
+ * Returns nulls per interval when unreachable/unconfigured — callers render
+ * FALLBACK_PRICES so the page always works. Never throws.
+ */
+export async function getPolarPrices(): Promise<PolarPrices> {
+  const token = Deno.env.get("POLAR_ACCESS_TOKEN");
+  if (!token) return { monthly: null, yearly: null };
+  if (priceCache && Date.now() - priceCache.at < PRICE_CACHE_MS) {
+    return priceCache.prices;
+  }
+
+  let prices: PolarPrices = { monthly: null, yearly: null };
+  try {
+    const res = await fetch(`${apiBase()}/products/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      const data = await res.json() as {
+        items?: {
+          prices?: {
+            type?: string;
+            recurring_interval?: string;
+            amount?: number;
+          }[];
+        }[];
+      };
+      const found: Record<string, number[]> = { month: [], year: [] };
+      for (const item of data.items ?? []) {
+        for (const price of item.prices ?? []) {
+          if (
+            price.type === "recurring" &&
+            (price.recurring_interval === "month" ||
+              price.recurring_interval === "year") &&
+            typeof price.amount === "number"
+          ) {
+            found[price.recurring_interval].push(price.amount / 100);
+          }
+        }
+      }
+      prices = {
+        monthly: found.month.length ? Math.min(...found.month) : null,
+        yearly: found.year.length ? Math.min(...found.year) : null,
+      };
+    }
+  } catch {
+    // Network failure — fall through with nulls; the page uses fallbacks.
+  }
+
+  priceCache = { at: Date.now(), prices };
+  return prices;
 }
 
 // ---------------------------------------------------------------------------
@@ -355,19 +474,21 @@ const GRACE_DAYS = 3;
 /**
  * Upsert `registry_subscriptions` from a subscription lifecycle webhook.
  *
- * Mapping: the registry comes from `metadata.registry_id` with
+ * Mapping: the subscribing USER comes from `metadata.user_id` with
  * `reference_id` fallbacks (see the inline comment in the body). Events
- * mapping to no registry are not ours (another product on the same org, or
- * a subscription created outside our checkout) and are ignored.
+ * mapping to no user are not ours (another product on the same org, or a
+ * subscription created outside our checkout) and are ignored.
  *
- * Idempotency: the upsert is keyed on registry_id (PK), so Polar's at-least-
- * once redelivery just overwrites the same row with the same values.
+ * Idempotency: the upsert is keyed on user_id (PK — one subscription per
+ * user), so Polar's at-least-once redelivery just overwrites the same row
+ * with the same values.
  *
  * Status → effect:
- *   trialing / active   → row upserted (no grace); registries.plan flipped
- *                         'free'→'pro'. The column is a fast path — the
- *                         subscription JOIN in getRegistryPlan stays
- *                         authoritative in BOTH directions.
+ *   trialing / active   → row upserted (no grace); the plan column of EVERY
+ *                         registry the user owns flips 'free'→'pro'. The
+ *                         column is a fast path — the owner-subscription
+ *                         JOIN in getRegistryPlan stays authoritative in
+ *                         BOTH directions.
  *   past_due            → row upserted with grace_until = now + 3d; Pro
  *                         continues while grace holds (dunning window).
  *   canceled / revoked  → row upserted with grace_until = now + 3d; the plan
@@ -385,19 +506,19 @@ export async function handleSubscriptionEvent(
   if (!data) return;
 
   const metadata = (data.metadata ?? {}) as Record<string, string>;
-  // Map the payment back to a registry. `metadata[registry_id]` on the
-  // checkout link is the primary channel, but Polar's DOCUMENTED query-param
-  // list for checkout links does not include metadata[…] — only
+  // Map the payment back to the subscribing USER. `metadata[user_id]` on
+  // the checkout link is the primary channel, but Polar's DOCUMENTED
+  // query-param list for checkout links does not include metadata[…] — only
   // `reference_id`. reference_id propagates from checkout to the order AND
   // (per the subscriptions API) to the subscription object, so we accept it
   // from three positions, in order of preference. The runbook requires an
   // end-to-end sandbox check of which channel actually fires — this fallback
   // makes the mapping robust either way. Events with none of them are not
   // ours (another product on the org, or a checkout created elsewhere).
-  const registryId = metadata.registry_id ??
+  const userId = metadata.user_id ??
     (typeof data.reference_id === "string" ? data.reference_id : undefined) ??
     metadata.reference_id;
-  if (!registryId) return;
+  if (!userId) return;
 
   const subscriptionId = data.id as string | undefined;
   const status = data.status as string | undefined;
@@ -408,6 +529,7 @@ export async function handleSubscriptionEvent(
       undefined;
   const currentPeriodEnd = (data.current_period_end as string | undefined) ??
     null;
+  const cancelAtPeriodEnd = data.cancel_at_period_end === true;
 
   // Grace is set on past_due too, not just canceled/revoked: a single failed
   // charge (card expired, bank decline) must not hard-cut a paying customer
@@ -420,34 +542,42 @@ export async function handleSubscriptionEvent(
 
   await query(
     `INSERT INTO registry_subscriptions
-       (registry_id, polar_subscription_id, polar_customer_id, status,
-        current_period_end, grace_until, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, now())
-     ON CONFLICT (registry_id) DO UPDATE SET
+       (user_id, polar_subscription_id, polar_customer_id, status,
+        current_period_end, grace_until, cancel_at_period_end, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+     ON CONFLICT (user_id) DO UPDATE SET
        polar_subscription_id = EXCLUDED.polar_subscription_id,
        polar_customer_id = EXCLUDED.polar_customer_id,
        status = EXCLUDED.status,
        current_period_end = EXCLUDED.current_period_end,
        grace_until = EXCLUDED.grace_until,
+       cancel_at_period_end = EXCLUDED.cancel_at_period_end,
        updated_at = now()`,
     [
-      registryId,
+      userId,
       subscriptionId,
       customerId,
       status,
       currentPeriodEnd,
       graceUntil,
+      cancelAtPeriodEnd,
     ],
   );
 
   const proAgain = status === "trialing" || status === "active" ||
     status === "past_due";
   if (proAgain) {
-    // Only ever upgrade the column here (WHERE plan = 'free') — never touch
+    // One subscription unlocks every registry the user owns. Only ever
+    // upgrade the column here (WHERE plan = 'free') — never touch
     // 'grandfathered', which is a permanent state by design.
     await query(
-      `UPDATE registries SET plan = 'pro' WHERE id = $1 AND plan = 'free'`,
-      [registryId],
+      `UPDATE registries SET plan = 'pro'
+       WHERE plan = 'free'
+         AND id IN (
+           SELECT rm.registry_id FROM registry_members rm
+           WHERE rm.user_id = $1 AND rm.role = 'owner'
+         )`,
+      [userId],
     );
   }
   // canceled/revoked/past_due beyond grace: deliberately no plan-column

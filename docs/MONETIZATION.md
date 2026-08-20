@@ -52,6 +52,29 @@ getRegistryPlan(registryId) — the single source of truth:
 | Checkout Links + webhooks (no programmatic sessions)               | Pricing/trial changes stay dashboard-only, no deploy                                                                                                                                                                                                                                                                                                       |
 | Registry mapping: metadata.registry_id with reference_id fallbacks | Polar's documented link params list `reference_id` but not `metadata[…]`; the webhook handler accepts both so the mapping survives either dashboard behavior                                                                                                                                                                                               |
 
+## Pricing page & in-app cancel (2026-08-20)
+
+- **`/pricing` (public)** is the single funnel for every upgrade CTA (sidebar
+  UpgradeButton, locked-history rows, 402 toasts, the registries/new form
+  fallback). Tier comparison renders from `FREE_LIMITS` so the page can't drift
+  from enforcement; anonymous visitors get signup/login with a
+  `?redirect=/pricing` round-trip (a subscription requires an account that owns
+  a registry). Under the per-user model there is no registry picker: one
+  "Mejorar a Pro" CTA, one cancel/reactivate/manage action set for the
+  subscriber.
+- **Prices come from Polar** (`GET /v1/products/`, matched by recurring
+  interval, cached 10 min, `FALLBACK_PRICES` when unreachable) — the dashboard
+  remains the single source of truth; price changes still never require a
+  deploy. **Coupon codes need no code**: configure discounts on the Polar
+  products and customers enter them on the hosted checkout.
+- **In-app cancel** (`POST /api/billing/cancel`) → Polar
+  `PATCH cancel_at_period_end` — Pro lasts until `current_period_end`
+  (entitlements honor paid-through for `canceled`), reversible via `undo`. The
+  mirror stores the flag (`add_subscription_cancel_flag.sql`).
+- **Bug fixed en route**: `/api/billing` was missing from `FULL_STATE_PREFIXES`,
+  so checkout/portal owner checks 403'd for everyone (the middleware never
+  populated `ownerRegistryIds` on those paths).
+
 ## Security notes (where the sensitive parts live)
 
 - **`lib/billing.ts` is the money file.** The HMAC verifier is the only thing
@@ -84,8 +107,8 @@ getRegistryPlan(registryId) — the single source of truth:
 - **Paid unit = registry (group), owner pays**, whole group benefits. Joining
   groups is never gated.
 - **Free tier**: unlimited transactions/payments/cuts; own ≤ 2 registries; per
-  free registry: ≤ 4 members, ≤ 3 active recurring/installment templates,
-  history = current exercise + last closed one.
+  free registry: ≤ 2 members (total, incl. owner), ≤ 3 active
+  recurring/installment templates, history = current exercise + last closed one.
 - **Pro registry**: unlimited members, templates, full history. Price configured
   in Polar dashboard (~US$1.99/mo, ~$15/yr, 14-day no-card trial — dashboard
   config, not code).
@@ -130,7 +153,7 @@ Following the new convention (self-contained RLS block, idempotent):
 
 ## Step 2 — `lib/entitlements.ts` (pure, unit-tested)
 
-- `FREE_LIMITS = { maxOwnedRegistries: 2, maxMembers: 4, maxActiveTemplates: 3, maxClosedExercisesVisible: 1 }`.
+- `FREE_LIMITS = { maxOwnedRegistries: 2, maxMembers: 2, maxActiveTemplates: 3, maxClosedExercisesVisible: 1 }`.
 - `getRegistryPlan(registryId)` → reads `registries.plan` +
   `registry_subscriptions` (pro = plan pro/grandfathered, or subscription status
   trialing/active, or past_due within `grace_until`).

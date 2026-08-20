@@ -363,7 +363,12 @@ Migrations must be run in order:
    (`free`|`pro`|`grandfathered`, existing rows grandfathered) and the
    `registry_subscriptions` mirror table (server-only, zero RLS policies).
    **Must run before deploying billing code.**
-7. **`drop_allowed_emails.sql`** — Drops the registration allowlist (the app
+7. **`add_subscription_cancel_flag.sql`** — Adds
+   `registry_subscriptions.cancel_at_period_end` (in-app cancel scheduling).
+8. **`migrate_billing_to_per_user.sql`** — Re-keys `registry_subscriptions` from
+   registry_id to user_id (per-user model): backfills the owner, dedupes
+   multiple subs per user (OPS: cancel the extras in Polar), swaps the PK.
+9. **`drop_allowed_emails.sql`** — Drops the registration allowlist (the app
    went public; signup is open). **Must run AFTER deploying the code that stops
    reading it** — the previously deployed code JOINs the table on every
    authenticated request. No-op on fresh installs (schema.sql no longer creates
@@ -445,7 +450,7 @@ deleted.
 
 | Column                | Type        | Constraints                                                               | Description                                      |
 | --------------------- | ----------- | ------------------------------------------------------------------------- | ------------------------------------------------ |
-| registry_id           | UUID        | PK, FK → registries ON DELETE CASCADE                                     | The billed registry (paid unit)                  |
+| user_id               | UUID        | PK (per-user: one subscription per user), FK → users ON DELETE CASCADE    | The subscriber — unlocks every registry they own |
 | polar_subscription_id | TEXT        | UNIQUE                                                                    | Polar subscription id                            |
 | polar_customer_id     | TEXT        | nullable                                                                  | Polar customer id (portal sessions)              |
 | status                | TEXT        | NOT NULL, CHECK (`trialing`\|`active`\|`past_due`\|`canceled`\|`revoked`) | Mirrored Polar status                            |
@@ -453,10 +458,12 @@ deleted.
 | grace_until           | TIMESTAMPTZ | nullable                                                                  | Cancellation grace (3 days) — no mid-period cuts |
 | updated_at            | TIMESTAMPTZ | NOT NULL, default now()                                                   | Last webhook update                              |
 
-**Purpose**: Server-side mirror of the Polar subscription state for a registry.
-Written exclusively by the webhook handler (`POST /api/webhooks/polar`) and
-`syncCheckout`. RLS is enabled and forced with **zero policies** — client roles
-see no rows (same posture as `audit_log`).
+**Purpose**: Server-side mirror of the Polar subscription state for a USER (one
+subscription per user — unlocks Pro on every registry the subscriber owns;
+originally per-registry, re-keyed by `db/migrate_billing_to_per_user.sql`).
+Written exclusively by the webhook handler (`POST /api/webhooks/polar`) and the
+cancel route's flag update. RLS is enabled and forced with **zero policies** —
+client roles see no rows (same posture as `audit_log`).
 
 Plan resolution (`lib/entitlements.ts`): a registry is effectively Pro when
 `registries.plan IN ('pro','grandfathered')` OR the subscription is

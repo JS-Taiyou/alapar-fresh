@@ -14,7 +14,15 @@ export default define.page(function Home(ctx) {
         <title>{t("app.name")}</title>
       </Head>
       <main class="relative h-screen flex flex-col items-center justify-center p-6 bg-pattern">
-        <LocaleToggle locale={locale} class="absolute top-4 right-4 z-20" />
+        <div class="absolute top-4 right-4 z-20 flex items-center gap-3">
+          <a
+            href="/pricing"
+            class="text-sm font-semibold text-zinc-300 hover:text-white transition-colors"
+          >
+            {t("pricing.title")}
+          </a>
+          <LocaleToggle locale={locale} />
+        </div>
         <div class="absolute inset-0 gradient-glow pointer-events-none" />
         <header class="text-center mb-12 z-10">
           <div class="inline-flex items-center justify-center p-3 bg-primary rounded-custom mb-4 shadow-lg shadow-primary/20">

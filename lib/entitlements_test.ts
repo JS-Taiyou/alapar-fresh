@@ -31,7 +31,7 @@ describe("entitlementsFor", () => {
   it("free → FREE_LIMITS", () => {
     assertEquals(entitlementsFor("free"), FREE_LIMITS);
     assertEquals(FREE_LIMITS.maxOwnedRegistries, 2);
-    assertEquals(FREE_LIMITS.maxMembers, 4);
+    assertEquals(FREE_LIMITS.maxMembers, 2);
     assertEquals(FREE_LIMITS.maxActiveTemplates, 3);
     assertEquals(FREE_LIMITS.maxClosedExercisesVisible, 1);
   });
@@ -84,6 +84,53 @@ describe("getRegistryPlan", () => {
       rows: [{ plan: "pro", sub_status: "canceled", grace_until: past }],
     });
     assertEquals((await getRegistryPlan("r1"))!.isPro, false);
+  });
+
+  it("canceled but paid-through (current_period_end in the future) → pro", async () => {
+    // Polar's cancel_at_period_end: the user paid for the period, so Pro
+    // lasts until current_period_end even if a canceled event lands early.
+    const past = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const future = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    __setQueryResult({
+      rows: [{
+        plan: "pro",
+        sub_status: "canceled",
+        grace_until: past,
+        current_period_end: future,
+      }],
+    });
+    const info = await getRegistryPlan("r1");
+    assertEquals(info?.isPro, true);
+  });
+
+  it("canceled with current_period_end in the past → free (beyond grace)", async () => {
+    const past = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    __setQueryResult({
+      rows: [{
+        plan: "pro",
+        sub_status: "canceled",
+        grace_until: past,
+        current_period_end: past,
+      }],
+    });
+    const info = await getRegistryPlan("r1");
+    assertEquals(info?.isPro, false);
+  });
+
+  it("revoked but paid-through does NOT use paid-through (immediate end)", async () => {
+    // Paid-through applies to canceled only; revoked is an immediate stop.
+    const past = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const future = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    __setQueryResult({
+      rows: [{
+        plan: "pro",
+        sub_status: "revoked",
+        grace_until: past,
+        current_period_end: future,
+      }],
+    });
+    const info = await getRegistryPlan("r1");
+    assertEquals(info?.isPro, false);
   });
 
   it("pro column + canceled WITHIN grace → still pro", async () => {

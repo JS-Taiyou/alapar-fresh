@@ -4,6 +4,44 @@ All notable changes to this project are documented here. Dates are approximate.
 
 ---
 
+## 2026-08-20 (b) — Public pricing page + in-app cancel + paywall funnel
+
+Every upgrade CTA now funnels to a public **`/pricing`** page; Pro owners can
+cancel (at period end) without leaving the app.
+
+- **BUG FIX first**: `/api/billing` was missing from `FULL_STATE_PREFIXES` — the
+  middleware never populated `ownerRegistryIds` on those paths, so
+  checkout/portal owner checks 403'd for everyone. Also made `/api/locale`
+  public (anonymous language switching on /demo and /pricing silently 401'd).
+- **`/pricing` (public)**: Free vs Pro cards — free features rendered from
+  `FREE_LIMITS` (can't drift from enforcement), "todo lo del plan gratuito,
+  más:" on Pro, monthly/yearly switcher (SSR links). Prices fetched from Polar
+  (`GET /v1/products/`, 10-min cache, `FALLBACK_PRICES` when unreachable) —
+  dashboard stays the source of truth, price changes still never need a deploy.
+  Session-aware CTAs: anonymous → signup/login with `?redirect=/pricing`
+  round-trip; free owner → checkout link (or no-JS registry picker); Pro owner →
+  "Activo" + cancel/reactivate/manage; member-only → ask-the-owner; no
+  registries → create-first.
+- **In-app cancel** (`POST /api/billing/cancel`): Polar
+  `PATCH cancel_at_period_end` — Pro lasts through `current_period_end`,
+  reversible via `undo`. New `db/add_subscription_cancel_flag.sql` column
+  (mirror), persisted by the webhook too. Entitlements hardened: `canceled`
+  - `current_period_end` in the future now resolves Pro (paid-through); matrix
+    extracted to pure `resolveEffectivePlan` shared with the pricing page.
+- **402 funnel**: new `Toaster` island (mounted in Sidebar) — paywalled failures
+  inside forms (template cap in TransactionModal, registry cap in Sidebar) roll
+  back and show a toast with a "Ver planes →" link; JoinButton shows the link
+  under the group-full error; the no-JS registries fallback redirects to
+  `/pricing`; `UpgradeButton` and `PaywallCard` CTAs point at `/pricing` (the
+  old dead `?upgrade=` params are gone).
+- Coupons: nothing to build — Polar-hosted checkout already accepts
+  dashboard-configured discount codes.
+- Tests: entitlements paid-through branches, cancel route (guards + fetch stub),
+  pricing handler state matrix, webhook flag persistence. 64 suites / 501 steps
+  green.
+
+---
+
 ## 2026-08-20 — Money validation, transactional writes, UI hardening
 
 Post-audit hardening pass (slop-police review): balance-integrity guarantees on

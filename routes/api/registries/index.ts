@@ -39,12 +39,13 @@ export const handler = define.handlers({
       // never limited — a user can join any number of Pro groups for free).
       //
       // Dual response shape: JSON clients (Sidebar island) get the 402 +
-      // {code:'upgrade_required'} contract; the form-post fallback (no-JS /
-      // registries/new page) gets a redirect so the dashboard can toast it.
+      // {code:'upgrade_required'} contract (surfaced as an upgrade toast);
+      // the form-post fallback (no-JS / registries/new page) goes straight
+      // to the pricing page.
       const owned = await countOwnedRegistries(userId);
       if (owned >= FREE_LIMITS.maxOwnedRegistries) {
         if (isJson) return upgradeRequired("owned_registries");
-        return ctx.redirect("/dashboard?upgrade=registries");
+        return ctx.redirect("/pricing");
       }
 
       const registry = await createRegistry(name, userId);

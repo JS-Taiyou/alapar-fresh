@@ -16,6 +16,7 @@ import DefaultSplitConfig from "./DefaultSplitConfig.tsx";
 import LocaleToggle from "./LocaleToggle.tsx";
 import UpgradeButton from "./UpgradeButton.tsx";
 import Modal from "../components/Modal.tsx";
+import Toaster, { showUpgradeToast } from "./Toaster.tsx";
 import {
   type EnrichedTransaction,
   entitiesChanged,
@@ -543,6 +544,11 @@ export default function Sidebar(props: SidebarProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name }),
       });
+      if (res.status === 402) {
+        // Free-plan owned-registry cap: the optimistic row rolls back below;
+        // the toast carries the limit message plus a path to /pricing.
+        showUpgradeToast(props.locale ?? "es", "billing.registries_full");
+      }
       if (!res.ok) throw new Error("create failed");
       const { registry } = await res.json() as { registry: Registry };
       registries.value = registries.value.map((r) =>
@@ -974,7 +980,6 @@ export default function Sidebar(props: SidebarProps) {
         {props.showUpgrade && props.activeRegistryId && (
           <UpgradeButton
             locale={props.locale ?? "es"}
-            registryId={props.activeRegistryId}
             isOwner={props.isOwner}
           />
         )}
@@ -1019,6 +1024,7 @@ export default function Sidebar(props: SidebarProps) {
 
   return (
     <>
+      <Toaster />
       <button
         type="button"
         onClick={() => mobileOpen.value = true}

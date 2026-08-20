@@ -10,6 +10,10 @@ describe("needsFullState", () => {
   describe("full-state paths (true)", () => {
     const fullStatePaths = [
       "/dashboard",
+      "/api/billing",
+      "/api/billing/checkout",
+      "/api/billing/portal",
+      "/api/billing/cancel",
       "/dashboard/history",
       "/dashboard/history/abc-123",
       "/api/registries",
@@ -98,6 +102,8 @@ describe("isPublicPath", () => {
     "/auth/callback",
     "/api/auth/callback",
     "/api/auth/logout",
+    "/api/locale",
+    "/pricing",
     "/demo",
   ];
 

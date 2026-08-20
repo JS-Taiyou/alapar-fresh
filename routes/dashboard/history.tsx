@@ -173,7 +173,11 @@ export default define.page(function HistoryPage(ctx) {
 
           <section class="space-y-4 mt-6">
             {data.lockedCount !== null && data.lockedCount > 0 && (
-              <PaywallCard locale={locale} lockedCount={data.lockedCount} />
+              <PaywallCard
+                locale={locale}
+                registryId={ctx.state.activeRegistry?.id}
+                lockedCount={data.lockedCount}
+              />
             )}
             {data.years.map((year) => (
               <div key={year} class="space-y-2">
