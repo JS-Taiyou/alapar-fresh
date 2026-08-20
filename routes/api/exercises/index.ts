@@ -7,6 +7,7 @@ import {
   getEntities,
   getUsers,
 } from "../../../lib/store.ts";
+import { withTransaction } from "../../../lib/db.ts";
 import { invalidateRegistry } from "../../../lib/server-cache.ts";
 
 export const handler = define.handlers({
@@ -83,37 +84,54 @@ export const handler = define.handlers({
     const totalPending = debts.reduce((sum, d) => sum + d.amount, 0);
     const maxRoundingError = 0.01 * active.length;
 
-    const exercise = await createExercise(registryId);
-    invalidateRegistry(registryId);
+    // Archiving the period and writing the carry-forward ajustes are ONE
+    // unit: if the ajuste writes fail, the archive rolls back too, so a
+    // crash mid-cut can never leave a period settled-without-its-debts.
+    const exercise = await withTransaction(async (q) => {
+      const created = await createExercise(registryId, q);
 
-    if (totalPending > maxRoundingError) {
-      for (const debt of debts) {
-        await createTransaction({
-          registry_id: registryId,
-          description:
-            `Pendiente de ${debt.fromUserName} a favor de ${debt.toUserName}`,
-          amount: debt.amount,
-          originalAmount: debt.amount,
-          type: "ajuste" as const,
-          relatedTransactionId: null,
-          exerciseId: null,
-          installmentCurrent: null,
-          installmentTotal: null,
-          recurringDisabled: false,
-          recurringGroupId: crypto.randomUUID(),
-          notes: "Ajuste de balance pendiente del ejercicio anterior",
-          splitJson: {
-            splits: [{
-              userId: debt.fromUserId,
-              percentage: 100,
+      if (totalPending > maxRoundingError) {
+        for (const debt of debts) {
+          const ajuste = await createTransaction(
+            {
+              registry_id: registryId,
+              description:
+                `Pendiente de ${debt.fromUserName} a favor de ${debt.toUserName}`,
               amount: debt.amount,
-            }],
-          },
-          creatorId: debt.toUserId,
-          userPaid: debt.toUserId,
-        }, userId);
+              originalAmount: debt.amount,
+              type: "ajuste" as const,
+              relatedTransactionId: null,
+              exerciseId: null,
+              installmentCurrent: null,
+              installmentTotal: null,
+              recurringDisabled: false,
+              recurringGroupId: crypto.randomUUID(),
+              notes: "Ajuste de balance pendiente del ejercicio anterior",
+              splitJson: {
+                splits: [{
+                  userId: debt.fromUserId,
+                  percentage: 100,
+                  amount: debt.amount,
+                }],
+              },
+              creatorId: debt.toUserId,
+              userPaid: debt.toUserId,
+            },
+            userId,
+            undefined,
+            q,
+          );
+          if (!ajuste) {
+            // Membership vanished mid-cut (checked per write). Abort the
+            // whole cut rather than archive without the ajustes.
+            throw new Error("registry membership lost during cut");
+          }
+        }
       }
-    }
+
+      return created;
+    });
+    invalidateRegistry(registryId);
 
     const accept = ctx.req.headers.get("Accept") ?? "";
     if (accept.includes("application/json")) {

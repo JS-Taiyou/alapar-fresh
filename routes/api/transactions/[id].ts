@@ -9,7 +9,8 @@ import {
 } from "../../../lib/store.ts";
 import { invalidateRegistry } from "../../../lib/server-cache.ts";
 import { sendPushToRegistry } from "../../../lib/push.ts";
-import type { TransactionSplit } from "../../../lib/types.ts";
+import { parseTransactionForm } from "../../../lib/transaction-validation.ts";
+import { formatMoney } from "../../../lib/format.ts";
 
 export const handler = define.handlers({
   async PUT(ctx) {
@@ -25,77 +26,15 @@ export const handler = define.handlers({
     }
 
     const form = await ctx.req.formData();
-    const description = form.get("description") as string;
-    const amountRaw = form.get("amount") as string;
-    const originalAmountRaw = form.get("originalAmount") as string;
-    const type = (form.get("type") as string) || "unico";
-    const splitJsonStr = form.get("splitJson") as string;
-    const userPaid = form.get("userPaid") as string;
-    const notes = (form.get("notes") as string) || "";
-    const installmentCurrent = form.get("installmentCurrent")
-      ? parseInt(form.get("installmentCurrent") as string)
-      : null;
-    const installmentTotal = form.get("installmentTotal")
-      ? parseInt(form.get("installmentTotal") as string)
-      : null;
-    const relatedTransactionId = (form.get("relatedTransactionId") as string) ||
-      null;
-
-    let transactionPaymentEntries:
-      | { expenseId: string; amount: number }[]
-      | undefined;
-    const tpRaw = form.get("transactionPayments") as string;
-    if (tpRaw) {
-      try {
-        transactionPaymentEntries = JSON.parse(tpRaw);
-      } catch {
-        return Response.json(
-          { error: "transactionPayments JSON inválido" },
-          { status: 400 },
-        );
-      }
-      if (!Array.isArray(transactionPaymentEntries)) {
-        return Response.json(
-          { error: "transactionPayments JSON inválido" },
-          { status: 400 },
-        );
-      }
+    const parsed = parseTransactionForm(form);
+    if (!parsed.ok) {
+      return Response.json({ error: parsed.error }, { status: 400 });
     }
-
-    if (!description || !description.trim()) {
-      return Response.json({ error: "Descripción requerida" }, { status: 400 });
-    }
-    if (!amountRaw || isNaN(parseFloat(amountRaw))) {
-      return Response.json({ error: "Monto inválido" }, { status: 400 });
-    }
-    const amount = parseFloat(amountRaw);
-    if (!isFinite(amount)) {
-      return Response.json({ error: "Monto inválido" }, { status: 400 });
-    }
-    const originalAmount = originalAmountRaw
-      ? parseFloat(originalAmountRaw)
-      : amount;
-    if (!isFinite(originalAmount)) {
-      return Response.json({ error: "Monto original inválido" }, {
-        status: 400,
-      });
-    }
-    if (!userPaid) {
-      return Response.json({ error: "Usuario pagador requerido" }, {
-        status: 400,
-      });
-    }
-
-    let splitJson: TransactionSplit;
-    try {
-      splitJson = JSON.parse(splitJsonStr ?? "{}");
-    } catch {
-      return Response.json({ error: "Split JSON inválido" }, { status: 400 });
-    }
+    const data = parsed.data;
 
     // Cross-reference validation (S7): the payer and every split recipient
-    // must be participants (users or entities) of the transaction's registry,
-    // and every referenced transaction must live in that same registry.
+    // must be participants of the transaction's registry, and every referenced
+    // transaction must live in that same registry.
     const registryId = tx.registry_id;
     const participantIds = registryId === ctx.state.activeRegistry?.id
       ? ctx.state.participants.map((p) => p.id)
@@ -103,23 +42,21 @@ export const handler = define.handlers({
         ...(await getUsers(registryId)).map((u) => u.id),
         ...(await getEntities(registryId, userId)).map((e) => e.id),
       ];
-    if (!participantIds.includes(userPaid)) {
+    if (!participantIds.includes(data.userPaid)) {
       return Response.json({ error: "Usuario pagador inválido" }, {
         status: 400,
       });
     }
-    const splitUserIds = Array.isArray(splitJson?.splits)
-      ? splitJson.splits.map((s) => s.userId)
-      : [];
-    if (splitUserIds.some((id) => !participantIds.includes(id))) {
+    const splitUserIds = data.splitJson.splits.map((s) => s.userId);
+    if (splitUserIds.some((id2) => !participantIds.includes(id2))) {
       return Response.json({ error: "Participante inválido en el split" }, {
         status: 400,
       });
     }
 
     const refIds = [
-      ...(relatedTransactionId ? [relatedTransactionId] : []),
-      ...(transactionPaymentEntries ?? []).map((e) => e.expenseId),
+      ...(data.relatedTransactionId ? [data.relatedTransactionId] : []),
+      ...(data.transactionPaymentEntries ?? []).map((e) => e.expenseId),
     ];
     if (refIds.length > 0) {
       const refs = await getTransactionsByIds(refIds);
@@ -134,19 +71,19 @@ export const handler = define.handlers({
     const updated = await updateTransaction(
       id,
       {
-        description,
-        amount,
-        originalAmount,
-        type: type as "unico" | "parcialidad" | "recurrente",
-        notes,
-        splitJson,
-        userPaid,
-        installmentCurrent,
-        installmentTotal,
-        relatedTransactionId,
+        description: data.description,
+        amount: data.amount,
+        originalAmount: data.originalAmount,
+        type: data.type,
+        notes: data.notes,
+        splitJson: data.splitJson,
+        userPaid: data.userPaid,
+        installmentCurrent: data.installmentCurrent,
+        installmentTotal: data.installmentTotal,
+        relatedTransactionId: data.relatedTransactionId,
       },
       userId,
-      transactionPaymentEntries,
+      data.transactionPaymentEntries,
     );
     if (!updated) {
       return new Response("Forbidden", { status: 403 });
@@ -156,12 +93,7 @@ export const handler = define.handlers({
 
     sendPushToRegistry(tx.registry_id, {
       title: "Transacción actualizada",
-      body: `${description} — $${
-        originalAmount.toLocaleString("en-US", {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })
-      }`,
+      body: `${data.description} — $${formatMoney(data.originalAmount)}`,
       registryId: tx.registry_id,
       url: "/dashboard",
     }, userId).catch(() => {});

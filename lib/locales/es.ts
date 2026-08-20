@@ -184,6 +184,8 @@ export const es: Record<string, string> = {
   "modal.amount_header": "MONTO",
   "modal.total_header": "TOTAL",
   "modal.delete_confirm": "Eliminar esta transacción?",
+  "modal.save_error": "No se pudo guardar la transacción.",
+  "modal.delete_error": "No se pudo eliminar la transacción.",
   "modal.unknown_payer": "Desconocido",
   "modal.default_payment_desc": "Pago",
 

@@ -9,10 +9,10 @@ describe("shouldSendPush", () => {
     assertEquals(shouldSendPush(1_700_000_000_000, 0), true);
   });
 
-  it("blocks a push when now is small and lastPush is 0 (still within window)", () => {
-    // Edge: if now itself is < cooldown, even a "first" push is blocked. This
-    // can't happen in production (epoch ms >> cooldown) but documents the math.
-    assertEquals(shouldSendPush(1000, 0), false);
+  it("allows the first-ever push regardless of how small now is", () => {
+    // 0 is the map's "never pushed" marker, not epoch 0 — eligibility for a
+    // key with no history doesn't depend on the clock.
+    assertEquals(shouldSendPush(1000, 0), true);
   });
 
   it("blocks a push within the cooldown window", () => {
@@ -33,8 +33,8 @@ describe("shouldSendPush", () => {
   it("respects a custom cooldown argument", () => {
     // With a 5s cooldown, a push 6s after the last is allowed.
     assertEquals(shouldSendPush(6_000, 0, 5_000), true);
-    // 4s after is not.
-    assertEquals(shouldSendPush(4_000, 0, 5_000), false);
+    // 4s after the last is not.
+    assertEquals(shouldSendPush(9_000, 5_000, 5_000), false);
   });
 
   it("treats equal now and lastPush as at-boundary (allowed) when cooldown is 0", () => {

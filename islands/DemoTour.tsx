@@ -68,19 +68,11 @@ export default function DemoTour() {
     );
   }
 
-  function openExpenseModal(): Promise<void> {
+  function openModal(base: "add-expense" | "add-payment"): Promise<void> {
     return new Promise((resolve) => {
-      const fab = visibleFab("add-expense") as HTMLElement | null;
+      const fab = visibleFab(base) as HTMLElement | null;
       fab?.click();
       // Wait for Preact to render the modal.
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-    });
-  }
-
-  function openPaymentModal(): Promise<void> {
-    return new Promise((resolve) => {
-      const fab = visibleFab("add-payment") as HTMLElement | null;
-      fab?.click();
       requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
     });
   }
@@ -92,6 +84,7 @@ export default function DemoTour() {
 
     const driverObj = driver({
       showProgress: true,
+      onDestroyed: () => setTourActive(false),
       nextBtnText: "Siguiente →",
       prevBtnText: "← Anterior",
       doneBtnText: "Listo ✓",
@@ -151,13 +144,6 @@ export default function DemoTour() {
     });
 
     driverObj.drive();
-    // Detect tour completion/dismissal.
-    const checkInterval = setInterval(() => {
-      if (!driverObj.isActive()) {
-        clearInterval(checkInterval);
-        setTourActive(false);
-      }
-    }, 500);
   }
 
   function startFullTour() {
@@ -167,6 +153,10 @@ export default function DemoTour() {
 
     const driverObj = driver({
       showProgress: true,
+      onDestroyed: () => {
+        closeModals();
+        setTourActive(false);
+      },
       nextBtnText: "Siguiente →",
       prevBtnText: "← Anterior",
       doneBtnText: "Listo ✓",
@@ -212,7 +202,7 @@ export default function DemoTour() {
             side: "left",
             align: "center",
             onNextClick: async () => {
-              await openExpenseModal();
+              await openModal("add-expense");
               driverObj.moveNext();
             },
           },
@@ -240,7 +230,7 @@ export default function DemoTour() {
             onNextClick: () => {
               closeModals();
               setTimeout(() => {
-                openPaymentModal().then(() => driverObj.moveNext());
+                openModal("add-payment").then(() => driverObj.moveNext());
               }, 200);
             },
           },
@@ -256,7 +246,7 @@ export default function DemoTour() {
             align: "center",
             onPrevClick: async () => {
               closeModals();
-              await openExpenseModal();
+              await openModal("add-expense");
               driverObj.movePrevious();
             },
           },
@@ -279,14 +269,6 @@ export default function DemoTour() {
     });
 
     driverObj.drive();
-
-    const checkInterval = setInterval(() => {
-      if (!driverObj.isActive()) {
-        clearInterval(checkInterval);
-        closeModals();
-        setTourActive(false);
-      }
-    }, 500);
   }
 
   if (tourActive) return null;

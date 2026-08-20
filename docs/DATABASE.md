@@ -93,6 +93,11 @@ by `tighten_rls.sql`).
 
 ### `user_preferences` — Per-User Settings
 
+> **Note**: currently **unused by application code** — the active registry is
+> tracked in the server's in-memory map (see `lib/server-cache.ts`), not here.
+> The table exists as the durable home for per-user settings if that ever needs
+> to survive isolates/restarts.
+
 | Column             | Type        | Constraints                 | Description                 |
 | ------------------ | ----------- | --------------------------- | --------------------------- |
 | id                 | UUID        | PK, auto                    | Unique identifier           |
@@ -191,6 +196,61 @@ that enforces not-revoked and `max_uses` in SQL.
 | created_at  | TIMESTAMPTZ | NOT NULL, default now() | Timestamp                            |
 
 **Tracked actions**: `invite_created`, `invite_used`, `invite_revoked`
+
+---
+
+### `transaction_payments` — Pago → Expense Allocation Links
+
+Added by `db/add_transaction_payments.sql`.
+
+| Column     | Type          | Constraints                 | Description                                  |
+| ---------- | ------------- | --------------------------- | -------------------------------------------- |
+| id         | UUID          | PK, auto                    | Unique identifier                            |
+| pago_id    | UUID          | NOT NULL, FK → transactions | The payment transaction                      |
+| expense_id | UUID          | NOT NULL, FK → transactions | The expense the payment settles (part of)    |
+| amount     | NUMERIC(12,2) | NOT NULL, CHECK (> 0)       | How much of the pago applies to this expense |
+| created_at | TIMESTAMPTZ   | NOT NULL, default now()     | Creation timestamp                           |
+
+**Purpose**: One `pago` may settle several outstanding expenses (and one expense
+may be settled by several pagos). The modal computes allocations by remaining
+debt; the API validates that allocations never exceed the pago amount
+(`lib/transaction-validation.ts`). The migration backfills one row per legacy
+`pago` that used the older single `related_transaction_id` link.
+
+**Indexes**: `idx_tp_pago` (pago_id), `idx_tp_expense` (expense_id).
+
+**RLS**: members of a registry can read/write links whose pago AND expense both
+live in that registry (cross-registry links are rejected by the policy, not just
+the app).
+
+---
+
+### `push_subscriptions` — Web Push Endpoints
+
+Added by `db/add_push_subscriptions.sql`.
+
+| Column      | Type        | Constraints                    | Description                                       |
+| ----------- | ----------- | ------------------------------ | ------------------------------------------------- |
+| id          | UUID        | PK, auto                       | Unique identifier                                 |
+| user_id     | UUID        | NOT NULL, FK → users, CASCADE  | Owning user                                       |
+| endpoint    | TEXT        | NOT NULL, UNIQUE               | Push service URL (the identity of a subscription) |
+| p256dh      | TEXT        | NOT NULL                       | Client public key (RFC 8291)                      |
+| auth        | TEXT        | NOT NULL                       | Client auth secret (RFC 8291)                     |
+| registry_id | UUID        | FK → registries, CASCADE, NULL | Registry the subscription delivers for            |
+| created_at  | TIMESTAMPTZ | NOT NULL, default NOW()        | Creation timestamp                                |
+| updated_at  | TIMESTAMPTZ | NOT NULL, default NOW()        | Last re-subscription                              |
+
+**Purpose**: Server-side Web Push fan-out on transaction CUD (15s cooldown per
+registry). `/api/push/subscribe` upserts on `endpoint` conflict and re-assigns
+`user_id`/`registry_id`, so a re-subscribed endpoint can't keep delivering to a
+previous owner. The server signs push JWTs with `aud` derived from each
+endpoint's origin, so non-FCM services (Firefox, Safari) work.
+
+**Indexes**: `idx_push_subscriptions_user_id`,
+`idx_push_subscriptions_registry_id`.
+
+**RLS**: users can SELECT/INSERT/DELETE only their own subscriptions (no UPDATE
+policy — the app server handles updates and bypasses RLS).
 
 ---
 

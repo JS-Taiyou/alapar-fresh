@@ -1,6 +1,7 @@
 import { useSignal } from "@preact/signals";
 import type { DefaultSplit, User } from "../lib/types.ts";
-import { sanitizeDecimal } from "../lib/format.ts";
+import { initials, sanitizeDecimal } from "../lib/format.ts";
+import Modal from "../components/Modal.tsx";
 
 interface DefaultSplitConfigProps {
   registryId: string;
@@ -164,135 +165,12 @@ export default function DefaultSplitConfig(props: DefaultSplitConfigProps) {
       )}
 
       {isOpen.value && (
-        <div
-          class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              closeModal();
-            }
-          }}
-        >
-          <div class="bg-surface border border-border-custom w-full max-w-md rounded-custom shadow-2xl flex flex-col overflow-hidden">
-            <header class="px-6 py-4 border-b border-border-custom flex justify-between items-center">
-              <div>
-                <h2 class="text-xl font-bold text-white">División Default</h2>
-                <p class="text-sm text-zinc-400 mt-1">
-                  Porcentajes predefinidos para nuevos gastos
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={closeModal}
-                class="text-zinc-400 hover:text-white transition-colors"
-              >
-                <svg
-                  class="h-6 w-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    d="M6 18L18 6M6 6l12 12"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                  />
-                </svg>
-              </button>
-            </header>
-
-            <div class="p-6 space-y-4 overflow-y-auto max-h-[60vh]">
-              {error.value && <p class="text-sm text-red-300">{error.value}</p>}
-              {success.value && (
-                <p class="text-sm text-emerald-300">Guardado exitosamente</p>
-              )}
-
-              <div class="border border-white/10 rounded-custom overflow-hidden">
-                <table class="w-full text-left border-collapse">
-                  <thead class="bg-white/5">
-                    <tr>
-                      <th class="px-4 py-3 text-xs font-semibold text-zinc-400">
-                        MIEMBRO
-                      </th>
-                      <th class="px-4 py-3 text-xs font-semibold text-zinc-400 w-32 text-right">
-                        %
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-border-custom">
-                    {currentMembers.map((user) => {
-                      const initials = user.name.split(" ").map((n) => n[0])
-                        .join("").substring(0, 2).toUpperCase();
-                      return (
-                        <tr key={user.id}>
-                          <td class="px-4 py-3">
-                            <div class="flex items-center gap-3">
-                              <div
-                                class="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                                style={`background-color: ${user.color}30; color: ${user.color}`}
-                              >
-                                {initials}
-                              </div>
-                              <span class="text-sm font-medium text-white">
-                                {user.name}
-                              </span>
-                            </div>
-                          </td>
-                          <td class="px-4 py-3">
-                            <div class="flex items-center justify-end">
-                              <input
-                                class="w-16 bg-transparent border-0 text-right text-sm font-medium text-white focus:ring-0 p-0"
-                                type="text"
-                                inputmode="decimal"
-                                value={percentages.value[user.id] ?? 0}
-                                onInput={(e) => {
-                                  const sanitized = sanitizeDecimal(
-                                    (e.target as HTMLInputElement).value,
-                                  );
-                                  (e.target as HTMLInputElement).value =
-                                    sanitized;
-                                  const v = parseFloat(sanitized) || 0;
-                                  percentages.value = {
-                                    ...percentages.value,
-                                    [user.id]: v,
-                                  };
-                                  autoComplement(user.id);
-                                }}
-                              />
-                              <span class="ml-1 text-zinc-500">%</span>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot class="bg-white/5">
-                    <tr>
-                      <td class="px-4 py-2 text-xs font-bold text-zinc-400 italic">
-                        TOTAL
-                      </td>
-                      <td
-                        class={`px-4 py-2 text-right text-xs font-bold ${
-                          isValid ? "text-white" : "text-red-400"
-                        }`}
-                      >
-                        {total.toFixed(1)}%
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-
-              <button
-                type="button"
-                onClick={resetToEqual}
-                class="text-xs text-zinc-400 hover:text-white transition-colors"
-              >
-                Restablecer a equitativo
-              </button>
-            </div>
-
-            <footer class="px-6 py-4 border-t border-border-custom bg-white/5 flex justify-between items-center gap-3">
+        <Modal
+          onClose={closeModal}
+          title="División Default"
+          subtitle="Porcentajes predefinidos para nuevos gastos"
+          footer={
+            <>
               <div>
                 {props.defaultSplit && (
                   <button
@@ -322,9 +200,99 @@ export default function DefaultSplitConfig(props: DefaultSplitConfigProps) {
                   {loading.value ? "Guardando..." : "Guardar"}
                 </button>
               </div>
-            </footer>
+            </>
+          }
+        >
+          <div class="p-6 space-y-4 overflow-y-auto max-h-[60vh]">
+            {error.value && <p class="text-sm text-red-300">{error.value}</p>}
+            {success.value && (
+              <p class="text-sm text-emerald-300">Guardado exitosamente</p>
+            )}
+
+            <div class="border border-white/10 rounded-custom overflow-hidden">
+              <table class="w-full text-left border-collapse">
+                <thead class="bg-white/5">
+                  <tr>
+                    <th class="px-4 py-3 text-xs font-semibold text-zinc-400">
+                      MIEMBRO
+                    </th>
+                    <th class="px-4 py-3 text-xs font-semibold text-zinc-400 w-32 text-right">
+                      %
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-border-custom">
+                  {currentMembers.map((user) => {
+                    const userInitials = initials(user.name);
+                    return (
+                      <tr key={user.id}>
+                        <td class="px-4 py-3">
+                          <div class="flex items-center gap-3">
+                            <div
+                              class="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                              style={`background-color: ${user.color}30; color: ${user.color}`}
+                            >
+                              {userInitials}
+                            </div>
+                            <span class="text-sm font-medium text-white">
+                              {user.name}
+                            </span>
+                          </div>
+                        </td>
+                        <td class="px-4 py-3">
+                          <div class="flex items-center justify-end">
+                            <input
+                              class="w-16 bg-transparent border-0 text-right text-sm font-medium text-white focus:ring-0 p-0"
+                              type="text"
+                              inputmode="decimal"
+                              value={percentages.value[user.id] ?? 0}
+                              onInput={(e) => {
+                                const sanitized = sanitizeDecimal(
+                                  (e.target as HTMLInputElement).value,
+                                );
+                                (e.target as HTMLInputElement).value =
+                                  sanitized;
+                                const v = parseFloat(sanitized) || 0;
+                                percentages.value = {
+                                  ...percentages.value,
+                                  [user.id]: v,
+                                };
+                                autoComplement(user.id);
+                              }}
+                            />
+                            <span class="ml-1 text-zinc-500">%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot class="bg-white/5">
+                  <tr>
+                    <td class="px-4 py-2 text-xs font-bold text-zinc-400 italic">
+                      TOTAL
+                    </td>
+                    <td
+                      class={`px-4 py-2 text-right text-xs font-bold ${
+                        isValid ? "text-white" : "text-red-400"
+                      }`}
+                    >
+                      {total.toFixed(1)}%
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <button
+              type="button"
+              onClick={resetToEqual}
+              class="text-xs text-zinc-400 hover:text-white transition-colors"
+            >
+              Restablecer a equitativo
+            </button>
           </div>
-        </div>
+        </Modal>
       )}
     </>
   );

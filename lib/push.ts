@@ -32,7 +32,7 @@ export const PUSH_COOLDOWN = 15_000;
  * threshold logic is unit-testable without the map.
  *
  * @param now      current epoch millis
- * @param lastPush epoch millis of the last push for this key (0 if never)
+ * @param lastPush epoch millis of the last push for this key, or 0 = never
  * @param cooldown cooldown window in millis
  */
 export function shouldSendPush(
@@ -40,6 +40,9 @@ export function shouldSendPush(
   lastPush: number,
   cooldown: number = PUSH_COOLDOWN,
 ): boolean {
+  // 0 is the map's "never pushed" marker, not epoch 0 — a key with no
+  // history is always eligible, regardless of `now`.
+  if (lastPush === 0) return true;
   return now - lastPush >= cooldown;
 }
 

@@ -1,4 +1,5 @@
 import type { Exercise } from "../lib/types.ts";
+import { formatMoney } from "../lib/format.ts";
 
 interface ExerciseCardProps {
   exercise: Exercise;
@@ -11,17 +12,9 @@ export default function ExerciseCard(props: ExerciseCardProps) {
 
   const totalDisplay = personalTotal !== undefined
     ? `${personalTotal >= 0 ? "+" : "-"}$${
-      Math.abs(personalTotal).toLocaleString("en-US", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })
+      formatMoney(Math.abs(personalTotal))
     }`
-    : `$${
-      exercise.totalAmount.toLocaleString("en-US", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })
-    }`;
+    : `$${formatMoney(exercise.totalAmount)}`;
 
   return (
     <a

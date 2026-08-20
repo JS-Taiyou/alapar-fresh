@@ -1,4 +1,5 @@
-import { query } from "./db.ts";
+import { query, withTransaction } from "./db.ts";
+import type { QueryFn } from "./db.ts";
 import {
   countRegistryMembers,
   getRegistryPlan,
@@ -49,8 +50,14 @@ export { generateInviteCode };
  * Write the computed balance deltas for a transaction into the
  * `transaction_balances` table. Called after every transaction INSERT and on
  * update (after deleting stale rows). Uses UPSERT to be idempotent.
+ *
+ * `q` is the executor: the pool by default, or a transaction's client when
+ * called inside `withTransaction` (the write must not escape the unit).
  */
-async function writeTransactionBalances(tx: Transaction): Promise<void> {
+async function writeTransactionBalances(
+  tx: Transaction,
+  q: QueryFn = query,
+): Promise<void> {
   const deltas = computeDeltas(tx);
   if (deltas.length === 0) return;
   const values: unknown[] = [];
@@ -59,16 +66,47 @@ async function writeTransactionBalances(tx: Transaction): Promise<void> {
     values.push(tx.id, d.userId, d.amount);
     return `($${base + 1}, $${base + 2}, $${base + 3})`;
   }).join(", ");
-  await query(
+  await q(
     `INSERT INTO transaction_balances (transaction_id, user_id, amount) VALUES ${placeholders}
      ON CONFLICT (transaction_id, user_id) DO UPDATE SET amount = EXCLUDED.amount`,
     values,
   );
 }
 
+/**
+ * Batched variant of {@link writeTransactionBalances}: one multi-row INSERT
+ * for the deltas of many transactions. `batchCloneTransactions` uses this so
+ * cloning N transactions doesn't mean N sequential balance queries.
+ */
+async function writeTransactionBalancesBatch(
+  txs: Transaction[],
+  q: QueryFn = query,
+): Promise<void> {
+  const params: unknown[] = [];
+  const rowFragments: string[] = [];
+  for (const tx of txs) {
+    for (const d of computeDeltas(tx)) {
+      const base = params.length;
+      params.push(tx.id, d.userId, d.amount);
+      rowFragments.push(`($${base + 1}, $${base + 2}, $${base + 3})`);
+    }
+  }
+  if (rowFragments.length === 0) return;
+  await q(
+    `INSERT INTO transaction_balances (transaction_id, user_id, amount) VALUES ${
+      rowFragments.join(", ")
+    }
+     ON CONFLICT (transaction_id, user_id) DO UPDATE SET amount = EXCLUDED.amount`,
+    params,
+  );
+}
+
 /** Delete persisted balance deltas for a transaction (before re-computing on update). */
-async function deleteTransactionBalances(transactionId: string): Promise<void> {
-  await query(
+async function deleteTransactionBalances(
+  transactionId: string,
+  q: QueryFn = query,
+): Promise<void> {
+  await q(
     "DELETE FROM transaction_balances WHERE transaction_id = $1",
     [transactionId],
   );
@@ -279,16 +317,11 @@ export async function getTransactionsByIds(
 export async function getTransactionPaymentsForRegistry(
   registryId: string,
 ): Promise<TransactionPayment[]> {
-  console.log("[store] getTransactionPaymentsForRegistry start:", registryId);
   const result = await query(
     `SELECT tp.* FROM transaction_payments tp
      JOIN transactions t ON t.id = tp.pago_id
      WHERE t.registry_id = $1 AND t.exercise_id IS NULL`,
     [registryId],
-  );
-  console.log(
-    "[store] getTransactionPaymentsForRegistry done, rows:",
-    result.rows.length,
   );
   return result.rows.map(rowToTransactionPayment);
 }
@@ -306,6 +339,7 @@ export async function getTransactionPaymentsForPago(
 export async function createTransactionPayments(
   pagoId: string,
   entries: { expenseId: string; amount: number }[],
+  q: QueryFn = query,
 ): Promise<TransactionPayment[]> {
   if (entries.length === 0) return [];
   const values: unknown[] = [];
@@ -314,7 +348,7 @@ export async function createTransactionPayments(
     values.push(pagoId, e.expenseId, e.amount);
     return `($${base + 1}, $${base + 2}, $${base + 3})`;
   }).join(", ");
-  const result = await query(
+  const result = await q(
     `INSERT INTO transaction_payments (pago_id, expense_id, amount) VALUES ${placeholders} RETURNING *`,
     values,
   );
@@ -323,45 +357,59 @@ export async function createTransactionPayments(
 
 export async function deleteTransactionPaymentsForPago(
   pagoId: string,
+  q: QueryFn = query,
 ): Promise<void> {
-  await query("DELETE FROM transaction_payments WHERE pago_id = $1", [pagoId]);
+  await q("DELETE FROM transaction_payments WHERE pago_id = $1", [pagoId]);
 }
 
 export async function createTransaction(
   data: Omit<Transaction, "id" | "createdAt">,
   userId: string,
   transactionPaymentEntries?: { expenseId: string; amount: number }[],
+  q?: QueryFn,
 ): Promise<Transaction | null> {
   const member = await isMemberOfRegistry(userId, data.registry_id);
   if (!member) return null;
   const recurringGroupId = data.recurringGroupId ?? crypto.randomUUID();
-  const result = await query(
-    `INSERT INTO transactions (registry_id, description, amount, original_amount, type, exercise_id, installment_current, installment_total, recurring_disabled, recurring_group_id, notes, split_json, creator_id, user_paid, related_transaction_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING *`,
-    [
-      data.registry_id,
-      data.description,
-      data.amount,
-      data.originalAmount,
-      data.type,
-      data.exerciseId,
-      data.installmentCurrent,
-      data.installmentTotal,
-      data.recurringDisabled ?? false,
-      recurringGroupId,
-      data.notes,
-      JSON.stringify(data.splitJson),
-      data.creatorId,
-      data.userPaid,
-      data.relatedTransactionId ?? null,
-    ],
-  );
-  const tx = rowToTransaction(result.rows[0]);
-  if (transactionPaymentEntries && transactionPaymentEntries.length > 0) {
-    await createTransactionPayments(tx.id, transactionPaymentEntries);
-  }
-  await writeTransactionBalances(tx);
-  return tx;
+  // Transaction + linked payments + balance deltas are one unit: a failure
+  // after the INSERT must not leave a transaction whose balances never got
+  // persisted (the deltas table is what balances are summed from). When an
+  // outer transaction's executor is passed, join it instead of opening one.
+  const insert = async (executor: QueryFn): Promise<Transaction> => {
+    const result = await executor(
+      `INSERT INTO transactions (registry_id, description, amount, original_amount, type, exercise_id, installment_current, installment_total, recurring_disabled, recurring_group_id, notes, split_json, creator_id, user_paid, related_transaction_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING *`,
+      [
+        data.registry_id,
+        data.description,
+        data.amount,
+        data.originalAmount,
+        data.type,
+        data.exerciseId,
+        data.installmentCurrent,
+        data.installmentTotal,
+        data.recurringDisabled ?? false,
+        recurringGroupId,
+        data.notes,
+        JSON.stringify(data.splitJson),
+        data.creatorId,
+        data.userPaid,
+        data.relatedTransactionId ?? null,
+      ],
+    );
+    const tx = rowToTransaction(result.rows[0]);
+    if (transactionPaymentEntries && transactionPaymentEntries.length > 0) {
+      await createTransactionPayments(
+        tx.id,
+        transactionPaymentEntries,
+        executor,
+      );
+    }
+    await writeTransactionBalances(tx, executor);
+    return tx;
+  };
+  if (q) return await insert(q);
+  return await withTransaction(insert);
 }
 
 export async function updateTransaction(
@@ -372,38 +420,42 @@ export async function updateTransaction(
 ): Promise<Transaction | undefined> {
   const { sets, values } = buildTransactionUpdateSets(data);
   if (sets.length === 0) return getTransactionById(id);
-  const idx = values.length + 1;
-  values.push(id);
-  values.push(userId);
-  const result = await query(
-    `UPDATE transactions SET ${
-      sets.join(", ")
-    } WHERE id = $${idx} AND registry_id IN (SELECT rm.registry_id FROM registry_members rm WHERE rm.user_id = $${
-      idx + 1
-    } AND rm.registry_id = transactions.registry_id) RETURNING *`,
-    values,
-  );
-  if (result.rows.length === 0) return undefined;
-  const updated = rowToTransaction(result.rows[0]);
-  if (transactionPaymentEntries !== undefined) {
-    await deleteTransactionPaymentsForPago(id);
-    if (transactionPaymentEntries.length > 0) {
-      await createTransactionPayments(id, transactionPaymentEntries);
+  // The UPDATE, the payment rows and the recomputed deltas are one unit:
+  // partially applying them leaves balances drifted from the transaction.
+  return await withTransaction(async (q) => {
+    const idx = values.length + 1;
+    values.push(id);
+    values.push(userId);
+    const result = await q(
+      `UPDATE transactions SET ${
+        sets.join(", ")
+      } WHERE id = $${idx} AND registry_id IN (SELECT rm.registry_id FROM registry_members rm WHERE rm.user_id = $${
+        idx + 1
+      } AND rm.registry_id = transactions.registry_id) RETURNING *`,
+      values,
+    );
+    if (result.rows.length === 0) return undefined;
+    const updated = rowToTransaction(result.rows[0]);
+    if (transactionPaymentEntries !== undefined) {
+      await deleteTransactionPaymentsForPago(id, q);
+      if (transactionPaymentEntries.length > 0) {
+        await createTransactionPayments(id, transactionPaymentEntries, q);
+      }
     }
-  }
-  // Recompute balance deltas if any delta-relevant field changed.
-  const deltaRelevant = data.amount !== undefined ||
-    data.originalAmount !== undefined ||
-    data.type !== undefined ||
-    data.splitJson !== undefined ||
-    data.userPaid !== undefined ||
-    data.installmentCurrent !== undefined ||
-    data.installmentTotal !== undefined;
-  if (deltaRelevant) {
-    await deleteTransactionBalances(id);
-    await writeTransactionBalances(updated);
-  }
-  return updated;
+    // Recompute balance deltas if any delta-relevant field changed.
+    const deltaRelevant = data.amount !== undefined ||
+      data.originalAmount !== undefined ||
+      data.type !== undefined ||
+      data.splitJson !== undefined ||
+      data.userPaid !== undefined ||
+      data.installmentCurrent !== undefined ||
+      data.installmentTotal !== undefined;
+    if (deltaRelevant) {
+      await deleteTransactionBalances(id, q);
+      await writeTransactionBalances(updated, q);
+    }
+    return updated;
+  });
 }
 
 export async function deleteTransaction(
@@ -454,8 +506,11 @@ export async function getExerciseByIdForUser(
   return rowToExercise(result.rows[0]);
 }
 
-export async function createExercise(registryId: string): Promise<Exercise> {
-  const result = await query(
+export async function createExercise(
+  registryId: string,
+  q: QueryFn = query,
+): Promise<Exercise> {
+  const result = await q(
     `WITH active AS (
       SELECT id, original_amount, created_at
       FROM transactions
@@ -495,24 +550,18 @@ export async function createRegistry(
   name: string,
   userId: string,
 ): Promise<Registry> {
-  const result = await query(
-    "INSERT INTO registries (name, is_default) VALUES ($1, false) RETURNING *",
-    [name],
-  );
-  const registry = rowToRegistry(result.rows[0]);
-
-  const existingMember = await query(
-    "SELECT registry_id FROM registry_members WHERE registry_id = $1 AND user_id = $2",
-    [registry.id, userId],
-  );
-  if (existingMember.rows.length === 0) {
-    await query(
-      "INSERT INTO registry_members (registry_id, user_id, role) VALUES ($1, $2, 'owner')",
+  return await withTransaction(async (q) => {
+    const result = await q(
+      "INSERT INTO registries (name, is_default) VALUES ($1, false) RETURNING *",
+      [name],
+    );
+    const registry = rowToRegistry(result.rows[0]);
+    await q(
+      "INSERT INTO registry_members (registry_id, user_id, role) VALUES ($1, $2, 'owner') ON CONFLICT DO NOTHING",
       [registry.id, userId],
     );
-  }
-
-  return registry;
+    return registry;
+  });
 }
 
 export async function renameRegistry(
@@ -652,31 +701,33 @@ export async function cloneTransactionForNextPeriod(
   const source = await getTransactionById(sourceId);
   if (!source) throw new Error(`Transaction ${sourceId} not found`);
   const recurringGroupId = source.recurringGroupId ?? crypto.randomUUID();
-  const result = await query(
-    `INSERT INTO transactions (registry_id, description, amount, original_amount, type, exercise_id, installment_current, installment_total, recurring_disabled, recurring_group_id, notes, split_json, creator_id, user_paid)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *`,
-    [
-      source.registry_id,
-      source.description,
-      source.amount,
-      source.originalAmount,
-      source.type,
-      null,
-      source.type === "parcialidad" && source.installmentCurrent !== null
-        ? source.installmentCurrent + installmentOffset
-        : null,
-      source.type === "parcialidad" ? source.installmentTotal : null,
-      false,
-      recurringGroupId,
-      source.notes,
-      JSON.stringify(source.splitJson),
-      source.creatorId,
-      source.userPaid,
-    ],
-  );
-  const cloned = rowToTransaction(result.rows[0]);
-  await writeTransactionBalances(cloned);
-  return cloned;
+  return await withTransaction(async (q) => {
+    const result = await q(
+      `INSERT INTO transactions (registry_id, description, amount, original_amount, type, exercise_id, installment_current, installment_total, recurring_disabled, recurring_group_id, notes, split_json, creator_id, user_paid)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *`,
+      [
+        source.registry_id,
+        source.description,
+        source.amount,
+        source.originalAmount,
+        source.type,
+        null,
+        source.type === "parcialidad" && source.installmentCurrent !== null
+          ? source.installmentCurrent + installmentOffset
+          : null,
+        source.type === "parcialidad" ? source.installmentTotal : null,
+        false,
+        recurringGroupId,
+        source.notes,
+        JSON.stringify(source.splitJson),
+        source.creatorId,
+        source.userPaid,
+      ],
+    );
+    const cloned = rowToTransaction(result.rows[0]);
+    await writeTransactionBalances(cloned, q);
+    return cloned;
+  });
 }
 
 export async function batchCloneTransactions(
@@ -732,15 +783,17 @@ export async function batchCloneTransactions(
   const placeholders = buildBatchPlaceholders(rows.length, cols);
   const flatValues = rows.flat();
 
-  const insertResult = await query(
-    `INSERT INTO transactions (registry_id, description, amount, original_amount, type, exercise_id, installment_current, installment_total, recurring_disabled, recurring_group_id, notes, split_json, creator_id, user_paid) VALUES ${placeholders} RETURNING *`,
-    flatValues,
-  );
-  const cloned = insertResult.rows.map(rowToTransaction);
-  // Write balance deltas for each cloned transaction.
-  for (const tx of cloned) {
-    await writeTransactionBalances(tx);
-  }
+  const cloned = await withTransaction(async (q) => {
+    const insertResult = await q(
+      `INSERT INTO transactions (registry_id, description, amount, original_amount, type, exercise_id, installment_current, installment_total, recurring_disabled, recurring_group_id, notes, split_json, creator_id, user_paid) VALUES ${placeholders} RETURNING *`,
+      flatValues,
+    );
+    const rows = insertResult.rows.map(rowToTransaction);
+    // One batched INSERT for all cloned transactions' deltas — cloning a
+    // large batch must not mean one balance query per row against the pool.
+    await writeTransactionBalancesBatch(rows, q);
+    return rows;
+  });
   return cloned;
 }
 
@@ -825,11 +878,21 @@ export async function deleteEntity(
   entityId: string,
   userId: string,
 ): Promise<boolean> {
+  // Reference check via JSONB containment (backed by the
+  // idx_transactions_split_json GIN index): the entity is in use if it paid
+  // any active transaction or appears as a split participant in one. Unlike
+  // the previous `split_json::text LIKE` this can't false-match on
+  // serialization quirks or special characters in the id.
   const txCheck = await query(
     `SELECT 1 FROM transactions WHERE registry_id = $1
      AND exercise_id IS NULL
-     AND (user_paid::text = $2 OR split_json::text LIKE $3)`,
-    [registryId, entityId, `%"userId":"${entityId}"%`],
+     AND (
+       user_paid::text = $2
+       OR split_json @> jsonb_build_object(
+            'splits', jsonb_build_array(jsonb_build_object('userId', $2))
+          )
+     )`,
+    [registryId, entityId],
   );
   if (txCheck.rows.length > 0) return false;
 
@@ -850,8 +913,9 @@ export async function deleteEntity(
 
 export async function getRegistryMemberCount(
   registryId: string,
+  q: QueryFn = query,
 ): Promise<number> {
-  const result = await query(
+  const result = await q(
     "SELECT COUNT(*) as cnt FROM registry_members WHERE registry_id = $1",
     [registryId],
   );
@@ -878,8 +942,9 @@ export async function setDefaultSplit(
 
 export async function clearDefaultSplit(
   registryId: string,
+  q: QueryFn = query,
 ): Promise<void> {
-  await query(
+  await q(
     "UPDATE registries SET default_split_json = NULL, default_split_member_count = NULL WHERE id = $1",
     [registryId],
   );
@@ -906,8 +971,9 @@ export async function clearDefaultSplitForOwner(
 
 export async function invalidateDefaultSplitIfNeeded(
   registryId: string,
+  q: QueryFn = query,
 ): Promise<void> {
-  const result = await query(
+  const result = await q(
     "SELECT default_split_member_count FROM registries WHERE id = $1",
     [registryId],
   );
@@ -915,9 +981,9 @@ export async function invalidateDefaultSplitIfNeeded(
   const savedCount = result.rows[0].default_split_member_count as number | null;
   if (savedCount === null) return;
 
-  const currentCount = await getRegistryMemberCount(registryId);
+  const currentCount = await getRegistryMemberCount(registryId, q);
   if (currentCount !== savedCount) {
-    await clearDefaultSplit(registryId);
+    await clearDefaultSplit(registryId, q);
   }
 }
 
@@ -1009,26 +1075,12 @@ export async function useInvitation(
     return invitation.registryId;
   }
 
-  // Atomic check-and-increment: the UPDATE itself enforces not-revoked and
-  // max-uses, so concurrent joins can't overshoot max_uses (the read above
-  // only exists to give precise error messages).
-  const claimed = await query(
-    `UPDATE invitations SET current_uses = current_uses + 1
-     WHERE id = $1 AND revoked_at IS NULL
-       AND (max_uses IS NULL OR current_uses < max_uses)
-     RETURNING id`,
-    [invitation.id],
-  );
-  if (claimed.rows.length === 0) {
-    throw new Error("Invitation has reached max uses");
-  }
-
   // Free plan: cap on members per registry.
   //
-  // Placement matters: this runs AFTER the invitation-validity checks and the
-  // current_uses claim above, but BEFORE the member INSERT — so a full group
-  // never consumes an invitation use (the joiner can retry once the owner
-  // upgrades, without wasting the code).
+  // Placement matters: this runs AFTER the invitation-validity checks above
+  // but BEFORE the current_uses claim and member INSERT (which share one
+  // transaction) — so a full group never consumes an invitation use (the
+  // joiner can retry once the owner upgrades, without wasting the code).
   //
   // The check is on the TARGET registry's plan, never the joiner's:
   // "joining groups is never gated" is a product invariant. A free-plan user
@@ -1040,7 +1092,7 @@ export async function useInvitation(
   //
   // TOCTOU: two racing joins could both pass the count and land N+1 members.
   // Accepted risk (product limit, not a security boundary). The atomic
-  // invitation-uses claim above is the check that MUST be race-proof, and it
+  // invitation-uses claim is the check that MUST be race-proof, and it
   // already is (UPDATE ... WHERE current_uses < max_uses).
   const planInfo = await getRegistryPlan(invitation.registryId);
   if (planInfo && !planInfo.isPro) {
@@ -1050,25 +1102,41 @@ export async function useInvitation(
     }
   }
 
-  await query(
-    "INSERT INTO registry_members (registry_id, user_id, role) VALUES ($1, $2, 'member') ON CONFLICT DO NOTHING",
-    [invitation.registryId, userId],
-  );
+  return await withTransaction(async (q) => {
+    // Atomic check-and-increment: the UPDATE itself enforces not-revoked and
+    // max-uses, so concurrent joins can't overshoot max_uses (the read above
+    // only exists to give precise error messages).
+    const claimed = await q(
+      `UPDATE invitations SET current_uses = current_uses + 1
+       WHERE id = $1 AND revoked_at IS NULL
+         AND (max_uses IS NULL OR current_uses < max_uses)
+       RETURNING id`,
+      [invitation.id],
+    );
+    if (claimed.rows.length === 0) {
+      throw new Error("Invitation has reached max uses");
+    }
 
-  await invalidateDefaultSplitIfNeeded(invitation.registryId);
+    await q(
+      "INSERT INTO registry_members (registry_id, user_id, role) VALUES ($1, $2, 'member') ON CONFLICT DO NOTHING",
+      [invitation.registryId, userId],
+    );
 
-  await query(
-    `INSERT INTO audit_log (actor_id, action, target_type, target_id, metadata) VALUES ($1, $2, $3, $4, $5)`,
-    [
-      userId,
-      "invite_used",
-      "invitation",
-      invitation.id,
-      JSON.stringify({ code }),
-    ],
-  );
+    await invalidateDefaultSplitIfNeeded(invitation.registryId, q);
 
-  return invitation.registryId;
+    await q(
+      `INSERT INTO audit_log (actor_id, action, target_type, target_id, metadata) VALUES ($1, $2, $3, $4, $5)`,
+      [
+        userId,
+        "invite_used",
+        "invitation",
+        invitation.id,
+        JSON.stringify({ code }),
+      ],
+    );
+
+    return invitation.registryId;
+  });
 }
 
 export async function getInvitationsForRegistry(registryId: string): Promise<{

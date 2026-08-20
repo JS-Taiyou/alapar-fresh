@@ -8,9 +8,14 @@ import type {
   BalanceBreakdownEntry,
   DefaultSplit,
   Participant,
+  SpawnCandidate,
   TransactionPayment,
 } from "../lib/types.ts";
-import { type EnrichedTransaction } from "./shared-signals.ts";
+import {
+  type EnrichedTransaction,
+  entitiesChanged,
+  registrySwitch,
+} from "./shared-signals.ts";
 import { rowToEnrichedTransaction } from "../lib/rows.ts";
 
 function dedupById<T extends { id: string }>(items: T[]): T[] {
@@ -38,6 +43,7 @@ import {
 } from "../lib/notifications.ts";
 import { cache } from "../lib/cache.ts";
 import TransactionModal from "../components/TransactionModal.tsx";
+import { formatMoney, initials } from "../lib/format.ts";
 import {
   formatDate,
   formatTime,
@@ -46,15 +52,6 @@ import {
 } from "../lib/i18n.ts";
 
 let lastPushSubscribedRegistry: string | null = null;
-
-interface SpawnCandidate {
-  id: string;
-  description: string;
-  type: "parcialidad" | "recurrente";
-  originalAmount: number;
-  installmentCurrent: number | null;
-  installmentTotal: number | null;
-}
 
 interface TransactionListProps {
   transactions: Signal<EnrichedTransaction[]>;
@@ -90,10 +87,7 @@ function TransactionCardClickable(props: {
     translate(props.locale ?? "es", key, params);
 
   if (tx.type === "ajuste") {
-    const formattedAmount = tx.originalAmount.toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+    const formattedAmount = formatMoney(tx.originalAmount);
 
     return (
       <div class="w-full text-left bg-card p-5 rounded-custom border-l-4 border-l-amber-500 border border-white/5 flex justify-between items-center">
@@ -125,10 +119,7 @@ function TransactionCardClickable(props: {
       ? users.find((u) => u.id === recipientSplit.userId)
       : null;
     const payerUser = tx.paidByUser;
-    const formattedAmount = tx.originalAmount.toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+    const formattedAmount = formatMoney(tx.originalAmount);
 
     let label = "";
     if (isPayer && recipientUser) {
@@ -369,18 +360,13 @@ function TransactionCardClickable(props: {
               : "text-red-500"
           }`}
         >
-          {isZero ? "" : isPositive ? "+" : "-"}${Math.abs(remainingBalance)
-            .toLocaleString(
-              "en-US",
-              { minimumFractionDigits: 2, maximumFractionDigits: 2 },
-            )}
+          {isZero ? "" : isPositive ? "+" : "-"}${formatMoney(
+            Math.abs(remainingBalance),
+          )}
         </span>
         <span class="text-xs text-zinc-400">
           {t("tx.of_total", {
-            total: perInstallmentTotal.toLocaleString("en-US", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            }),
+            total: formatMoney(perInstallmentTotal),
           })}
         </span>
       </div>
@@ -470,12 +456,7 @@ export default function TransactionList(props: TransactionListProps) {
                   ? payload.new.amount
                   : 0;
                 new Notification(t("tx.notification_title"), {
-                  body: `${desc} — $${
-                    amt.toLocaleString("en-US", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })
-                  }`,
+                  body: `${desc} — $${formatMoney(amt)}`,
                   icon: "/logo.svg",
                 });
               }
@@ -563,86 +544,64 @@ export default function TransactionList(props: TransactionListProps) {
   });
 
   useSignalEffect(() => {
-    function onRegistrySwitch(e: Event) {
-      const detail = (e as CustomEvent).detail as {
-        registryId: string;
-        transactions?: EnrichedTransaction[];
-        transactionPayments?: TransactionPayment[];
-        balance?: number;
-        balanceEntries?: BalanceBreakdownEntry[];
-        users?: Participant[];
-        currentUserId?: string;
-        defaultSplit?: DefaultSplit | null;
-        spawnCandidates?: SpawnCandidate[];
-        lastModified?: string | null;
-        entityIds?: string[];
-        entities?: { id: string; name: string; color: string }[];
-      };
-      if (!detail) return;
-      registryId.value = detail.registryId;
-      if (detail.transactions) {
-        transactions.value = detail.transactions.map((t) => ({
-          ...t,
-          createdAt:
-            typeof (t as unknown as { createdAt: unknown }).createdAt ===
-                "string"
-              ? new Date((t as unknown as { createdAt: string }).createdAt)
-              : t.createdAt,
-        })) as EnrichedTransaction[];
-      }
-      if (detail.balance !== undefined) balance.value = detail.balance;
-      if (detail.balanceEntries) balanceEntries.value = detail.balanceEntries;
-      if (detail.users) users.value = detail.users;
-      if (detail.currentUserId) currentUserId.value = detail.currentUserId;
-      if (detail.defaultSplit !== undefined) {
-        defaultSplit.value = detail.defaultSplit;
-      }
-      if (detail.spawnCandidates !== undefined) {
-        props.spawnCandidates.value = detail.spawnCandidates;
-      }
-      if (detail.lastModified !== undefined) {
-        props.lastModified.value = detail.lastModified;
-      }
-      if (detail.entityIds) {
-        props.entityIds.value = new Set(detail.entityIds);
-      }
-      if (detail.entities) {
-        props.entities.value = detail.entities;
-      }
-      if (detail.transactionPayments) {
-        transactionPayments.value = detail.transactionPayments;
-      }
+    const payload = registrySwitch.value;
+    if (!payload) return;
+    registryId.value = payload.registryId;
+    if (payload.transactions) {
+      transactions.value = payload.transactions.map((t) => ({
+        ...t,
+        createdAt:
+          typeof (t as unknown as { createdAt: unknown }).createdAt === "string"
+            ? new Date((t as unknown as { createdAt: string }).createdAt)
+            : t.createdAt,
+      })) as EnrichedTransaction[];
     }
-    globalThis.addEventListener("registry-switch", onRegistrySwitch);
+    if (payload.balance !== undefined) balance.value = payload.balance;
+    if (payload.balanceEntries) balanceEntries.value = payload.balanceEntries;
+    if (payload.users) users.value = payload.users;
+    if (payload.currentUserId) currentUserId.value = payload.currentUserId;
+    if (payload.defaultSplit !== undefined) {
+      defaultSplit.value = payload.defaultSplit;
+    }
+    if (payload.spawnCandidates !== undefined) {
+      props.spawnCandidates.value = payload.spawnCandidates;
+    }
+    if (payload.lastModified !== undefined) {
+      props.lastModified.value = payload.lastModified;
+    }
+    if (payload.entityIds) {
+      props.entityIds.value = new Set(payload.entityIds);
+    }
+    if (payload.entities) {
+      props.entities.value = payload.entities;
+    }
+    if (payload.transactionPayments) {
+      transactionPayments.value = payload.transactionPayments;
+    }
+  });
 
-    async function onEntitiesChanged(e: Event) {
-      const detail = (e as CustomEvent).detail as {
-        entities?: { id: string; name: string; color: string }[];
-      } | undefined;
-      if (detail?.entities) {
-        props.entityIds.value = new Set(detail.entities.map((ent) => ent.id));
-        return;
-      }
-      const rid = registryId.value;
-      if (!rid) return;
-      if (props.isDemo) return;
-      try {
-        const res = await fetch(`/api/entities?registryId=${rid}`);
-        if (rid !== registryId.value) return;
-        if (!res.ok) return;
-        const data = await res.json() as { id: string }[];
+  useSignalEffect(() => {
+    const announcement = entitiesChanged.value;
+    if (!announcement) return;
+    if (announcement.entities) {
+      props.entityIds.value = new Set(
+        announcement.entities.map((ent) => ent.id),
+      );
+      return;
+    }
+    const rid = registryId.value;
+    if (!rid) return;
+    if (props.isDemo) return;
+    fetch(`/api/entities?registryId=${rid}`)
+      .then((res) => res.ok ? res.json() as Promise<{ id: string }[]> : null)
+      .then((data) => {
+        if (!data) return;
         if (rid !== registryId.value) return;
         props.entityIds.value = new Set(data.map((ent) => ent.id));
-      } catch {
+      })
+      .catch(() => {
         // ignore
-      }
-    }
-    globalThis.addEventListener("entities-changed", onEntitiesChanged);
-
-    return () => {
-      globalThis.removeEventListener("registry-switch", onRegistrySwitch);
-      globalThis.removeEventListener("entities-changed", onEntitiesChanged);
-    };
+      });
   });
 
   useSignalEffect(() => {
@@ -905,10 +864,7 @@ export default function TransactionList(props: TransactionListProps) {
                   {t("tx.all")}
                 </button>
                 {users.value.map((user) => {
-                  const initials = user.name.split(" ").map((n) => n[0]).join(
-                    "",
-                  )
-                    .substring(0, 2).toUpperCase();
+                  const userInitials = initials(user.name);
                   // Active state: colored BORDER + white name, NOT a solid
                   // fill — filling with user.color made the initials avatar
                   // (same color on same color) invisible.
@@ -931,7 +887,7 @@ export default function TransactionList(props: TransactionListProps) {
                         class="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold"
                         style={`background-color: ${user.color}30; color: ${user.color}`}
                       >
-                        {initials}
+                        {userInitials}
                       </div>
                       {user.name.split(" ")[0]}
                     </button>

@@ -4,6 +4,87 @@ All notable changes to this project are documented here. Dates are approximate.
 
 ---
 
+## 2026-08-20 — Money validation, transactional writes, UI hardening
+
+Post-audit hardening pass (slop-police review): balance-integrity guarantees on
+the server, DB transactions around multi-statement writes, and the interactive
+layer's scaffolded-but-unwired states made real.
+
+**Server (balance integrity)**:
+
+- New `lib/transaction-validation.ts`: one shared parser for the transaction
+  POST/PUT forms (previously ~90 lines duplicated per route). Enforces amount
+  bounds, known `type`, installment ranges, split amounts summing to the
+  transaction total (rounding tolerance scales with participant count), and
+  linked payments not exceeding the pago. Deliberate behavior change: a fixed
+  split that doesn't add up is now a 400 with a clear message instead of
+  silently corrupting balances.
+- `lib/db.ts` gains `withTransaction`; `createTransaction`, `updateTransaction`,
+  `useInvitation`, `createRegistry`, `cloneTransactionForNextPeriod` and
+  `batchCloneTransactions` now run their multi-statement sequences inside one DB
+  transaction (transaction + payments + balance deltas can no longer half-apply;
+  a failed join no longer burns an invite use). Batch cloning writes all cloned
+  deltas as one batched INSERT instead of one query per row.
+- `lib/server-cache.ts`: per-dataset presence — a spawn-candidates-first entry
+  can no longer answer a transactions GET with an empty list, and registries
+  with no recurring templates now actually hit the cache. Removed per-request
+  production logs in the hot path.
+
+**Client (wired states, shared scaffolds)**:
+
+- New `components/Modal.tsx` adopted by all eight hand-rolled modals: Escape
+  closes (which the demo tour's synthetic-Escape close depended on — the full
+  tour was broken mid-way before), backdrop-close opt-out for the transaction
+  editor, `role="dialog"`/`aria-modal`. The tour now completes end-to-end and
+  detects its own teardown via driver.js `onDestroyed` instead of polling.
+- TransactionModal: the `submitting` guard is real (double-submit, disabled
+  buttons, "Guardando…" state), and optimistic writes roll back on server
+  rejection — the pre-optimistic snapshots are restored and the modal reopens
+  with the user's input intact. Same rollback for delete and for Sidebar
+  rename/delete-registry; Cortar/RecurringSpawn failures now surface an error
+  instead of reloading indistinguishably.
+- `islands/shared-signals.ts` finally holds signals: `registrySwitch` and
+  `entitiesChanged` replace the stringly-typed `CustomEvent` bus (payload typed
+  once, both sides); registry switches now also forward linked payments. Deleted
+  the dead `InviteManager` and `RealtimeSubscription` islands (283 lines,
+  imported by nothing).
+- `formatMoney()` / `initials()` extracted to `lib/format.ts` (33 + 11 inline
+  copies removed); `SpawnCandidate` deduped into `lib/types.ts`.
+
+**Follow-ups (same day, former PENDING.md items)**:
+
+- Supabase server client is now a module-level singleton instead of a throwaway
+  per request.
+- `deleteEntity`'s in-use reference check uses JSONB containment
+  (`split_json @> …`, GIN-indexed) instead of the fragile
+  `split_json::text LIKE` string match.
+- Carry-forward rejects `quantity > 1` on non-parcialidad sources with a 400
+  instead of silently discarding the quantity.
+- "Cortar" now archives the period and writes the carry-forward ajustes in ONE
+  DB transaction — a crash mid-cut can no longer leave a period settled without
+  its debts.
+- `shouldSendPush` treats `lastPush = 0` explicitly as "never pushed" (always
+  eligible) instead of relying on epoch-ms arithmetic.
+
+**Tests / CI**:
+
+- `test/fixtures/supabase_stub.ts` is structurally typed, so the test config
+  type-checks for real; `deno task check` and CI run the suite WITHOUT
+  `--no-check` again. New `test/fixtures/stub_compat.ts` fails `check:types` if
+  the db stub drifts from `lib/db.ts`'s exports.
+- New coverage: transaction-form validation matrix, cross-dataset cache
+  isolation, the cut-with-ajustes happy path, and the carry-forward quantity
+  contract. 62 suites / 473 steps green.
+
+**Docs**: ROUTES/ISLANDS/COMPONENTS/ARCHITECTURE/BUSINESS_LOGIC/DATABASE/
+MONETIZATION + both READMEs refreshed against the code (phantom
+`/api/registries/switch` route removed, missing routes/components documented,
+mangled ARCHITECTURE fences repaired, migration order in READMEs now points at
+DATABASE.md's canonical list, rotting test-suite counters replaced with stable
+claims).
+
+---
+
 ## 2026-08-18 — Open signup (allowlist removed) + Pro tier merged
 
 The app is public: any authenticated Google/email account can sign up.

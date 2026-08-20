@@ -1,4 +1,5 @@
 import { useSignal } from "@preact/signals";
+import Modal from "../components/Modal.tsx";
 
 interface CortarButtonProps {
   hasTransactions: boolean;
@@ -17,14 +18,20 @@ export default function CortarButton(props: CortarButtonProps) {
     if (!canCut || loading.value) return;
     loading.value = true;
     try {
-      await fetch("/api/exercises", {
+      const res = await fetch("/api/exercises", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ registryId: props.registryId }),
       });
+      if (!res.ok) {
+        loading.value = false;
+        alert("No se pudo cortar el ejercicio. Inténtalo de nuevo.");
+        return;
+      }
       globalThis.location.reload();
     } catch {
-      globalThis.location.reload();
+      loading.value = false;
+      alert("Error de conexión al cortar el ejercicio.");
     }
   }
 
@@ -46,28 +53,12 @@ export default function CortarButton(props: CortarButtonProps) {
       </button>
 
       {showModal.value && (
-        <div
-          class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) showModal.value = false;
-          }}
-        >
-          <div class="bg-surface border border-border-custom w-full max-w-md rounded-custom shadow-2xl flex flex-col overflow-hidden">
-            <header class="px-6 py-4 border-b border-border-custom">
-              <h2 class="text-xl font-bold text-white">Cortar ejercicio</h2>
-              <p class="text-sm text-zinc-400 mt-1">
-                Esta acción cerrará el periodo actual y no se puede deshacer.
-              </p>
-            </header>
-
-            <div class="p-6">
-              <p class="text-sm text-zinc-300">
-                Se crearán transacciones de ajuste para los saldos pendientes
-                entre los miembros del registro.
-              </p>
-            </div>
-
-            <footer class="px-6 py-4 border-t border-border-custom bg-white/5 flex justify-end items-center gap-3">
+        <Modal
+          onClose={() => showModal.value = false}
+          title="Cortar ejercicio"
+          subtitle="Esta acción cerrará el periodo actual y no se puede deshacer."
+          footer={
+            <div class="ml-auto flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => showModal.value = false}
@@ -83,9 +74,16 @@ export default function CortarButton(props: CortarButtonProps) {
               >
                 {loading.value ? "Cortando..." : "Cortar"}
               </button>
-            </footer>
+            </div>
+          }
+        >
+          <div class="p-6">
+            <p class="text-sm text-zinc-300">
+              Se crearán transacciones de ajuste para los saldos pendientes
+              entre los miembros del registro.
+            </p>
           </div>
-        </div>
+        </Modal>
       )}
     </>
   );

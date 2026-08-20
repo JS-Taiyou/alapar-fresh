@@ -53,6 +53,20 @@ export const handler = define.handlers({
       return new Response("Forbidden", { status: 403 });
     }
 
+    // quantity only means something for parcialidad (how many installments to
+    // carry). A quantity > 1 on anything else used to be silently discarded
+    // by the cloner — reject it so the contract can't be misread.
+    const sourceById = new Map(sources.map((tx) => [tx.id, tx]));
+    for (const item of items) {
+      const source = sourceById.get(item.id);
+      if (source && source.type !== "parcialidad" && (item.quantity ?? 1) > 1) {
+        return Response.json(
+          { error: "quantity > 1 only applies to parcialidad items" },
+          { status: 400 },
+        );
+      }
+    }
+
     const cloned = await batchCloneTransactions(
       items.map((item) => ({ id: item.id, quantity: item.quantity ?? 1 })),
       userId,

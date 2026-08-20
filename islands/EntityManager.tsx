@@ -1,5 +1,8 @@
 import { type Signal, useSignal } from "@preact/signals";
 import type { Entity } from "../lib/types.ts";
+import { initials } from "../lib/format.ts";
+import { entitiesChanged } from "./shared-signals.ts";
+import Modal from "../components/Modal.tsx";
 
 interface EntityManagerProps {
   registryId: string;
@@ -23,17 +26,13 @@ export default function EntityManager(props: EntityManagerProps) {
       if (res.ok) {
         const data = await res.json();
         entities.value = data;
-        globalThis.dispatchEvent(
-          new CustomEvent("entities-changed", {
-            detail: { entities: data },
-          }),
-        );
+        entitiesChanged.value = { entities: data };
         return;
       }
     } catch {
       // ignore
     }
-    globalThis.dispatchEvent(new CustomEvent("entities-changed"));
+    entitiesChanged.value = {};
   }
 
   async function handleCreate() {
@@ -149,211 +148,15 @@ export default function EntityManager(props: EntityManagerProps) {
       </button>
 
       {isOpen.value && (
-        <div
-          class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              isOpen.value = false;
-              editingId.value = null;
-            }
+        <Modal
+          onClose={() => {
+            isOpen.value = false;
+            editingId.value = null;
           }}
-        >
-          <div class="bg-surface border border-border-custom w-full max-w-md rounded-custom shadow-2xl flex flex-col overflow-hidden">
-            <header class="px-6 py-4 border-b border-border-custom flex justify-between items-center">
-              <div>
-                <h2 class="text-xl font-bold text-white">Terceros</h2>
-                <p class="text-sm text-zinc-400 mt-1">
-                  Personas o entidades que participan en gastos
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  isOpen.value = false;
-                  editingId.value = null;
-                }}
-                class="text-slate-400 hover:text-white transition-colors"
-              >
-                <svg
-                  class="h-6 w-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    d="M6 18L18 6M6 6l12 12"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                  />
-                </svg>
-              </button>
-            </header>
-
-            <div class="p-6 space-y-4 overflow-y-auto max-h-[60vh]">
-              {error.value && <p class="text-sm text-red-300">{error.value}</p>}
-
-              <div class="flex gap-2">
-                <input
-                  class="flex-1 px-2 py-1 bg-transparent border border-white/20 rounded text-white text-sm focus:ring-primary"
-                  type="text"
-                  placeholder="Nombre del tercero"
-                  value={newName.value}
-                  onInput={(e) =>
-                    newName.value = (e.target as HTMLInputElement).value}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleCreate();
-                    }
-                  }}
-                />
-                <div class="flex items-center gap-1">
-                  {ENTITY_COLORS.slice(0, 4).map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => newColor.value = c}
-                      class={`w-6 h-6 rounded-full border-2 ${
-                        newColor.value === c
-                          ? "border-white"
-                          : "border-transparent"
-                      }`}
-                      style={`background-color: ${c}`}
-                    />
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  onClick={handleCreate}
-                  disabled={loading.value || !newName.value.trim()}
-                  class="px-4 py-2 bg-primary hover:bg-primary-light text-white text-sm font-semibold rounded-custom transition-all active:scale-95 disabled:opacity-50"
-                >
-                  +
-                </button>
-              </div>
-
-              {entities.value.length === 0
-                ? (
-                  <p class="text-sm text-zinc-400 text-center py-4">
-                    No hay terceros agregados
-                  </p>
-                )
-                : (
-                  <div class="space-y-2">
-                    {entities.value.map((entity) => (
-                      <div
-                        key={entity.id}
-                        class="flex items-center gap-3 px-3 py-2 bg-background border border-border-custom rounded-custom"
-                      >
-                        {editingId.value === entity.id
-                          ? (
-                            <>
-                              <div class="flex items-center gap-1">
-                                {ENTITY_COLORS.slice(0, 4).map((c) => (
-                                  <button
-                                    key={c}
-                                    type="button"
-                                    onClick={() => editColor.value = c}
-                                    class={`w-5 h-5 rounded-full border-2 ${
-                                      editColor.value === c
-                                        ? "border-white"
-                                        : "border-transparent"
-                                    }`}
-                                    style={`background-color: ${c}`}
-                                  />
-                                ))}
-                              </div>
-                              <input
-                                class="flex-1 px-2 py-1 bg-transparent border border-white/20 rounded text-white text-sm focus:ring-primary"
-                                type="text"
-                                value={editName.value}
-                                onInput={(e) =>
-                                  editName.value =
-                                    (e.target as HTMLInputElement).value}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") handleUpdate();
-                                }}
-                              />
-                              <button
-                                type="button"
-                                onClick={handleUpdate}
-                                class="text-xs font-semibold text-primary hover:text-primary-light"
-                              >
-                                OK
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => editingId.value = null}
-                                class="text-xs text-zinc-400 hover:text-white"
-                              >
-                                X
-                              </button>
-                            </>
-                          )
-                          : (
-                            <>
-                              <div
-                                class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                                style={`background-color: ${entity.color}30; color: ${entity.color}`}
-                              >
-                                {entity.name.split(" ").map((n) => n[0]).join(
-                                  "",
-                                ).substring(0, 2).toUpperCase()}
-                              </div>
-                              <span class="flex-1 text-sm font-medium text-white">
-                                {entity.name}
-                              </span>
-                              <span class="text-xs px-2 py-0.5 rounded bg-white/10 text-zinc-300">
-                                Tercero
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => startEdit(entity)}
-                                class="text-zinc-400 hover:text-white transition-colors"
-                              >
-                                <svg
-                                  class="w-4 h-4"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                  />
-                                </svg>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(entity.id)}
-                                class="text-zinc-400 hover:text-red-400 transition-colors"
-                              >
-                                <svg
-                                  class="w-4 h-4"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                  />
-                                </svg>
-                              </button>
-                            </>
-                          )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-            </div>
-
-            <footer class="px-6 py-4 border-t border-border-custom bg-white/5 flex justify-end">
+          title="Terceros"
+          subtitle="Personas o entidades que participan en gastos"
+          footer={
+            <div class="ml-auto">
               <button
                 type="button"
                 onClick={() => {
@@ -364,9 +167,170 @@ export default function EntityManager(props: EntityManagerProps) {
               >
                 Cerrar
               </button>
-            </footer>
+            </div>
+          }
+        >
+          <div class="p-6 space-y-4 overflow-y-auto max-h-[60vh]">
+            {error.value && <p class="text-sm text-red-300">{error.value}</p>}
+
+            <div class="flex gap-2">
+              <input
+                class="flex-1 px-2 py-1 bg-transparent border border-white/20 rounded text-white text-sm focus:ring-primary"
+                type="text"
+                placeholder="Nombre del tercero"
+                value={newName.value}
+                onInput={(e) =>
+                  newName.value = (e.target as HTMLInputElement).value}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleCreate();
+                  }
+                }}
+              />
+              <div class="flex items-center gap-1">
+                {ENTITY_COLORS.slice(0, 4).map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => newColor.value = c}
+                    class={`w-6 h-6 rounded-full border-2 ${
+                      newColor.value === c
+                        ? "border-white"
+                        : "border-transparent"
+                    }`}
+                    style={`background-color: ${c}`}
+                  />
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={handleCreate}
+                disabled={loading.value || !newName.value.trim()}
+                class="px-4 py-2 bg-primary hover:bg-primary-light text-white text-sm font-semibold rounded-custom transition-all active:scale-95 disabled:opacity-50"
+              >
+                +
+              </button>
+            </div>
+
+            {entities.value.length === 0
+              ? (
+                <p class="text-sm text-zinc-400 text-center py-4">
+                  No hay terceros agregados
+                </p>
+              )
+              : (
+                <div class="space-y-2">
+                  {entities.value.map((entity) => (
+                    <div
+                      key={entity.id}
+                      class="flex items-center gap-3 px-3 py-2 bg-background border border-border-custom rounded-custom"
+                    >
+                      {editingId.value === entity.id
+                        ? (
+                          <>
+                            <div class="flex items-center gap-1">
+                              {ENTITY_COLORS.slice(0, 4).map((c) => (
+                                <button
+                                  key={c}
+                                  type="button"
+                                  onClick={() => editColor.value = c}
+                                  class={`w-5 h-5 rounded-full border-2 ${
+                                    editColor.value === c
+                                      ? "border-white"
+                                      : "border-transparent"
+                                  }`}
+                                  style={`background-color: ${c}`}
+                                />
+                              ))}
+                            </div>
+                            <input
+                              class="flex-1 px-2 py-1 bg-transparent border border-white/20 rounded text-white text-sm focus:ring-primary"
+                              type="text"
+                              value={editName.value}
+                              onInput={(e) =>
+                                editName.value =
+                                  (e.target as HTMLInputElement).value}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") handleUpdate();
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={handleUpdate}
+                              class="text-xs font-semibold text-primary hover:text-primary-light"
+                            >
+                              OK
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => editingId.value = null}
+                              class="text-xs text-zinc-400 hover:text-white"
+                            >
+                              X
+                            </button>
+                          </>
+                        )
+                        : (
+                          <>
+                            <div
+                              class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                              style={`background-color: ${entity.color}30; color: ${entity.color}`}
+                            >
+                              {initials(entity.name)}
+                            </div>
+                            <span class="flex-1 text-sm font-medium text-white">
+                              {entity.name}
+                            </span>
+                            <span class="text-xs px-2 py-0.5 rounded bg-white/10 text-zinc-300">
+                              Tercero
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => startEdit(entity)}
+                              class="text-zinc-400 hover:text-white transition-colors"
+                            >
+                              <svg
+                                class="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                  stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                  stroke-width="2"
+                                />
+                              </svg>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(entity.id)}
+                              class="text-zinc-400 hover:text-red-400 transition-colors"
+                            >
+                              <svg
+                                class="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                  stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                  stroke-width="2"
+                                />
+                              </svg>
+                            </button>
+                          </>
+                        )}
+                    </div>
+                  ))}
+                </div>
+              )}
           </div>
-        </div>
+        </Modal>
       )}
     </>
   );

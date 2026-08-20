@@ -1,11 +1,27 @@
 import { useComputed, useSignal, useSignalEffect } from "@preact/signals";
-import type { DefaultSplit, Entity, Registry, User } from "../lib/types.ts";
+import type {
+  BalanceBreakdownEntry,
+  DefaultSplit,
+  Entity,
+  Participant,
+  Registry,
+  SpawnCandidate,
+  TransactionPayment,
+  User,
+} from "../lib/types.ts";
 import { cache } from "../lib/cache.ts";
 import { clearSupabaseBrowserStorage } from "./auth-storage.ts";
 import EntityManager from "./EntityManager.tsx";
 import DefaultSplitConfig from "./DefaultSplitConfig.tsx";
 import LocaleToggle from "./LocaleToggle.tsx";
 import UpgradeButton from "./UpgradeButton.tsx";
+import Modal from "../components/Modal.tsx";
+import {
+  type EnrichedTransaction,
+  entitiesChanged,
+  registrySwitch,
+  type RegistrySwitchPayload,
+} from "./shared-signals.ts";
 import type { Locale } from "../lib/i18n.ts";
 
 interface SidebarProps {
@@ -55,30 +71,22 @@ export default function Sidebar(props: SidebarProps) {
   });
 
   useSignalEffect(() => {
-    const onEntitiesChanged = async (e: Event) => {
-      const detail = (e as CustomEvent).detail as {
-        entities?: { id: string; name: string; color: string }[];
-      } | undefined;
-      if (detail?.entities) {
-        $entities.value = detail.entities as Entity[];
-        return;
-      }
-      const rid = activeRegistryId.value;
-      if (!rid) return;
-      try {
-        const res = await fetch(`/api/entities?registryId=${rid}`);
-        if (res.ok) {
-          $entities.value = await res.json();
-        }
-      } catch {
+    const announcement = entitiesChanged.value;
+    if (!announcement) return;
+    if (announcement.entities) {
+      $entities.value = announcement.entities;
+      return;
+    }
+    const rid = activeRegistryId.value;
+    if (!rid) return;
+    fetch(`/api/entities?registryId=${rid}`)
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (data) $entities.value = data as Entity[];
+      })
+      .catch(() => {
         // ignore
-      }
-    };
-    globalThis.addEventListener("entities-changed", onEntitiesChanged);
-
-    return () => {
-      globalThis.removeEventListener("entities-changed", onEntitiesChanged);
-    };
+      });
   });
 
   const sortedRegistries = useComputed(() => {
@@ -254,6 +262,30 @@ export default function Sidebar(props: SidebarProps) {
     };
   });
 
+  /** `/api/dashboard` response shape (fields we consume on switch). */
+  type DashboardApiResponse = {
+    transactions: EnrichedTransaction[];
+    transactionPayments?: TransactionPayment[];
+    balance: number;
+    balanceEntries: BalanceBreakdownEntry[];
+    users: Participant[];
+    defaultSplit: DefaultSplit | null;
+    spawnCandidates?: SpawnCandidate[];
+    entityIds?: string[];
+    entities?: Entity[];
+    lastModified: string | null;
+  };
+
+  /**
+   * Broadcast a registry snapshot to the transaction list (and keep our own
+   * entity list in sync). One helper instead of one inline dispatch per
+   * call site — the payload shape lives in shared-signals.ts, typed once.
+   */
+  function applyRegistrySwitch(payload: RegistrySwitchPayload) {
+    registrySwitch.value = payload;
+    if (payload.entities) $entities.value = payload.entities;
+  }
+
   async function switchRegistry(id: string) {
     if (id === activeRegistryId.value) return;
 
@@ -265,25 +297,24 @@ export default function Sidebar(props: SidebarProps) {
     activeRegistryId.value = id;
 
     if (cached && cached.transactions && cached.entities) {
-      $entities.value = cached.entities as Entity[];
-
-      globalThis.dispatchEvent(
-        new CustomEvent("registry-switch", {
-          detail: {
-            registryId: id,
-            transactions: cached.transactions,
-            balance: cached.balance,
-            balanceEntries: cached.balanceEntries,
-            users: cached.users,
-            currentUserId: cached.currentUserId,
-            defaultSplit: cached.defaultSplit,
-            spawnCandidates: cached.spawnCandidates ?? [],
-            entityIds: cached.entityIds ?? [],
-            entities: cached.entities,
-            lastModified: cached.lastModified,
-          },
-        }),
-      );
+      // The IndexedDB snapshot is stored with `unknown[]` fields (its dates
+      // are ISO strings); the transaction list re-coerces them on arrival.
+      applyRegistrySwitch({
+        registryId: id,
+        transactions: cached.transactions as EnrichedTransaction[],
+        transactionPayments: cached.transactionPayments as
+          | TransactionPayment[]
+          | undefined,
+        balance: cached.balance,
+        balanceEntries: cached.balanceEntries as BalanceBreakdownEntry[],
+        users: cached.users as Participant[],
+        currentUserId: cached.currentUserId,
+        defaultSplit: cached.defaultSplit as DefaultSplit | null,
+        spawnCandidates: cached.spawnCandidates as SpawnCandidate[],
+        entityIds: cached.entityIds ?? [],
+        entities: cached.entities,
+        lastModified: cached.lastModified,
+      });
 
       validateCacheInBackground(id, cached.lastModified, gen);
       return;
@@ -293,35 +324,21 @@ export default function Sidebar(props: SidebarProps) {
       const res = await fetch(`/api/dashboard?registryId=${id}`);
       if (gen !== switchGen.value) return;
       if (!res.ok) throw new Error();
-      const data = await res.json() as {
-        transactions: unknown[];
-        balance: number;
-        balanceEntries: unknown[];
-        users: unknown[];
-        defaultSplit: unknown;
-        spawnCandidates: unknown[];
-        entityIds: string[];
-        entities: { id: string; name: string; color: string }[];
-        lastModified: string | null;
-      };
-      $entities.value = data.entities ?? [];
+      const data = await res.json() as DashboardApiResponse;
 
-      globalThis.dispatchEvent(
-        new CustomEvent("registry-switch", {
-          detail: {
-            registryId: id,
-            transactions: data.transactions,
-            balance: data.balance,
-            balanceEntries: data.balanceEntries,
-            users: data.users,
-            defaultSplit: data.defaultSplit,
-            spawnCandidates: data.spawnCandidates ?? [],
-            entityIds: data.entityIds ?? [],
-            entities: data.entities ?? [],
-            lastModified: data.lastModified,
-          },
-        }),
-      );
+      applyRegistrySwitch({
+        registryId: id,
+        transactions: data.transactions,
+        transactionPayments: data.transactionPayments,
+        balance: data.balance,
+        balanceEntries: data.balanceEntries,
+        users: data.users,
+        defaultSplit: data.defaultSplit,
+        spawnCandidates: data.spawnCandidates ?? [],
+        entityIds: data.entityIds ?? [],
+        entities: data.entities ?? [],
+        lastModified: data.lastModified,
+      });
     } catch {
       if (gen !== switchGen.value) return;
       globalThis.location.href = "/dashboard";
@@ -348,36 +365,21 @@ export default function Sidebar(props: SidebarProps) {
       const dashRes = await fetch(`/api/dashboard?registryId=${registryId}`);
       if (gen !== switchGen.value) return;
       if (!dashRes.ok) return;
-      const data = await dashRes.json() as {
-        transactions: unknown[];
-        balance: number;
-        balanceEntries: unknown[];
-        users: unknown[];
-        defaultSplit: unknown;
-        spawnCandidates: unknown[];
-        entityIds: string[];
-        entities: { id: string; name: string; color: string }[];
-        lastModified: string | null;
-      };
+      const data = await dashRes.json() as DashboardApiResponse;
 
-      $entities.value = data.entities ?? [];
-
-      globalThis.dispatchEvent(
-        new CustomEvent("registry-switch", {
-          detail: {
-            registryId,
-            transactions: data.transactions,
-            balance: data.balance,
-            balanceEntries: data.balanceEntries,
-            users: data.users,
-            defaultSplit: data.defaultSplit,
-            spawnCandidates: data.spawnCandidates ?? [],
-            entityIds: data.entityIds ?? [],
-            entities: data.entities ?? [],
-            lastModified: lastModified,
-          },
-        }),
-      );
+      applyRegistrySwitch({
+        registryId,
+        transactions: data.transactions,
+        transactionPayments: data.transactionPayments,
+        balance: data.balance,
+        balanceEntries: data.balanceEntries,
+        users: data.users,
+        defaultSplit: data.defaultSplit,
+        spawnCandidates: data.spawnCandidates ?? [],
+        entityIds: data.entityIds ?? [],
+        entities: data.entities ?? [],
+        lastModified,
+      });
     } catch { /* background validation failure is non-critical */ }
   }
 
@@ -429,13 +431,17 @@ export default function Sidebar(props: SidebarProps) {
   }
 
   function copyCode() {
-    navigator.clipboard.writeText(
-      `${globalThis.location.origin}/join/${inviteCode.value}`,
-    );
-    copied.value = true;
-    setTimeout(() => {
-      copied.value = false;
-    }, 2000);
+    navigator.clipboard
+      .writeText(`${globalThis.location.origin}/join/${inviteCode.value}`)
+      .then(() => {
+        copied.value = true;
+        setTimeout(() => {
+          copied.value = false;
+        }, 2000);
+      })
+      .catch(() => {
+        // Permission denied — show nothing rather than a false "Copiado!"
+      });
   }
 
   function closeInviteModal() {
@@ -467,11 +473,12 @@ export default function Sidebar(props: SidebarProps) {
     );
     renamingId.value = null;
     try {
-      await fetch(`/api/registries/${id}`, {
+      const res = await fetch(`/api/registries/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name }),
       });
+      if (!res.ok) registries.value = oldRegistries;
     } catch {
       registries.value = oldRegistries;
     }
@@ -481,7 +488,12 @@ export default function Sidebar(props: SidebarProps) {
     if (!confirm("Eliminar este registro? Esta acción no se puede deshacer.")) {
       return;
     }
-    const res = await fetch(`/api/registries/${id}`, { method: "DELETE" });
+    let res: Response;
+    try {
+      res = await fetch(`/api/registries/${id}`, { method: "DELETE" });
+    } catch {
+      return; // offline — nothing was deleted, nothing to update
+    }
     if (res.status === 409) {
       alert("No se puede eliminar un registro con transacciones.");
       return;
@@ -662,11 +674,7 @@ export default function Sidebar(props: SidebarProps) {
                       collapsed.value && !mobileOpen.value
                         ? "justify-center p-2.5"
                         : "gap-3 px-3 py-2.5"
-                    } ${
-                      r.id === activeRegistryId.value
-                        ? "bg-white/5 border border-white/10 text-white"
-                        : "bg-white/5 border border-white/10 text-white"
-                    }`}
+                    } bg-white/5 border border-white/10 text-white`}
                   >
                     <div
                       class="w-2 h-2 rounded-full flex-shrink-0"
@@ -718,11 +726,7 @@ export default function Sidebar(props: SidebarProps) {
                     title={r.name}
                   >
                     <div
-                      class={`rounded-full flex-shrink-0 transition-all duration-300 ${
-                        collapsed.value && !mobileOpen.value
-                          ? "w-2 h-2"
-                          : "w-2 h-2"
-                      }`}
+                      class="rounded-full flex-shrink-0 transition-all duration-300 w-2 h-2"
                       style={collapsed.value && !mobileOpen.value
                         ? undefined
                         : `background-color: ${
@@ -1100,79 +1104,12 @@ export default function Sidebar(props: SidebarProps) {
       </aside>
 
       {showInvite.value && (
-        <div
-          class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) closeInviteModal();
-          }}
-        >
-          <div class="bg-surface border border-border-custom w-full max-w-md rounded-custom shadow-2xl flex flex-col overflow-hidden">
-            <header class="px-6 py-4 border-b border-border-custom">
-              <h2 class="text-xl font-bold text-white">Invitar al Registro</h2>
-              <p class="text-sm text-zinc-400 mt-1">
-                Genera un código para invitar a alguien
-              </p>
-            </header>
-            <div class="p-6 space-y-4">
-              {!inviteCode.value
-                ? (
-                  <button
-                    type="button"
-                    onClick={handleCreateInvite}
-                    disabled={inviteLoading.value}
-                    class="w-full py-3 bg-primary hover:bg-primary-light text-white font-semibold rounded-custom transition-all active:scale-95 disabled:opacity-50"
-                  >
-                    {inviteLoading.value
-                      ? "Generando..."
-                      : "Generar Código de Invitación"}
-                  </button>
-                )
-                : (
-                  <div class="space-y-3">
-                    <div class="text-center">
-                      <p class="text-sm text-zinc-400 mb-2">
-                        Código de invitación:
-                      </p>
-                      <div class="flex items-center justify-center gap-2">
-                        <span class="text-3xl font-mono font-bold text-white tracking-widest">
-                          {inviteCode.value}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={copyCode}
-                          class="p-2 hover:bg-white/10 rounded-custom text-primary transition-colors"
-                          title="Copiar"
-                        >
-                          <svg
-                            class="w-5 h-5"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                            />
-                          </svg>
-                        </button>
-                      </div>
-                      {copied.value && (
-                        <p class="text-xs text-emerald-400 mt-1">Copiado!</p>
-                      )}
-                    </div>
-                    <p class="text-xs text-zinc-500 text-center">
-                      Comparte este código o el enlace:{" "}
-                      {globalThis.location.origin}/join/{inviteCode.value}
-                    </p>
-                  </div>
-                )}
-              {inviteError.value && (
-                <p class="text-sm text-red-300">{inviteError.value}</p>
-              )}
-            </div>
-            <footer class="px-6 py-4 border-t border-border-custom bg-white/5 flex justify-end">
+        <Modal
+          onClose={closeInviteModal}
+          title="Invitar al Registro"
+          subtitle="Genera un código para invitar a alguien"
+          footer={
+            <div class="ml-auto">
               <button
                 type="button"
                 onClick={closeInviteModal}
@@ -1180,43 +1117,78 @@ export default function Sidebar(props: SidebarProps) {
               >
                 Cerrar
               </button>
-            </footer>
+            </div>
+          }
+        >
+          <div class="p-6 space-y-4">
+            {!inviteCode.value
+              ? (
+                <button
+                  type="button"
+                  onClick={handleCreateInvite}
+                  disabled={inviteLoading.value}
+                  class="w-full py-3 bg-primary hover:bg-primary-light text-white font-semibold rounded-custom transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {inviteLoading.value
+                    ? "Generando..."
+                    : "Generar Código de Invitación"}
+                </button>
+              )
+              : (
+                <div class="space-y-3">
+                  <div class="text-center">
+                    <p class="text-sm text-zinc-400 mb-2">
+                      Código de invitación:
+                    </p>
+                    <div class="flex items-center justify-center gap-2">
+                      <span class="text-3xl font-mono font-bold text-white tracking-widest">
+                        {inviteCode.value}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={copyCode}
+                        class="p-2 hover:bg-white/10 rounded-custom text-primary transition-colors"
+                        title="Copiar"
+                      >
+                        <svg
+                          class="w-5 h-5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                    {copied.value && (
+                      <p class="text-xs text-emerald-400 mt-1">Copiado!</p>
+                    )}
+                  </div>
+                  <p class="text-xs text-zinc-500 text-center">
+                    Comparte este código o el enlace:{" "}
+                    {globalThis.location.origin}/join/{inviteCode.value}
+                  </p>
+                </div>
+              )}
+            {inviteError.value && (
+              <p class="text-sm text-red-300">{inviteError.value}</p>
+            )}
           </div>
-        </div>
+        </Modal>
       )}
 
       {showNewRegistry.value && (
-        <div
-          class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) showNewRegistry.value = false;
-          }}
-        >
-          <div class="bg-surface border border-border-custom w-full max-w-md rounded-custom shadow-2xl flex flex-col overflow-hidden">
-            <header class="px-6 py-4 border-b border-border-custom">
-              <h2 class="text-xl font-bold text-white">Nuevo Registro</h2>
-              <p class="text-sm text-zinc-400 mt-1">
-                Crea un grupo para gestionar gastos compartidos
-              </p>
-            </header>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleCreateRegistry();
-              }}
-              class="p-6"
-            >
-              <input
-                type="text"
-                value={newRegistryName.value}
-                onInput={(e) =>
-                  newRegistryName.value = (e.target as HTMLInputElement).value}
-                placeholder="Ej: Compañeros de piso"
-                class="block w-full px-4 py-2.5 bg-background border border-border-custom rounded-custom text-white focus:ring-primary focus:border-primary"
-                autofocus
-              />
-            </form>
-            <footer class="px-6 py-4 border-t border-border-custom bg-white/5 flex justify-end items-center gap-3">
+        <Modal
+          onClose={() => showNewRegistry.value = false}
+          title="Nuevo Registro"
+          subtitle="Crea un grupo para gestionar gastos compartidos"
+          footer={
+            <>
               <button
                 type="button"
                 onClick={() => showNewRegistry.value = false}
@@ -1233,9 +1205,27 @@ export default function Sidebar(props: SidebarProps) {
               >
                 Crear
               </button>
-            </footer>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleCreateRegistry();
+            }}
+            class="p-6"
+          >
+            <input
+              type="text"
+              value={newRegistryName.value}
+              onInput={(e) =>
+                newRegistryName.value = (e.target as HTMLInputElement).value}
+              placeholder="Ej: Compañeros de piso"
+              class="block w-full px-4 py-2.5 bg-background border border-border-custom rounded-custom text-white focus:ring-primary focus:border-primary"
+              autofocus
+            />
+          </form>
+        </Modal>
       )}
 
       {showSplitConfig.value && (

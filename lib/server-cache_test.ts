@@ -11,6 +11,7 @@ import type { Transaction } from "./types.ts";
 import { beforeEach, describe, it } from "@std/testing/bdd";
 import {
   clearAll,
+  getCachedSpawnCandidates,
   getCachedTransactionCounts,
   getCachedTransactions,
   getUserActiveRegistry,
@@ -125,6 +126,66 @@ describe("getCachedTransactions", () => {
     const result = await getCachedTransactions("reg-1", fetcher);
     assertEquals(result.hit, false);
     assertEquals(result.transactions.length, 1);
+  });
+});
+
+describe("cross-dataset isolation", () => {
+  // The two getters share one entry per registry; these tests pin the
+  // contract that a dataset nobody fetched is never served as a hit.
+  it("does not serve empty transactions after spawn candidates ran first", async () => {
+    __setQueryResult({ rows: [{ last_modified: STAMP }] });
+    let txFetcherCalls = 0;
+
+    await getCachedSpawnCandidates(
+      "reg-1",
+      () => Promise.resolve([{ id: "c-1" } as Transaction]),
+    );
+
+    const result = await getCachedTransactions("reg-1", () => {
+      txFetcherCalls++;
+      return Promise.resolve([{ id: "tx-1" } as Transaction]);
+    });
+
+    assertEquals(result.hit, false);
+    assertEquals(result.transactions.length, 1);
+    assertEquals(txFetcherCalls, 1);
+  });
+
+  it("does not refetch spawn candidates when the cached list is empty", async () => {
+    __setQueryResult({ rows: [{ last_modified: STAMP }] });
+    let spawnFetcherCalls = 0;
+    const fetcher = (): Promise<Transaction[]> => {
+      spawnFetcherCalls++;
+      return Promise.resolve([]);
+    };
+
+    await getCachedSpawnCandidates("reg-1", fetcher);
+    const second = await getCachedSpawnCandidates("reg-1", fetcher);
+
+    assertEquals(second.length, 0);
+    assertEquals(spawnFetcherCalls, 1); // empty list IS a hit
+  });
+
+  it("keeps both datasets in one entry without clobbering each other", async () => {
+    __setQueryResult({ rows: [{ last_modified: STAMP }] });
+
+    const txs = await getCachedTransactions(
+      "reg-1",
+      () => Promise.resolve([{ id: "tx-1" } as Transaction]),
+    );
+    const spawns = await getCachedSpawnCandidates(
+      "reg-1",
+      () => Promise.resolve([{ id: "c-1" } as Transaction]),
+    );
+    const txsAgain = await getCachedTransactions(
+      "reg-1",
+      () => Promise.resolve([{ id: "SHOULD-NOT-RUN" } as Transaction]),
+    );
+
+    assertEquals(txs.hit, false);
+    assertEquals(spawns.length, 1);
+    assertEquals(txsAgain.hit, true); // transactions survived the spawn write
+    assertEquals(txsAgain.transactions[0].id, "tx-1");
   });
 });
 

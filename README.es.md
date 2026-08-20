@@ -27,8 +27,9 @@ cargos recurrentes y pagos directos entre miembros.
 - **Corte de ejercicio** — archiva las transacciones del periodo y empieza en
   ceros; los saldos pendientes se arrastran como transacciones de apertura para
   que nada se pierda
-- **Historial con búsqueda** — filtra la lista de transacciones y consulta
-  ejercicios cerrados cuando quieras
+- **Historial con búsqueda** — busca ejercicios cerrados por nombre y
+  consúltalos cuando quieras
+- **Interfaz bilingüe** — español/inglés con un selector por usuario
 - **PWA instalable** — actualizaciones optimistas, caché con service workers,
   notificaciones push e instalación en Android y escritorio
 - **Actualizaciones en tiempo real** — los cambios de otros miembros aparecen al
@@ -46,16 +47,18 @@ cargos recurrentes y pagos directos entre miembros.
 
 ## Detalles de ingeniería
 
-- **El dinero se maneja en centavos enteros** de principio a fin — sin errores
-  de punto flotante en los saldos. Las partes siempre suman exactamente el monto
-  original.
+- **Aritmética monetaria en centavos enteros** — el motor de repartos y los
+  deltas de saldo persistidos usan aritmética exacta en centavos, y la API
+  valida que las partes sumen el monto total antes de guardar nada.
 - **Reparto determinista del sobrante** — cuando una división no es exacta, los
   centavos restantes se asignan de forma reproducible (sembrados con un UUID por
   transacción): saldos auditables y justos en agregado.
 - **Persistencia exacta de saldos** — los deltas por usuario se guardan como
   `NUMERIC(12,2)` en una tabla `transaction_balances` y se suman con aritmética
   exacta de SQL, eliminando las discrepancias de 1-2 centavos que se acumulan
-  con totales flotantes.
+  con totales flotantes. Las escrituras multi-paso (transacción + pagos +
+  deltas, uniones por invitación, clonación por lotes) corren dentro de
+  transacciones de BD, así que una falla parcial no deja saldos inconsistidos.
 - **Recuperación del canal en tiempo real** — si el WebSocket de Supabase
   Realtime se cae (expiración de token, corte de red, suspensión del móvil), el
   cliente obtiene automáticamente un token nuevo y se resuscribe con retroceso
@@ -63,9 +66,10 @@ cargos recurrentes y pagos directos entre miembros.
 - **Seguridad en la base de datos** — Row-Level Security de Postgres aísla los
   datos de cada grupo; el canal de tiempo real solo entrega transacciones de los
   registros a los que pertenece el usuario autenticado.
-- **Suite de pruebas completa** — 59 suites, 417 pasos cubriendo el motor de
-  saldos, repartos, validación de rutas y reglas de negocio, con un stub de DB
-  para que las pruebas corran sin base de datos.
+- **Suite de pruebas con stubs tipados** — el motor de saldos, repartos,
+  validación de rutas y reglas de negocio corren contra stubs tipados de la base
+  de datos y de Supabase (sin BD en vivo), y los stubs se verifican en tiempo de
+  compilación contra la API real para que no se desincronicen.
 
 ## Correr en local
 
@@ -83,9 +87,11 @@ cd alapar-fresh
 cp .env.example .env   # agrega tus credenciales de Supabase y VAPID
 ```
 
-Ejecuta las migraciones en `db/` contra tu proyecto de Supabase, en orden:
-`schema.sql` primero, luego los archivos `add_*.sql`, después `enable_rls.sql`,
-`tighten_rls.sql` y finalmente `enable_realtime.sql`.
+Ejecuta las migraciones en `db/` contra tu proyecto de Supabase, en el orden
+indicado en [`docs/DATABASE.md`](docs/DATABASE.md#migrations) (`schema.sql`
+primero, luego los archivos `add_*.sql` incluido `add_billing.sql`, después
+`enable_rls.sql`, `tighten_rls.sql` y finalmente `enable_realtime.sql`;
+`drop_allowed_emails.sql` al final — es un no-op en instalaciones nuevas).
 
 Inicia el servidor de desarrollo:
 
@@ -121,7 +127,9 @@ petición falso y una capa de queries simulada.
 - [`docs/DATABASE.md`](docs/DATABASE.md) — esquema, tablas, migraciones
 - [`docs/ROUTES.md`](docs/ROUTES.md) — inventario de rutas
 - [`docs/ISLANDS.md`](docs/ISLANDS.md) — componentes interactivos
-- [`docs/COMPONENTS.md`](docs/COMPONENTS.md) — componentes de servidor
+- [`docs/COMPONENTS.md`](docs/COMPONENTS.md) — componentes presentacionales
+- [`docs/MONETIZATION.md`](docs/MONETIZATION.md) — diseño del plan Pro y runbook
+  de Polar
 - [`CHANGELOG.md`](CHANGELOG.md) — registro de cambios significativos
 
 ## Próximos pasos

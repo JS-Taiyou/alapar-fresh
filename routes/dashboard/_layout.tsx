@@ -5,14 +5,12 @@ import {
   setCachedTransactionCounts,
 } from "../../lib/server-cache.ts";
 import Sidebar from "../../islands/Sidebar.tsx";
+import { initials } from "../../lib/format.ts";
 
 export default define.layout(async function DashboardLayout(ctx) {
   const user = ctx.state.user;
   const userName = user?.name ?? "Usuario";
-  const userInitials = userName.split(" ").map((n) => n[0]).join("").substring(
-    0,
-    2,
-  ).toUpperCase();
+  const userInitials = initials(userName);
 
   const deletableRegistryIds = new Set<string>();
   if (ctx.state.registries.length > 0) {

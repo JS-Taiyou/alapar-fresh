@@ -6,6 +6,7 @@ import {
 import { Head } from "fresh/runtime";
 import TransactionCard from "../../../components/TransactionCard.tsx";
 import type { Participant, Transaction } from "../../../lib/types.ts";
+import { formatMoney } from "../../../lib/format.ts";
 
 interface EnrichedTransaction extends Transaction {
   paidByUser: Participant | null;
@@ -151,11 +152,9 @@ export default define.page(function ExerciseDetail(ctx) {
               </h1>
               <p class="text-slate-400 text-sm">
                 {exercise.transactionCount} movimientos &bull; Total:{" "}
-                {personalTotal >= 0 ? "+" : "-"}${Math.abs(personalTotal)
-                  .toLocaleString(
-                    "en-US",
-                    { minimumFractionDigits: 2, maximumFractionDigits: 2 },
-                  )}
+                {personalTotal >= 0 ? "+" : "-"}${formatMoney(
+                  Math.abs(personalTotal),
+                )}
               </p>
             </div>
           </header>

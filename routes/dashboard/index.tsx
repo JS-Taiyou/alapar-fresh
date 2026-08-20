@@ -21,18 +21,10 @@ import type {
   BalanceBreakdownEntry,
   DefaultSplit,
   Participant,
+  SpawnCandidate,
   TransactionPayment,
 } from "../../lib/types.ts";
 import type { EnrichedTransaction } from "../../islands/shared-signals.ts";
-
-interface SpawnCandidate {
-  id: string;
-  description: string;
-  type: "parcialidad" | "recurrente";
-  originalAmount: number;
-  installmentCurrent: number | null;
-  installmentTotal: number | null;
-}
 
 interface DashboardData {
   transactions: EnrichedTransaction[];

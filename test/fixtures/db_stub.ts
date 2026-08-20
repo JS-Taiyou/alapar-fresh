@@ -58,6 +58,9 @@ export function getPool() {
   return {} as unknown;
 }
 
+/** Mirrors the real module's QueryFn type through the stub's `query` shape. */
+export type QueryFn = typeof query;
+
 export function query(
   text: string,
   params?: unknown[],
@@ -76,4 +79,15 @@ export function query(
     rows: resolved.rows,
     rowCount: resolved.rowCount ?? resolved.rows.length,
   });
+}
+
+/**
+ * Stub for the real `withTransaction`: no BEGIN/COMMIT (the stub has no
+ * client to connect), just run the unit against the stubbed `query` so tests
+ * exercise the same code path with the same result-injection semantics.
+ */
+export async function withTransaction<T>(
+  fn: (q: typeof query) => Promise<T>,
+): Promise<T> {
+  return await fn(query);
 }

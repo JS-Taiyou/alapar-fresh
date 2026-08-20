@@ -1,4 +1,5 @@
 import type { Participant, Transaction } from "../lib/types.ts";
+import { formatMoney } from "../lib/format.ts";
 import {
   formatDate,
   formatTime,
@@ -34,10 +35,7 @@ export default function TransactionCard(props: TransactionCardProps) {
       ? allUsers.find((u) => u.id === recipientSplit.userId)
       : null;
     const payerUser = paidByUser;
-    const formattedAmount = tx.originalAmount.toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+    const formattedAmount = formatMoney(tx.originalAmount);
 
     const badgeBg = tx.type === "pago"
       ? "bg-indigo-500/20 text-indigo-300 border-l-indigo-500"
@@ -149,18 +147,11 @@ export default function TransactionCard(props: TransactionCardProps) {
             isPositive ? "text-green-500" : "text-red-500"
           }`}
         >
-          {isPositive ? "+" : "-"}{" "}
-          ${Math.abs(personalBalance).toLocaleString("en-US", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}
+          {isPositive ? "+" : "-"} ${formatMoney(Math.abs(personalBalance))}
         </span>
         <span class="text-xs text-slate-500">
           {t("tx.of_total", {
-            total: perInstallmentTotal.toLocaleString("en-US", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            }),
+            total: formatMoney(perInstallmentTotal),
           })}
         </span>
       </div>

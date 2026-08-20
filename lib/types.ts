@@ -92,3 +92,17 @@ export interface BalanceBreakdownEntry {
   userColor: string;
   amount: number;
 }
+
+/**
+ * A recurring/installment template offered for inclusion when a new period
+ * starts. Shared by the dashboard SSR handler, the recurring-spawn island and
+ * the transaction list's registry-switch payload.
+ */
+export interface SpawnCandidate {
+  id: string;
+  description: string;
+  type: "parcialidad" | "recurrente";
+  originalAmount: number;
+  installmentCurrent: number | null;
+  installmentTotal: number | null;
+}

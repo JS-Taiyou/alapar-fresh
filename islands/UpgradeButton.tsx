@@ -1,4 +1,5 @@
 import { useSignal } from "@preact/signals";
+import Modal from "../components/Modal.tsx";
 import { type Locale, t as translate } from "../lib/i18n.ts";
 
 /**
@@ -58,49 +59,42 @@ export default function UpgradeButton(
       </button>
 
       {open.value && (
-        <>
-          <div
-            class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
-            onClick={() => open.value = false}
-          />
-          <div class="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
-            <div class="pointer-events-auto bg-surface border border-border-custom rounded-custom p-6 w-full max-w-sm animate-scale-in">
-              <h3 class="text-lg font-bold text-white text-center mb-1">
-                {t("billing.upgrade")}
-              </h3>
-              <p class="text-xs text-zinc-400 text-center mb-5">
-                {t("billing.upgrade_hint_owner")}
-              </p>
-              <div class="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  disabled={redirecting.value}
-                  onClick={() => goToCheckout("monthly")}
-                  class="py-3 rounded-custom bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold transition-all active:scale-95 disabled:opacity-50"
-                >
-                  <span class="block text-sm">{t("billing.monthly")}</span>
-                  <span class="block text-xs text-zinc-400">$1.99</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={redirecting.value}
-                  onClick={() => goToCheckout("yearly")}
-                  class="py-3 rounded-custom btn-primary border border-primary-light/40 font-semibold transition-all active:scale-95 disabled:opacity-50"
-                >
-                  <span class="block text-sm">{t("billing.yearly")}</span>
-                  <span class="block text-xs opacity-80">$15 · -37%</span>
-                </button>
-              </div>
+        <Modal
+          onClose={() => open.value = false}
+          title={t("billing.upgrade")}
+          subtitle={t("billing.upgrade_hint_owner")}
+          widthClass="max-w-sm"
+        >
+          <div class="p-6">
+            <div class="grid grid-cols-2 gap-3">
               <button
                 type="button"
-                onClick={() => open.value = false}
-                class="mt-4 w-full text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                disabled={redirecting.value}
+                onClick={() => goToCheckout("monthly")}
+                class="py-3 rounded-custom bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold transition-all active:scale-95 disabled:opacity-50"
               >
-                {t("common.cancel")}
+                <span class="block text-sm">{t("billing.monthly")}</span>
+                <span class="block text-xs text-zinc-400">$1.99</span>
+              </button>
+              <button
+                type="button"
+                disabled={redirecting.value}
+                onClick={() => goToCheckout("yearly")}
+                class="py-3 rounded-custom btn-primary border border-primary-light/40 font-semibold transition-all active:scale-95 disabled:opacity-50"
+              >
+                <span class="block text-sm">{t("billing.yearly")}</span>
+                <span class="block text-xs opacity-80">$15 · -37%</span>
               </button>
             </div>
+            <button
+              type="button"
+              onClick={() => open.value = false}
+              class="mt-4 w-full text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
+              {t("common.cancel")}
+            </button>
           </div>
-        </>
+        </Modal>
       )}
     </>
   );

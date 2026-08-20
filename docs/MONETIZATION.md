@@ -1,8 +1,9 @@
 # Monetization — Pro tier with Polar billing
 
-> **Status: implemented** on branch `feat/monetization-pro-tier`. This document
-> describes the system **as built** — the original plan is preserved below for
-> history. User-facing behavior summary: see
+> **Status: implemented and merged to main** (originally
+> `feat/monetization-pro-tier`, merged 2026-08-18). This document describes the
+> system **as built** — the original plan is preserved below for history.
+> User-facing behavior summary: see
 > [Plans & Limits in BUSINESS_LOGIC.md](BUSINESS_LOGIC.md#plans--limits-pro-tier);
 > schema: [DATABASE.md](DATABASE.md); routes: [ROUTES.md](ROUTES.md).
 

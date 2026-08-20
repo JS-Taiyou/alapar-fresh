@@ -17,7 +17,8 @@ import {
   getRegistryPlan,
   upgradeRequired,
 } from "../../../lib/entitlements.ts";
-import type { TransactionSplit } from "../../../lib/types.ts";
+import { parseTransactionForm } from "../../../lib/transaction-validation.ts";
+import { formatMoney } from "../../../lib/format.ts";
 import { generateETag } from "../../../lib/etag.ts";
 
 export const handler = define.handlers({
@@ -59,76 +60,14 @@ export const handler = define.handlers({
     }
 
     const form = await ctx.req.formData();
-    const description = form.get("description") as string;
-    const amountRaw = form.get("amount") as string;
-    const originalAmountRaw = form.get("originalAmount") as string;
-    const type = (form.get("type") as string) || "unico";
-    const splitJsonStr = form.get("splitJson") as string;
-    const userPaid = form.get("userPaid") as string;
-    const notes = (form.get("notes") as string) || "";
+    const parsed = parseTransactionForm(form);
+    if (!parsed.ok) {
+      return Response.json({ error: parsed.error }, { status: 400 });
+    }
+    const data = parsed.data;
     const registryId = form.get("registryId") as string;
-    const installmentCurrent = form.get("installmentCurrent")
-      ? parseInt(form.get("installmentCurrent") as string)
-      : null;
-    const installmentTotal = form.get("installmentTotal")
-      ? parseInt(form.get("installmentTotal") as string)
-      : null;
-    const relatedTransactionId = (form.get("relatedTransactionId") as string) ||
-      null;
-
-    let transactionPaymentEntries:
-      | { expenseId: string; amount: number }[]
-      | undefined;
-    const tpRaw = form.get("transactionPayments") as string;
-    if (tpRaw) {
-      try {
-        transactionPaymentEntries = JSON.parse(tpRaw);
-      } catch {
-        return Response.json(
-          { error: "transactionPayments JSON inválido" },
-          { status: 400 },
-        );
-      }
-      if (!Array.isArray(transactionPaymentEntries)) {
-        return Response.json(
-          { error: "transactionPayments JSON inválido" },
-          { status: 400 },
-        );
-      }
-    }
-
-    if (!description || !description.trim()) {
-      return Response.json({ error: "Descripción requerida" }, { status: 400 });
-    }
-    if (!amountRaw || isNaN(parseFloat(amountRaw))) {
-      return Response.json({ error: "Monto inválido" }, { status: 400 });
-    }
-    const amount = parseFloat(amountRaw);
-    if (!isFinite(amount)) {
-      return Response.json({ error: "Monto inválido" }, { status: 400 });
-    }
-    const originalAmount = originalAmountRaw
-      ? parseFloat(originalAmountRaw)
-      : amount;
-    if (!isFinite(originalAmount)) {
-      return Response.json({ error: "Monto original inválido" }, {
-        status: 400,
-      });
-    }
-    if (!userPaid) {
-      return Response.json({ error: "Usuario pagador requerido" }, {
-        status: 400,
-      });
-    }
     if (!registryId) {
       return Response.json({ error: "Registro requerido" }, { status: 400 });
-    }
-
-    let splitJson: TransactionSplit;
-    try {
-      splitJson = JSON.parse(splitJsonStr ?? "{}");
-    } catch {
-      return Response.json({ error: "Split JSON inválido" }, { status: 400 });
     }
 
     // Cross-reference validation (S7): the payer and every split recipient
@@ -140,14 +79,12 @@ export const handler = define.handlers({
         ...(await getUsers(registryId)).map((u) => u.id),
         ...(await getEntities(registryId, userId)).map((e) => e.id),
       ];
-    if (!participantIds.includes(userPaid)) {
+    if (!participantIds.includes(data.userPaid)) {
       return Response.json({ error: "Usuario pagador inválido" }, {
         status: 400,
       });
     }
-    const splitUserIds = Array.isArray(splitJson?.splits)
-      ? splitJson.splits.map((s) => s.userId)
-      : [];
+    const splitUserIds = data.splitJson.splits.map((s) => s.userId);
     if (splitUserIds.some((id) => !participantIds.includes(id))) {
       return Response.json({ error: "Participante inválido en el split" }, {
         status: 400,
@@ -155,8 +92,8 @@ export const handler = define.handlers({
     }
 
     const refIds = [
-      ...(relatedTransactionId ? [relatedTransactionId] : []),
-      ...(transactionPaymentEntries ?? []).map((e) => e.expenseId),
+      ...(data.relatedTransactionId ? [data.relatedTransactionId] : []),
+      ...(data.transactionPaymentEntries ?? []).map((e) => e.expenseId),
     ];
     if (refIds.length > 0) {
       const refs = await getTransactionsByIds(refIds);
@@ -183,7 +120,7 @@ export const handler = define.handlers({
     // TOCTOU note: two racing creates could both pass the count check and
     // land N+1 templates. Accepted risk — the cap is a product limit, not a
     // security boundary; the worst case is one extra template on free.
-    if (type === "parcialidad" || type === "recurrente") {
+    if (data.type === "parcialidad" || data.type === "recurrente") {
       const planInfo = await getRegistryPlan(registryId);
       if (planInfo && !planInfo.isPro) {
         const activeTemplates = await countActiveTemplates(registryId);
@@ -196,23 +133,23 @@ export const handler = define.handlers({
     const tx = await createTransaction(
       {
         registry_id: registryId,
-        description,
-        amount,
-        originalAmount,
-        type: type as "unico" | "parcialidad" | "recurrente",
+        description: data.description,
+        amount: data.amount,
+        originalAmount: data.originalAmount,
+        type: data.type,
         exerciseId: null,
-        installmentCurrent,
-        installmentTotal,
+        installmentCurrent: data.installmentCurrent,
+        installmentTotal: data.installmentTotal,
         recurringDisabled: false,
         recurringGroupId: crypto.randomUUID(),
-        notes,
-        splitJson,
+        notes: data.notes,
+        splitJson: data.splitJson,
         creatorId: userId,
-        userPaid,
-        relatedTransactionId,
+        userPaid: data.userPaid,
+        relatedTransactionId: data.relatedTransactionId,
       },
       userId,
-      transactionPaymentEntries,
+      data.transactionPaymentEntries,
     );
 
     if (!tx) {
@@ -223,12 +160,7 @@ export const handler = define.handlers({
 
     sendPushToRegistry(registryId, {
       title: "Nueva transacción",
-      body: `${description} — $${
-        originalAmount.toLocaleString("en-US", {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })
-      }`,
+      body: `${data.description} — $${formatMoney(data.originalAmount)}`,
       registryId,
       url: "/dashboard",
     }, userId).catch((err) =>

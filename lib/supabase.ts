@@ -5,10 +5,16 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
+// Module-level singleton: the JS client is an HTTP client (no connection
+// pool to exhaust), and creating one per request just churns fetch/GoTrue
+// state on every middleware invocation.
+let serverClient: SupabaseClient | null = null;
+
 export function createServerClient(): SupabaseClient {
-  return createClient(supabaseUrl, supabaseServiceRoleKey, {
+  serverClient ??= createClient(supabaseUrl, supabaseServiceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+  return serverClient;
 }
 
 export function getSupabaseUrl(): string {

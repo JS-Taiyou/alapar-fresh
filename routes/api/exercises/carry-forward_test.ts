@@ -118,6 +118,44 @@ describe("carry-forward POST — source registry checks (B3)", () => {
     assertEquals(res.status, 403);
   });
 
+  it("rejects quantity > 1 on a recurrente source (silently ignored before)", async () => {
+    __setQueryResult((text) => {
+      if (text.includes("id = ANY")) return { rows: [txRow("t1", "r1")] };
+      return { rows: [] };
+    });
+    const ctx = memberCtx(
+      jsonRequest(URL, { items: [{ id: "t1", quantity: 3 }] }),
+    );
+    const res = await handler.POST!(ctx as never);
+    assertEquals(res.status, 400);
+    const body = await res.json();
+    assertEquals(typeof body.error, "string");
+  });
+
+  it("accepts quantity > 1 on a parcialidad source", async () => {
+    __setQueryResult((text) => {
+      if (text.includes("id = ANY")) {
+        return {
+          rows: [{
+            ...txRow("t1", "r1"),
+            type: "parcialidad",
+            installment_current: 3,
+            installment_total: 12,
+          }],
+        };
+      }
+      if (text.includes("INSERT INTO transactions")) {
+        return { rows: [{ ...txRow("clone-1", "r1"), id: "clone-1" }] };
+      }
+      return { rows: [] };
+    });
+    const ctx = memberCtx(
+      jsonRequest(URL, { items: [{ id: "t1", quantity: 3 }] }),
+    );
+    const res = await handler.POST!(ctx as never);
+    assertEquals(res.status, 200);
+  });
+
   it("clones and returns the created count when every source is in a member registry", async () => {
     __setQueryResult((text) => {
       if (text.includes("id = ANY")) return { rows: [txRow("t1", "r1")] };

@@ -3,12 +3,26 @@
 Islands are Fresh's interactive Preact components that hydrate on the client.
 They use `@preact/signals` for reactive state management.
 
+## Cross-island state — `islands/shared-signals.ts`
+
+Signals live in the islands that own them; when siblings must synchronize, they
+do it through two module-level signals instead of DOM events:
+
+- **`registrySwitch`** — the Sidebar publishes a full registry snapshot (typed
+  as `RegistrySwitchPayload`) on every registry switch; TransactionList reacts
+  by replacing its data signals
+- **`entitiesChanged`** — EntityManager publishes the fresh entity list (or a
+  "refetch" hint when the list wasn't returned)
+
+Both are client-only: nothing reads them during SSR, and producers always assign
+freshly-built objects so repeated updates keep notifying.
+
 ---
 
 ## `AuthForm` — `islands/AuthForm.tsx`
 
 **Props**:
-`{ mode: "login" | "signup", supabaseUrl: string, supabaseAnonKey: string }`
+`{ mode: "login" | "signup", supabaseUrl: string, supabaseAnonKey: string, locale?: Locale }`
 
 Client-side authentication form using Supabase JS SDK directly in the browser.
 
@@ -64,14 +78,18 @@ OAuth landing page (`/auth/callback`) for the Google sign-in flow.
 
 ## `CortarButton` — `islands/CortarButton.tsx`
 
-**Props**: `{ hasTransactions: boolean }`
+**Props**: `{ hasTransactions: boolean, registryId: string, isDemo?: boolean }`
 
-The "Cortar" (cut/settle) button in the dashboard header.
+The "Cortar" (cut/settle) button in the dashboard header (hidden on the demo
+page).
 
 **Business Logic**:
 
 - Button is **only enabled** when `hasTransactions === true`
-- On click, POSTs to `/api/exercises` to create the exercise, then reloads
+- On click, opens a confirmation modal (shared `Modal` component, Escape to
+  close), then POSTs to `/api/exercises` and reloads
+- A failed cut shows an error alert instead of reloading — a rejected cut is
+  never indistinguishable from a successful one
 
 **Disabled state**: Grayed out, `cursor-not-allowed`, when no transactions
 exist.
@@ -80,9 +98,11 @@ exist.
 
 ## `EntityManager` — `islands/EntityManager.tsx`
 
-**Props**: `{ registryId: string, entities: Entity[], onUpdate: () => void }`
+**Props**: `{ registryId: string, entities: Signal<Entity[]> }`
 
-Modal for managing third-party entities (terceros). Button with users icon.
+Modal (shared `Modal` scaffold) for managing third-party entities (terceros).
+Button with users icon. Rendered inside the Sidebar (desktop and mobile asides
+share one `entities` signal).
 
 **Behavior**:
 
@@ -92,43 +112,28 @@ Modal for managing third-party entities (terceros). Button with users icon.
   transactions)
 - Shows color picker (8 preset colors)
 - Entities display with avatar initials and "Tercero" badge
-- Calls `onUpdate` callback after any change to refresh parent state
+- After any change, publishes the fresh entity list (or a "refetch" hint) on the
+  shared `entitiesChanged` signal — the Sidebar and TransactionList react to it
+  without a prop callback
 
 ---
 
 ## `DefaultSplitConfig` — `islands/DefaultSplitConfig.tsx`
 
 **Props**:
-`{ registryId: string, users: User[], defaultSplit: DefaultSplit | null, onUpdate: () => void }`
+`{ registryId: string, users: User[], defaultSplit: DefaultSplit | null, isOwner: boolean, autoOpen?: boolean, onClose?: () => void }`
 
-Owner-only modal for configuring default split percentages.
+Owner-only modal (shared `Modal` scaffold) for configuring default split
+percentages. Opened per-registry from the Sidebar's "%" action.
 
 **Behavior**:
 
 - Shows all participants with percentage inputs
 - POSTs to `/api/registries/default-split` with `{ splits, registryId }`
-- DELETEs to `/api/registries/default-split` to clear
+- DELETEs to `/api/registries/default-split` to clear (reloads — the default
+  split feeds the SSR-rendered dashboard)
 - Auto-complement for 2 users (editing one fills the other to 100%)
-- Calls `onUpdate` callback after save/clear
-
----
-
-## `InviteManager` — `islands/InviteManager.tsx`
-
-**Props**: `{ registryId: string }`
-
-Modal for managing invitations within a registry. Button with user+ icon.
-
-**Behavior**:
-
-- On open, loads all invitations for the registry via
-  `GET /api/invitations/list`
-- **Create**: POSTs to `/api/invitations`, displays generated code with copy
-  button. No explicit expiry is sent — the server defaults new invitations to a
-  7-day expiry
-- **Revoke**: POSTs to `/api/invitations/[id]/revoke`, refreshes list
-- Shows usage count (`currentUses/maxUses`) and revoked status for each
-  invitation
+- Percentages must sum to 100% before the save button enables
 
 ---
 
@@ -161,7 +166,10 @@ No props. Simple form on the home page for entering an invite code.
 
 ## `RecurringSpawn` — `islands/RecurringSpawn.tsx`
 
-**Props**: `{ candidates: SpawnCandidate[] }`
+**Props**: `{ candidates: Signal<SpawnCandidate[]>, isDemo?: boolean }`
+
+(`SpawnCandidate` comes from `lib/types.ts` — shared with the dashboard handler
+and the registry-switch payload.)
 
 Manages recurring expense carry-forward after a cut. Button with refresh icon
 and badge count.
@@ -178,28 +186,30 @@ and badge count.
 - Users can **disable** recurring items (POSTs to
   `/api/transactions/disable-recurring`)
 - On confirm: POSTs checked items with quantities to
-  `/api/exercises/carry-forward`
-- Reloads page after spawn
+  `/api/exercises/carry-forward`, then reloads
+- A failed spawn shows an error alert instead of reloading silently
 
 ---
 
 ## `SearchBar` — `islands/SearchBar.tsx`
 
-No props. Search input for the exercise history page.
+**Props**: `{ placeholder?: string, filterSelector?: string }`
+
+Search input for the exercise history page.
 
 **Behavior**:
 
-- Text input with search icon
-- Updates a signal on input
-- Currently **cosmetic only** — the filtering is not wired up server-side
-  (exercises are pre-rendered)
+- Text input with search icon, updates a signal on input
+- When `filterSelector` is given (history passes `[data-exercise-card]`), hides
+  the DOM nodes whose text doesn't match the query — client-side filtering over
+  the server-rendered cards
 
 ---
 
 ## `Sidebar` — `islands/Sidebar.tsx`
 
 **Props**:
-`{ registries: Registry[], activeRegistryId: string, userName: string, userInitials: string, isOwner: boolean, entities: Entity[], registryUsers: User[], defaultSplit: DefaultSplit | null, deletableRegistryIds: Set<string>, initialCollapsed?: boolean }`
+`{ registries: Registry[], activeRegistryId: string, userName: string, userInitials: string, isOwner: boolean, ownerRegistryIds: Set<string>, entities: Entity[], registryUsers: User[], defaultSplit: DefaultSplit | null, deletableRegistryIds: Set<string>, initialCollapsed?: boolean, locale?: Locale, showUpgrade?: boolean }`
 
 Collapsible sidebar with user info, registry list, entity manager, default split
 config, invite button, and actions.
@@ -225,21 +235,25 @@ reload needed).
 
 **Cache-aware registry switch**:
 
-1. POST `/api/registries/switch`
-2. Update `activeRegistryId` signal immediately
-3. Read IndexedDB snapshot for target registry
-4. If snapshot exists → dispatch `registry-switch` CustomEvent → instant render
-5. Background: POST `/api/stamp/{id}` → compare `lastModified` → refresh if
-   stale
-6. If no snapshot → fallback to `location.href = "/dashboard"`
+1. Read the IndexedDB snapshot for the target registry (guarded by a generation
+   counter so a slower stale switch can't overwrite a newer one)
+2. Update `activeRegistryId` immediately; if a snapshot exists, publish it on
+   the shared `registrySwitch` signal (`islands/shared-signals.ts`) →
+   TransactionList updates all of its signals instantly
+3. Background: POST `/api/stamp/{id}` (which also marks the registry active
+   server-side) → compare `lastModified` → re-publish fresh data if stale
+4. No snapshot → fetch `/api/dashboard?registryId=…` and publish that (full
+   reload only on network failure)
+
+**Optimistic updates**: registry rename (and delete) apply instantly and roll
+back if the server rejects the request — a 403/409 never leaves a phantom rename
+in the list.
 
 **Owner-only features**:
 
-- "Invitar" button opens inline invite modal
-- "Terceros" button opens `EntityManager` island
-- "Default Split" button opens `DefaultSplitConfig` island
-- Rename registry (inline edit)
-- Delete empty registries
+- "Invitar" button opens the invite-code modal (shared `Modal` scaffold)
+- Rename / configure default split / delete actions on each owned registry row
+  (delete only offered for registries with zero transactions)
 
 **Actions**:
 
@@ -304,10 +318,10 @@ fetches it from `/api/auth/token` when subscribing.
 **Caching**:
 
 - On data change: writes full snapshot to IndexedDB via `lib/cache.ts`
-  (transactions, balance, users, lastModified)
-- Listens for `registry-switch` CustomEvent from Sidebar → updates all signals
-  instantly from cached data
-- Deserializes `createdAt` strings back to `Date` objects on cache read
+  (transactions, payments, balance, users, lastModified)
+- Watches the shared `registrySwitch` signal (published by the Sidebar) →
+  updates all signals instantly from the switched registry's data
+- Deserializes `createdAt` strings back to `Date` objects on arrival
 
 **Realtime**:
 
@@ -366,3 +380,63 @@ fetches it from `/api/auth/token` when subscribing.
 - Edit: PUTs FormData to `/api/transactions/[id]`
 - Both use optimistic updates — signals updated before server response, rolled
   back on error
+
+---
+
+## `DemoTour` — `islands/DemoTour.tsx`
+
+No props. Floating tour button (bottom-left) on the `/demo` page, powered by
+driver.js.
+
+**Behavior**:
+
+- Auto-opens the tour picker on first visit (suppressed afterwards via a
+  `localStorage` flag; the button always remains)
+- **Tour Rápido** (5 steps): dashboard highlights only
+- **Tour Completo**: additionally opens the real expense modal (clicks the FAB
+  programmatically), walks the type/split-mode controls, then closes it by
+  dispatching a synthetic Escape — which works because every modal gets its
+  Escape handling from the shared `Modal` component — and repeats inside the
+  payment modal for the pay-exact-debt step
+- Tour end/dismissal is detected via driver's `onDestroyed` hook
+
+---
+
+## `UpgradeButton` — `islands/UpgradeButton.tsx`
+
+**Props**: `{ locale: Locale, registryId: string, isOwner: boolean }`
+
+"Mejorar a Pro" CTA in the sidebar footer (rendered only for the free active
+registry). Owner variant opens a monthly/yearly picker modal (shared `Modal`
+scaffold) and redirects to the Polar checkout; non-owners see a hint to ask the
+owner instead.
+
+---
+
+## `LocaleToggle` — `islands/LocaleToggle.tsx`
+
+**Props**: `{ locale: Locale, full?: boolean, class?: string }`
+
+ES/EN pill toggle (`role="group"` + `aria-pressed`). POSTs the choice to
+`/api/locale` and reloads so the SSR re-renders in the new language.
+
+---
+
+## `ForgotPassword` — `islands/ForgotPassword.tsx`
+
+**Props**: `{ supabaseUrl: string, supabaseAnonKey: string, locale?: Locale }`
+
+Email-only form on `/forgot-password`: calls Supabase `resetPasswordForEmail`
+client-side (redirecting back to `/reset-password`) and shows the localized
+confirmation.
+
+---
+
+## `ResetPassword` — `islands/ResetPassword.tsx`
+
+**Props**: `{ supabaseUrl: string, supabaseAnonKey: string, locale?: Locale }`
+
+New-password form on `/reset-password`: establishes the recovery session in
+memory only (`setSession` — never persisted), updates the password via
+`updateUser`, then shows a success card linking to `/login` (the recovery
+session is intentionally not turned into an app session).

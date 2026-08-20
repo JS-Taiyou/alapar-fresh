@@ -1,6 +1,7 @@
 import { type Signal, useSignal } from "@preact/signals";
 import type { BalanceBreakdownEntry, Participant } from "../lib/types.ts";
 import { type Locale, t as translate } from "../lib/i18n.ts";
+import { formatMoney, initials } from "../lib/format.ts";
 
 interface BalanceBreakdownProps {
   balance: Signal<number>;
@@ -36,10 +37,7 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
   // Sign before the $ ("-$11.99", never "$-11.99"), matching the popover's
   // +$/-$ convention and the transaction cards.
   const balanceStr = (displayBalance < 0 ? "-$" : "$") +
-    Math.abs(displayBalance).toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+    formatMoney(Math.abs(displayBalance));
 
   return (
     <div class="relative min-w-0 shrink">
@@ -129,12 +127,7 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
                         {t("balance.owed_to_you")}
                       </h4>
                       {owedToMe.map((entry) => {
-                        const initials = entry.userName
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")
-                          .substring(0, 2)
-                          .toUpperCase();
+                        const userInitials = initials(entry.userName);
                         return (
                           <div
                             key={entry.userId}
@@ -145,7 +138,7 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
                                 class="h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
                                 style={`background-color: ${entry.userColor}25; color: ${entry.userColor}`}
                               >
-                                {initials}
+                                {userInitials}
                               </div>
                               <span class="text-sm text-zinc-300">
                                 {entry.userName}
@@ -153,10 +146,7 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
                             </div>
                             <span class="text-sm font-semibold text-green-400">
                               +$
-                              {entry.amount.toLocaleString("en-US", {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
+                              {formatMoney(entry.amount)}
                             </span>
                           </div>
                         );
@@ -174,12 +164,7 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
                         {t("balance.you_owe")}
                       </h4>
                       {owedByMe.map((entry) => {
-                        const initials = entry.userName
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")
-                          .substring(0, 2)
-                          .toUpperCase();
+                        const userInitials = initials(entry.userName);
                         return (
                           <div
                             key={entry.userId}
@@ -190,7 +175,7 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
                                 class="h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
                                 style={`background-color: ${entry.userColor}25; color: ${entry.userColor}`}
                               >
-                                {initials}
+                                {userInitials}
                               </div>
                               <span class="text-sm text-zinc-300">
                                 {entry.userName}
@@ -198,10 +183,7 @@ export default function BalanceBreakdown(props: BalanceBreakdownProps) {
                             </div>
                             <span class="text-sm font-semibold text-red-400">
                               -$
-                              {Math.abs(entry.amount).toLocaleString("en-US", {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
+                              {formatMoney(Math.abs(entry.amount))}
                             </span>
                           </div>
                         );

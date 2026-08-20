@@ -35,4 +35,4 @@ jobs:
         run: deno task check:types
 
       - name: Test
-        run: deno test --no-check --config deno.test.json --allow-env
+        run: deno test --config deno.test.json --allow-env

@@ -26,8 +26,7 @@ No authentication required.
 
 **File**: `routes/login.tsx`
 
-Displays `AuthForm` island in `mode="login"`. Shows an unauthorized error banner
-if `?error=unauthorized` query param is present.
+Displays `AuthForm` island in `mode="login"`.
 
 Passes `supabaseUrl` and `supabaseAnonKey` as props to the island for
 client-side Supabase auth.
@@ -39,6 +38,41 @@ client-side Supabase auth.
 Displays `AuthForm` island in `mode="signup"`. Same pattern as login — client
 handles signup via Supabase, then calls `/api/auth/callback` to set server
 cookies.
+
+### `/forgot-password` — Password Reset Request
+
+**File**: `routes/forgot-password.tsx`
+
+Public page rendering the `ForgotPassword` island inside `AuthCardLayout`.
+Client-side Supabase `resetPasswordForEmail` — no server state involved.
+
+### `/reset-password` — Set New Password
+
+**File**: `routes/reset-password.tsx`
+
+Public page rendering the `ResetPassword` island inside `AuthCardLayout`.
+Receives the Supabase recovery-session redirect (after the email link); the
+island sets the session in memory only, updates the password via `updateUser`,
+and points the user back to `/login`.
+
+### `/auth/callback` — OAuth Landing Page
+
+**File**: `routes/auth/callback.tsx`
+
+Renders the `AuthCallback` island for the Google PKCE flow: reads `?code=` plus
+a validated relative `next` param (open-redirect guard — absolute paths fall
+back to `/dashboard`), exchanges the code, then POSTs tokens to
+`/api/auth/callback`.
+
+### `/demo` — Guided Demo
+
+**File**: `routes/demo/index.tsx`
+
+Public, no auth and no DB: the dashboard rendered from static `data/demo.json`
+(3 users, 7 transactions). All mutations are client-side-only and reset on
+reload. Includes the `DemoTour` island (driver.js quick/full tours — the full
+tour opens and closes the real transaction modal via Escape) and a
+`LocaleToggle`.
 
 ### `/join/[code]` — Join Registry via Invitation
 
@@ -124,7 +158,8 @@ Wraps all dashboard routes in a sidebar + content layout:
 **Page rendering**:
 
 - Back button → `/dashboard`
-- `SearchBar` island (client-side filter — currently cosmetic only)
+- `SearchBar` island (client-side filter: hides non-matching exercise cards via
+  the `filterSelector` prop, `[data-exercise-card]`)
 - Exercises grouped by year with `ExerciseCard` components
 - Empty state if no exercises exist
 
@@ -215,24 +250,18 @@ invalidates refresh tokens), clears auth cookies, and redirects to `/login`
 additionally wipes service-worker caches, IndexedDB snapshots, and any `sb-*`
 localStorage keys before leaving (see `Sidebar` island).
 
-### `/api/registries` — Create Registry (POST)
+### `/api/registries` — List/Create Registries (GET/POST)
 
 **File**: `routes/api/registries/index.ts`
 
-Receives form data with `name`. Creates registry via
-`createRegistry(name, userId)` which:
+**GET**: Returns the caller's registries + active registry id as JSON.
 
-- Creates registry record
-- Adds current user as `owner` in `registry_members`
-- Sets as active registry
-- Redirects to `/dashboard`
-
-### `/api/registries/switch` — Switch Active Registry (POST)
-
-**File**: `routes/api/registries/switch.ts`
-
-Receives JSON `{ registryId }`. Validates user is a member of the target
-registry. Updates `user_preferences.active_registry_id`. Returns `{ ok: true }`.
+**POST**: Receives a `name` (form data or JSON — the `Accept`/`Content-Type`
+header decides). `createRegistry(name, userId)` inserts the registry and the
+owner membership in one DB transaction. Free-plan cap on **owned effectively-
+free** registries (2) enforced first — JSON clients get `402 upgrade_required`,
+the form fallback gets a redirect with `?upgrade=…`. Returns `{ registry }`
+(JSON) or redirects to `/dashboard` (form).
 
 ### `/api/registries/[id]` — Rename/Delete Registry
 
@@ -266,8 +295,8 @@ registry.
 to the active registry). Requires membership of that registry — 403 otherwise,
 so foreign registry contents can't leak.
 
-**POST**: Creates a new entity in `registries.entities_json`. Auto-increments
-integer ID. Invalidates server cache.
+**POST**: Creates a new entity in `registries.entities_json` with a random UUID
+id and default color. Invalidates server cache.
 
 **File**: `routes/api/entities/[id].ts`
 
@@ -283,20 +312,24 @@ integer ID. Invalidates server cache.
 **GET**: Returns active transactions for the registry via server cache. Supports
 ETag/304.
 
-**POST**: Creates transaction via `createTransaction()`. Cross-reference
-validation: `userPaid` and every split `userId` must be participants (users or
-entities) of the target registry, and `relatedTransactionId`/payment
-`expenseIds` must resolve to transactions in that same registry (400 otherwise).
-Invalidates server cache for the registry. Sends Web Push notification to other
-registry members.
+**POST**: Creates transaction via `createTransaction()` (INSERT + linked
+payments + balance deltas in one DB transaction). The form is parsed by the
+shared validator (`lib/transaction-validation.ts`): amount bounds/type/
+installment ranges, split entries must be well-formed, split amounts must sum to
+the transaction total (small rounding tolerance), and linked payments may not
+exceed the pago amount. Cross-reference validation: `userPaid` and every split
+`userId` must be participants (users or entities) of the target registry, and
+`relatedTransactionId`/payment `expenseIds` must resolve to transactions in that
+same registry (400 otherwise). Invalidates server cache for the registry. Sends
+Web Push notification to other registry members.
 
 ### `/api/transactions/[id]` — Update/Delete Transaction
 
 **File**: `routes/api/transactions/[id].ts`
 
-**PUT**: Updates transaction fields from form data, with the same
-participant/reference validation as POST. Invalidates server cache for the
-registry. Sends Web Push.
+**PUT**: Updates transaction fields from form data, parsed by the same shared
+validator with the same participant/reference validation as POST. Invalidates
+server cache for the registry. Sends Web Push.
 
 **DELETE**: Deletes transaction by ID. Invalidates server cache. Returns 204 on
 success, 404 if not found. Sends Web Push.
@@ -324,7 +357,8 @@ Creates an exercise (cut) for the active registry:
    `participants`
 3. Creates exercise record, archives all active transactions
 4. Creates `ajuste` transactions for any outstanding debts to carry into next
-   period
+   period — steps 3–4 run in ONE DB transaction, so a mid-cut failure rolls the
+   archive back instead of leaving a settled-without-debts period
 5. Invalidates server cache for the registry
 6. Redirects to `/dashboard`
 
@@ -343,7 +377,8 @@ query is scoped the same way in SQL as defense in depth.
 Receives JSON `{ items: [{ id, quantity? }] }`. Validates **every** item: all
 ids must exist (404 otherwise) and every source transaction's registry must
 belong to the caller (403 otherwise). Batch caps: at most 100 items, integer
-`quantity` between 1 and 60. For each item:
+`quantity` between 1 and 60 — and `quantity > 1` is only valid for `parcialidad`
+sources (400 otherwise; recurrente items clone exactly once). For each item:
 
 - If parcialidad: clones `quantity` times, incrementing `installmentCurrent`
 - If recurrente: clones once
@@ -391,6 +426,15 @@ Owner-only, scoped in SQL: the revoke only lands when the caller owns the
 invitation's registry (regardless of which registry is active) — a foreign or
 unknown id no-ops and returns 404. Sets `revoked_at = now()` on the invitation.
 Logs to audit log.
+
+### `/api/locale` — UI Language (POST)
+
+**File**: `routes/api/locale.ts`
+
+Receives JSON `{ locale: "es" | "en" }` (anything non-`en` resolves to `es`) and
+sets the year-long `alapar-locale` cookie. The client reloads after the response
+so SSR re-renders in the new language. Locale for any request is resolved in
+`ctx.state.locale` (cookie → `Accept-Language` → `es`).
 
 ### `/api/push/subscribe` — Push Subscription (POST)
 

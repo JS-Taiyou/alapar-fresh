@@ -1,11 +1,17 @@
 import { query } from "./db.ts";
-import type { Transaction, TransactionPayment } from "./types.ts";
+import type { Transaction } from "./types.ts";
 
+/**
+ * Per-registry cache entry. Each dataset (transactions, spawn candidates,
+ * transaction counts) is populated independently — a dataset that was never
+ * fetched is `undefined` and therefore never a hit. All datasets share the
+ * registry's `lastModified` stamp, so any mutation invalidates them together
+ * via `invalidateRegistry`.
+ */
 interface RegistryCache {
-  transactions: Transaction[];
-  transactionPayments: TransactionPayment[];
-  spawnCandidates: Transaction[];
-  transactionCounts: Map<string, number> | null;
+  transactions?: Transaction[];
+  spawnCandidates?: Transaction[];
+  transactionCounts?: Map<string, number>;
   lastModified: string | null;
   cachedAt: number;
 }
@@ -54,11 +60,14 @@ export async function getStamp(registryId: string): Promise<string | null> {
   );
   if (result.rows.length === 0) return null;
   const lm = result.rows[0].last_modified;
-  const stamp = lm ? new Date(lm as string).toISOString() : null;
-  console.log("[server-cache] getStamp:", registryId, "=>", stamp);
-  return stamp;
+  return lm ? new Date(lm as string).toISOString() : null;
 }
 
+/**
+ * Get (or fill) the registry's active-transaction snapshot. Presence-based
+ * hit check: an entry written by {@link getCachedSpawnCandidates} has no
+ * `transactions` yet and must not answer here with an empty list.
+ */
 export async function getCachedTransactions(
   registryId: string,
   fetcher: () => Promise<Transaction[]>,
@@ -70,25 +79,24 @@ export async function getCachedTransactions(
   const entry = cache.get(registryId);
 
   if (
-    entry && entry.lastModified === stamp &&
-    Date.now() - entry.cachedAt < CACHE_TTL_MS
+    entry && entry.transactions !== undefined &&
+    entry.lastModified === stamp && Date.now() - entry.cachedAt < CACHE_TTL_MS
   ) {
     return { transactions: entry.transactions, hit: true };
   }
 
   const transactions = await fetcher();
-  evictIfNeeded();
-  cache.set(registryId, {
-    transactions,
-    transactionPayments: [],
-    spawnCandidates: [],
-    transactionCounts: null,
-    lastModified: stamp,
-    cachedAt: Date.now(),
+  writeDataset(registryId, stamp, (e) => {
+    e.transactions = transactions;
   });
   return { transactions, hit: false };
 }
 
+/**
+ * Get (or fill) the registry's recurring-spawn candidates. Empty candidate
+ * lists are cached like any other value — registries with no recurring
+ * templates are the common case and must not re-query on every request.
+ */
 export async function getCachedSpawnCandidates(
   registryId: string,
   fetcher: () => Promise<Transaction[]>,
@@ -100,29 +108,43 @@ export async function getCachedSpawnCandidates(
   const entry = cache.get(registryId);
 
   if (
-    entry && entry.spawnCandidates.length > 0 &&
+    entry && entry.spawnCandidates !== undefined &&
     entry.lastModified === stamp && Date.now() - entry.cachedAt < CACHE_TTL_MS
   ) {
     return entry.spawnCandidates;
   }
 
   const candidates = await fetcher();
-
-  if (entry && entry.lastModified === stamp) {
-    entry.spawnCandidates = candidates;
-  } else {
-    evictIfNeeded();
-    cache.set(registryId, {
-      transactions: [],
-      transactionPayments: [],
-      spawnCandidates: candidates,
-      transactionCounts: null,
-      lastModified: stamp,
-      cachedAt: Date.now(),
-    });
-  }
-
+  writeDataset(registryId, stamp, (e) => {
+    e.spawnCandidates = candidates;
+  });
   return candidates;
+}
+
+/**
+ * Mutate one dataset of the entry, keeping the other datasets and the stamp
+ * coherent: the data was just fetched against the CURRENT stamp, so
+ * `cachedAt` resets (the TTL clock starts when the data was verified, not
+ * when the entry was created).
+ */
+function writeDataset(
+  registryId: string,
+  stamp: string | null,
+  mutate: (entry: RegistryCache) => void,
+): void {
+  const entry = cache.get(registryId);
+  if (entry && entry.lastModified === stamp) {
+    mutate(entry);
+    entry.cachedAt = Date.now();
+    return;
+  }
+  evictIfNeeded();
+  const fresh: RegistryCache = {
+    lastModified: stamp,
+    cachedAt: Date.now(),
+  };
+  mutate(fresh);
+  cache.set(registryId, fresh);
 }
 
 export function getCachedTransactionCounts(
@@ -132,7 +154,8 @@ export function getCachedTransactionCounts(
   for (const id of registryIds) {
     const entry = cache.get(id);
     if (
-      !entry || !entry.transactionCounts || now - entry.cachedAt >= CACHE_TTL_MS
+      !entry || entry.transactionCounts === undefined ||
+      now - entry.cachedAt >= CACHE_TTL_MS
     ) {
       return { counts: new Map(), hit: false };
     }

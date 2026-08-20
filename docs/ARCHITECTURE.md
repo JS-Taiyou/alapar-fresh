@@ -45,7 +45,8 @@ Fresh Middleware (utils.ts → State)
           │
           └── Full paths (/dashboard, /api/transactions, etc.):
                ├── user (from Supabase Auth ID → users table)
-               ├── activeRegistry (from user_preferences.active_registry_id)
+               ├── activeRegistry (from the in-memory active-registry map,
+               │    set by POST /api/stamp — per-isolate, falls back to first)
                ├── registryUsers (real users in active registry via registry_members)
                ├── entities (third-parties from registries.entities_json)
                ├── participants (combined: registryUsers + entities)
@@ -74,8 +75,12 @@ alapar-fresh/
 │   ├── index.tsx              # Landing page
 │   ├── login.tsx              # Login page
 │   ├── signup.tsx             # Signup page
+│   ├── forgot-password.tsx    # Password reset request (public)
+│   ├── reset-password.tsx     # Set new password (public)
+│   ├── auth/callback.tsx      # OAuth PKCE landing page
 │   ├── join/[code].tsx        # Join registry via invite code
 │   ├── registries/new.tsx     # Create new registry
+│   ├── billing/success.tsx    # Polar checkout confirmation page
 │   ├── dashboard/
 │   │   ├── _layout.tsx        # Dashboard layout with Sidebar
 │   │   ├── index.tsx          # Main dashboard (balance + transactions)
@@ -84,28 +89,39 @@ alapar-fresh/
 │   │       └── [id].tsx       # Exercise detail
 │   ├── demo/index.tsx         # Static demo page (no auth/DB, guided tour)
 │   └── api/                   # API endpoints
-│       ├── auth/              # Auth callback + logout + token refresh
+│       ├── auth/              # Token validation callback + logout + token
+│       ├── billing/           # Polar checkout + customer portal
+│       ├── webhooks/polar.ts  # HMAC-verified Polar webhook (public)
 │       ├── dashboard.ts       # Dashboard data (ETag support)
 │       ├── entities/          # Entity CRUD (terceros)
 │       ├── exercises/         # Create exercise + carry-forward
-│       ├── invitations/       # CRUD + join
-│       ├── registries/        # Create + switch + default-split
+│       ├── invitations/       # Create + list + revoke + join
+│       ├── locale.ts          # UI language cookie
+│       ├── registries/        # List/create + rename/delete + default-split
 │       ├── stamp/[id].ts      # Lightweight registry timestamp check
 │       ├── transactions/      # CRUD + disable-recurring
-│       └── push/              # Web Push subscription endpoint
+│       └── push/              # Web Push subscription endpoints
 ├── islands/                   # Interactive client-side Preact components
+│   ├── shared-signals.ts      # Cross-island signals (registrySwitch, entitiesChanged)
 │   ├── TransactionList.tsx    # Main list (uses shared rowToEnrichedTransaction)
+│   ├── Sidebar.tsx            # Registry switcher, invite, entities, logout
 │   ├── BalanceBreakdown.tsx   # Balance header + pairwise popover
 │   ├── DemoTour.tsx           # driver.js guided tour (demo page only)
-│   ├── AuthCallback.tsx       # OAuth callback (uses AuthCardLayout)
-│   └── ...                    # Other islands
-├── components/                # Server-side presentational components
-│   ├── AuthCardLayout.tsx     # Shared auth-screen shell (bg-pattern + card)
-│   └── TransactionModal.tsx   # Create/edit transaction modal
+│   ├── UpgradeButton.tsx      # Pro CTA + interval picker
+│   ├── LocaleToggle.tsx       # ES/EN switch
+│   └── ...                    # Auth islands, EntityManager, RecurringSpawn, …
+├── components/                # Presentational components (some shared into islands)
+│   ├── Modal.tsx              # Shared modal scaffold (Escape-close contract)
+│   ├── TransactionModal.tsx   # Create/edit transaction form (used by islands)
+│   ├── AuthCardLayout.tsx     # Shared auth-screen shell
+│   ├── PaywallCard.tsx        # Locked-history placeholder (free plan)
+│   ├── ExerciseCard.tsx       # History list card
+│   └── TransactionCard.tsx    # Exercise detail card
 ├── lib/
-│   ├── db.ts                  # PostgreSQL connection pool
+│   ├── db.ts                  # PostgreSQL pool + query + withTransaction
 │   ├── supabase.ts            # Supabase client + auth helpers
 │   ├── store.ts               # Data access layer (queries + business logic)
+│   ├── transaction-validation.ts  # Shared POST/PUT form parser + money rules
 │   ├── server-cache.ts        # In-memory server cache (stamp-based invalidation)
 │   ├── cache.ts               # Client-side IndexedDB cache (registry snapshots)
 │   ├── realtime.ts            # Supabase Realtime subscriptions + channel recovery
@@ -116,14 +132,21 @@ alapar-fresh/
 │   ├── rows.ts                # Pure row mappers (rowToUser, rowToTransaction, etc.)
 │   ├── invite.ts              # generateInviteCode + filterSpawnCandidates + validateInvitation
 │   ├── auth-cookies.ts        # getCookie (handles Deno Deploy comma-mashing)
+│   ├── auth-client.ts         # Client-side auth helpers (redirect-to-login, 401 detection)
+│   ├── billing.ts             # Polar REST client + webhook HMAC verification
+│   ├── entitlements.ts        # Plan resolution + free-tier limits (single source of truth)
 │   ├── encoding.ts            # base64url, concatUint8Arrays, encodeLength
+│   ├── i18n.ts + locales/     # es/en message catalogs, resolveLocale, t()
 │   ├── routing.ts             # needsFullState, isPublicPath, routeGuard (pure)
 │   ├── sql-builders.ts        # buildBatchPlaceholders, buildTransactionUpdateSets
-│   ├── format.ts              # Input sanitizers (sanitizeDecimal, sanitizeInteger)
+│   ├── splits.ts              # Integer-cents split arithmetic (toCents, splitCents)
+│   ├── format.ts              # formatMoney, initials + input sanitizers
 │   ├── etag.ts                # generateETag
 │   └── types.ts               # TypeScript interfaces
 ├── test/                      # Test infrastructure
 │   ├── fixtures/db_stub.ts    # Controllable query() stub for route/store tests
+│   ├── fixtures/supabase_stub.ts  # Structurally-typed @supabase/supabase-js stub
+│   ├── fixtures/stub_compat.ts    # Compile-time db_stub ↔ lib/db.ts drift guard
 │   └── helpers.ts             # makeCtx builder + request helpers
 ├── db/
 │   ├── schema.sql             # Full PostgreSQL schema
@@ -133,30 +156,33 @@ alapar-fresh/
 │   ├── add_transaction_payments.sql
 │   ├── add_push_subscriptions.sql
 │   ├── add_transaction_balances.sql  # Per-user balance deltas table + backfill
+│   ├── add_billing.sql        # registries.plan + registry_subscriptions
+│   ├── drop_allowed_emails.sql      # Open-signup cleanup
 │   ├── enable_rls.sql         # Row-Level Security policies (re-runnable)
 │   ├── tighten_rls.sql        # RLS hardening follow-up (idempotent)
 │   └── enable_realtime.sql    # Publishes `transactions` via supabase_realtime
 ├── data/demo.json             # Static demo data (3 users, 7 transactions)
 ├── deno.json                  # Deno config (imports, tasks, compiler options)
-├── deno.test.json             # Test-only config (remaps lib/db.ts → stub)
+├── deno.check.jsonc           # Type-check-only config (real npm types)
+├── deno.test.json             # Test-only config (remaps db/supabase → stubs)
 ├── utils.ts                   # Fresh State definition + createDefine
 └── CHANGELOG.md               # Record of significant changes
 ```
 
-```
 ### Testing
 
-The project has a comprehensive test suite (59 suites, 417 steps) covering pure
-logic, extracted modules, and route-handler validation.
-```
-
-deno task test # run tests (uses deno.test.json with DB stub) deno task check #
-fmt + lint + type-check + tests
-
-````
 Test files live alongside source as `*_test.ts`. The test config
-(`deno.test.json`) remaps `lib/db.ts` to a stub (`test/fixtures/db_stub.ts`)
-so tests run without `DATABASE_URL` or a live database.
+(`deno.test.json`) remaps `lib/db.ts` and `@supabase/supabase-js` to stubs
+(`test/fixtures/`) so tests run without `DATABASE_URL` or a live database — and
+the suite is type-checked against those stubs (see
+`test/fixtures/supabase_stub.ts` for the structural contract and
+`test/fixtures/stub_compat.ts`, which fails `check:types` if `db_stub` drifts
+from the real `lib/db.ts` exports).
+
+```sh
+deno task test    # run tests (uses deno.test.json with DB stub)
+deno task check   # fmt + lint + type-check + tests
+```
 
 ## Authentication Flow
 
@@ -172,21 +198,20 @@ so tests run without `DATABASE_URL` or a live database.
 5. Subsequent requests: middleware reads cookie → validates with Supabase →
    resolves `State` (refreshing expired tokens single-flight, so concurrent
    requests share one refresh)
-6. First-ever request from a new Supabase user: a `users` profile row is
-   created (open signup — the app is public)
+6. First-ever request from a new Supabase user: a `users` profile row is created
+   (open signup — the app is public)
 7. Logout: `/api/auth/logout` revokes the session server-side
    (`auth.admin.signOut`) and clears cookies; the client also wipes
-   service-worker caches, IndexedDB snapshots, and any `sb-*` localStorage
-   keys
+   service-worker caches, IndexedDB snapshots, and any `sb-*` localStorage keys
 
 **Google OAuth (PKCE)**:
 
-1. `AuthForm` starts the OAuth flow with a PKCE client (`flowType: "pkce"`);
-   the code verifier is the only value persisted to localStorage
+1. `AuthForm` starts the OAuth flow with a PKCE client (`flowType: "pkce"`); the
+   code verifier is the only value persisted to localStorage
 2. Google redirects back to `/auth/callback?code=...`
-3. `AuthCallback` exchanges the code for a session
-   (`exchangeCodeForSession`), wipes the stored `sb-*` keys, then sends the
-   tokens to `/api/auth/callback` as above
+3. `AuthCallback` exchanges the code for a session (`exchangeCodeForSession`),
+   wipes the stored `sb-*` keys, then sends the tokens to `/api/auth/callback`
+   as above
 4. Redirect targets (`next`/`redirect` params) are validated to relative
    same-origin paths only — absolute URLs are rejected
 
@@ -196,9 +221,9 @@ so tests run without `DATABASE_URL` or a live database.
 - **Service Worker**: `/sw.js` — cache-first only for immutable static assets
   (`/assets/*`, `/logo.svg`, `/favicon.ico`, `/manifest.json`,
   `/sw-register.js`). `/api/*` and HTML navigations are strictly network-only
-  (never written to cache — authenticated responses must not be replayed),
-  with a generic offline shell shown on network failure. On logout the client
-  posts a `CLEAR_CACHES` message and the SW drops every cache
+  (never written to cache — authenticated responses must not be replayed), with
+  a generic offline shell shown on network failure. On logout the client posts a
+  `CLEAR_CACHES` message and the SW drops every cache
 - **Viewport**: `maximum-scale=1.0, user-scalable=no` +
   `touch-action: manipulation` on body to prevent zoom interference with
   two-finger sidebar gesture
@@ -215,20 +240,21 @@ so tests run without `DATABASE_URL` or a live database.
 - **Role-based access**: Registry membership tracked in `registry_members` with
   `owner` or `member` roles
 - **Owner-only actions**: Creating/revoking invitations, configuring default
-  split, renaming/deleting a registry, closing an exercise ("cortar").
-  Ownership is checked against the **target** registry (via
-  `ctx.state.ownerRegistryIds`), not just the active one
+  split, renaming/deleting a registry, closing an exercise ("cortar"). Ownership
+  is checked against the **target** registry (via `ctx.state.ownerRegistryIds`),
+  not just the active one
 - **Member gating**: `ctx.state.registries` only contains registries the user
   belongs to; API endpoints additionally validate any client-supplied
   `registryId`/exercise/invitation against membership (404/403 on foreign ids)
-- **Middleware protections**: CSRF middleware with no exemptions (mutating
-  requests must send a matching `Origin`); security headers on every response
-  (`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+- **Middleware protections**: CSRF middleware (mutating requests must send a
+  matching `Origin`) with a single documented exemption — the Polar webhook,
+  whose authenticity is the Standard Webhooks HMAC signature rather than a
+  session; security headers on every response (`X-Frame-Options: DENY`,
+  `X-Content-Type-Options: nosniff`,
   `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`);
-  per-IP rate limit (20 req/min → 429) on `/join`,
-  `/api/invitations/join`, `/api/auth/callback`;
-  public-path matching is segment-aware so `/joinville`-style prefixes can't
-  slip through
+  per-IP rate limit (20 req/min → 429) on `/join`, `/api/invitations/join`,
+  `/api/auth/callback`; public-path matching is segment-aware so
+  `/joinville`-style prefixes can't slip through
 
 ## State Management
 
@@ -238,7 +264,9 @@ In-memory `Map<registryId, RegistryCache>` with stamp-based invalidation. Shared
 across all users on the same server.
 
 **What's cached**: Transaction lists and spawn candidates per registry
-(identical for all users).
+(identical for all users), each tracked by **presence**: a dataset nobody has
+fetched is `undefined` and can never be served as a (possibly empty) hit, and an
+empty candidate list caches like any other value.
 
 **What's NOT cached**: Balance (pure function of `transactions + userId` —
 computed live, no DB).
@@ -264,12 +292,13 @@ currentUserId, defaultSplit, lastModified.
 
 **Registry switch flow**:
 
-1. POST `/api/registries/switch` (server-side active registry update)
-2. Read IndexedDB snapshot for target registry → dispatch `registry-switch`
-   CustomEvent → instant render
-3. Background: GET `/api/stamp/{id}` → compare `lastModified`
-4. If stamp matches → done (cache valid). If differs → fetch fresh data + update
-   signals
+1. Read the IndexedDB snapshot for the target registry → publish it on the
+   shared `registrySwitch` signal (`islands/shared-signals.ts`) → instant render
+   in TransactionList
+2. Background: POST `/api/stamp/{id}` (also marks the registry active
+   server-side) → compare `lastModified`
+3. If stamp matches → done (cache valid). If differs → fetch fresh data +
+   re-publish
 
 ### Wake-Up Detection
 
@@ -313,8 +342,10 @@ interface State {
   accessToken: string | null; // Middleware-validated token (served by /api/auth/token)
   isOwner: boolean; // Is user owner of active registry
   ownerRegistryIds: Set<string>; // Registries the user owns (target-registry checks)
+  locale: Locale; // UI language (cookie → Accept-Language → es)
+  activeRegistryPlan: RegistryPlanInfo | null; // Active registry's plan (full-state paths)
 }
-````
+```
 
 **Key concept — `Participant`**: Both real users and entities share the base
 interface `{ id, name, color }`. Calculations (balance, pairwise breakdown)
@@ -324,8 +355,11 @@ TransactionList for "tercero" badges.
 
 ### Client State (Preact Signals)
 
-Islands use `@preact/signals` for local reactive state. No global client-side
-store.
+Islands use `@preact/signals` for local reactive state. The dashboard page
+creates the shared data signals once and passes them into the islands as props;
+sibling islands synchronize through the two module-level signals in
+`islands/shared-signals.ts` (`registrySwitch`, `entitiesChanged`) — there is no
+other global store.
 
 ## Split JSON Format
 
@@ -438,11 +472,15 @@ when creating new transactions.
 
 ## "Cortar" (Cut/Settle)
 
-When balance is exactly $0.00 and there are active transactions:
+When there are active transactions (no other prerequisite — unsettled balances
+are not a blocker):
 
-1. Creates an `exercise` record spanning earliest active transaction date to now
-2. All active transactions get their `exercise_id` set (archived)
-3. Recurring/installment transactions that were archived become candidates for
+1. Computes the pairwise debts from the active transactions
+2. Creates an `exercise` record spanning earliest active transaction date to now
+3. All active transactions get their `exercise_id` set (archived)
+4. Outstanding debts carry into the new period as `ajuste` transactions, so
+   nothing is lost
+5. Recurring/installment transactions that were archived become candidates for
    carry-forward
 
 ## Carry-Forward (Recurring Spawn)

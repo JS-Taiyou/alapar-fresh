@@ -30,6 +30,28 @@ Users choose how to divide each expense:
 For 2-user registries, editing one user's value auto-complements the other
 (e.g., enter 30% → other becomes 70%).
 
+### Server-side validation (`lib/transaction-validation.ts`)
+
+The create/update routes parse the form with one shared validator, so neither
+path can drift. Beyond field presence, it enforces the money rules that keep
+balances trustworthy (whatever passes here is persisted and summed verbatim into
+`transaction_balances`):
+
+- Amounts must be finite, positive, and within a sane ceiling; `type` must be
+  one of the five known values; installments are integers in range
+  (`installmentCurrent` ≤ `installmentTotal`)
+- For expenses, split amounts must sum to the transaction total within a small
+  rounding tolerance (scales with participant count — the client's
+  percentage/fixed builders round each share independently)
+- Linked payment allocations may not exceed the pago's amount
+- Payer and every split `userId` must be participants of the target registry,
+  and every referenced transaction must live in that same registry
+
+**Write integrity**: transaction INSERT + linked payments + balance deltas, the
+update equivalent, registry creation, invitation joins, and batch cloning all
+run inside `withTransaction` (`lib/db.ts`) — a failure mid-sequence rolls the
+whole unit back instead of leaving balances drifted from transactions.
+
 ---
 
 ## Balance Calculation
@@ -151,7 +173,8 @@ transactions in the new period, so nothing is lost (see Carry-Forward below).
 3. Count and sum all active transactions
 4. Create `exercises` record
 5. Set `exercise_id` on all active transactions (moves them out of "active"
-   scope)
+   scope) — the archive and the carry-forward ajustes below run in ONE DB
+   transaction, so a mid-cut failure rolls everything back
 
 After cutting, the dashboard is empty and ready for a new period.
 
@@ -181,7 +204,9 @@ For each selected candidate:
 
 **Server-side limits**: every selected item must belong to a registry the caller
 is a member of (all items are validated, not just the first), batches are capped
-at 100 items, and `quantity` must be an integer between 1 and 60.
+at 100 items, and `quantity` must be an integer between 1 and 60 — with
+`quantity > 1` only valid for parcialidad sources (recurrente items with a
+larger quantity are rejected with a 400, never silently trimmed).
 
 ### Disabling
 
@@ -286,12 +311,13 @@ finds its registry.
 - Validation: not expired, not revoked, under max uses
 - If already a member: just sets active registry
 - If new member:
-  1. Added to `registry_members` as `member`
-  2. User profile created in registry's `users` table
-  3. Invitation `current_uses` incremented — atomically: the UPDATE itself
+  1. Invitation use claimed, membership inserted, default-split invalidation and
+     audit logging run in one DB transaction — a failure mid-join rolls the
+     claim back, so an invite use is never burned without granting membership
+  2. Invitation `current_uses` incremented — atomically: the UPDATE itself
      enforces not-revoked and `max_uses`, so concurrent joins can't overshoot
-  4. Active registry set to the joined registry
-  5. Audit log entry created
+  3. Active registry set to the joined registry
+  4. Audit log entry created
 
 ### Revoking
 
@@ -309,11 +335,12 @@ User clicks "Nuevo registro"
 → Form at /registries/new
 → User enters name (e.g., "Viaje Playa")
 → POST /api/registries
-→ store.createRegistry():
+→ store.createRegistry() (one DB transaction):
     1. INSERT into registries
     2. INSERT into registry_members as 'owner'
-    3. Set as active registry in user_preferences
-→ Redirect to /dashboard
+→ Redirect to /dashboard (the registry becomes the active one when the
+  client POSTs /api/stamp on load, which sets the server's in-memory
+  active-registry map)
 ```
 
 ---
@@ -326,12 +353,13 @@ Three caching layers coordinate via the `registries.last_modified` timestamp
 ### Server Cache (`lib/server-cache.ts`)
 
 In-memory
-`Map<registryId, { transactions, spawnCandidates, lastModified, cachedAt }>`.
+`Map<registryId, { transactions?, spawnCandidates?, transactionCounts?, lastModified, cachedAt }>`.
 
 - **Shared** across all users on the same Deno process
 - **TTL**: 15 minutes
-- **Hit condition**: cached `lastModified` matches current DB stamp AND TTL not
-  expired
+- **Hit condition** (per dataset): the dataset is present AND the cached
+  `lastModified` matches the current DB stamp AND the TTL hasn't expired — an
+  empty candidate list is a hit, a never-fetched dataset is not
 - **Invalidation**: eager `invalidateRegistry()` on any mutation
   (transaction/entity/exercise CUD)
 - **Balance**: never cached — pure function of `transactions + userId`
@@ -402,8 +430,8 @@ step 3.
 **Middleware** (`main.ts` State): Every request reads `sb-access-token` cookie,
 validates with Supabase (refreshing expired tokens single-flight), resolves user
 state. Lightweight paths (e.g., `/api/stamp`) skip full `resolveUserState()`.
-The email allowlist is enforced before a `users` row is created, even on the
-very first request.
+Signup is open — any authenticated account gets a `users` profile row on its
+first request.
 
 **Logout**: Revokes the session server-side (`auth.admin.signOut`), clears both
 cookies, and the client wipes service-worker caches / IndexedDB / `sb-*`
