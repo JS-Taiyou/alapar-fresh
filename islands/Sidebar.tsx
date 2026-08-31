@@ -322,7 +322,9 @@ export default function Sidebar(props: SidebarProps) {
     }
 
     try {
-      const res = await fetch(`/api/dashboard?registryId=${id}`);
+      const res = await fetch(`/api/dashboard?registryId=${id}`, {
+        cache: "no-store",
+      });
       if (gen !== switchGen.value) return;
       if (!res.ok) throw new Error();
       const data = await res.json() as DashboardApiResponse;
@@ -354,6 +356,7 @@ export default function Sidebar(props: SidebarProps) {
     try {
       const stampRes = await fetch(`/api/stamp/${registryId}`, {
         method: "POST",
+        cache: "no-store",
       });
       if (gen !== switchGen.value) return;
       if (!stampRes.ok) return;
@@ -363,7 +366,9 @@ export default function Sidebar(props: SidebarProps) {
 
       if (lastModified === cachedLastModified) return;
 
-      const dashRes = await fetch(`/api/dashboard?registryId=${registryId}`);
+      const dashRes = await fetch(`/api/dashboard?registryId=${registryId}`, {
+        cache: "no-store",
+      });
       if (gen !== switchGen.value) return;
       if (!dashRes.ok) return;
       const data = await dashRes.json() as DashboardApiResponse;

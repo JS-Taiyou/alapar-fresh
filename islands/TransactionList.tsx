@@ -621,7 +621,15 @@ export default function TransactionList(props: TransactionListProps) {
    * wake-up path (visibility/heartbeat), and — via the same wake-up — the
    * `online` reconnect. An in-flight guard keeps concurrent triggers from
    * racing two fetches and double-applying snapshots.
+   *
+   * The reconnect moment races the network actually coming up (a laptop's
+   * visibilitychange fires before Wi-Fi reconnects), so transient failures
+   * retry with backoff instead of leaving the UI silently stale until the
+   * next visibility flip. All fetches bypass the HTTP cache: a stored
+   * `no-cache` + ETag response can revalidate into a 304, whose empty body
+   * would read as failure and mask fresh data.
    */
+  const SYNC_RETRY_DELAYS_MS = [2_000, 5_000, 10_000];
   let syncInFlight = false;
   async function syncRegistry(): Promise<void> {
     if (props.isDemo) return;
@@ -630,29 +638,54 @@ export default function TransactionList(props: TransactionListProps) {
     if (syncInFlight) return;
     syncInFlight = true;
     try {
-      const stampRes = await fetch(`/api/stamp/${rid}`, { method: "POST" });
-      if (rid !== registryId.value) return;
+      for (let attempt = 0;; attempt++) {
+        if (rid !== registryId.value) return;
+        const outcome = await trySyncOnce(rid);
+        if (outcome === "done") return;
+        if (attempt >= SYNC_RETRY_DELAYS_MS.length) {
+          console.warn(
+            "[sync] catch-up failed after retries; waiting for next wake signal",
+          );
+          return;
+        }
+        await new Promise((r) => setTimeout(r, SYNC_RETRY_DELAYS_MS[attempt]));
+      }
+    } finally {
+      syncInFlight = false;
+    }
+  }
+
+  /** One catch-up attempt. "retry" = transient failure worth another try. */
+  async function trySyncOnce(rid: string): Promise<"done" | "retry"> {
+    try {
+      const stampRes = await fetch(`/api/stamp/${rid}`, {
+        method: "POST",
+        cache: "no-store",
+      });
+      if (rid !== registryId.value) return "done";
       // Dead session (expired refresh token): go to login instead of
       // silently leaving the screen frozen on stale data.
       if (isAuthFailure(stampRes)) {
         redirectToLogin();
-        return;
+        return "done";
       }
-      if (!stampRes.ok) return;
+      if (!stampRes.ok) return "retry";
       const { lastModified } = await stampRes.json() as {
         lastModified: string | null;
       };
       const cached = await cache.getRegistrySnapshot(rid);
-      if (rid !== registryId.value) return;
-      if (cached?.lastModified === lastModified) return;
+      if (rid !== registryId.value) return "done";
+      if (cached?.lastModified === lastModified) return "done";
 
-      const dashRes = await fetch(`/api/dashboard?registryId=${rid}`);
-      if (rid !== registryId.value) return;
+      const dashRes = await fetch(`/api/dashboard?registryId=${rid}`, {
+        cache: "no-store",
+      });
+      if (rid !== registryId.value) return "done";
       if (isAuthFailure(dashRes)) {
         redirectToLogin();
-        return;
+        return "done";
       }
-      if (!dashRes.ok) return;
+      if (!dashRes.ok) return "retry";
       const data = await dashRes.json() as {
         transactions: unknown[];
         transactionPayments: TransactionPayment[];
@@ -695,10 +728,10 @@ export default function TransactionList(props: TransactionListProps) {
         transactionPayments.value = data.transactionPayments;
       }
       props.lastModified.value = lastModified;
+      return "done";
     } catch {
-      /* catch-up failure is non-critical */
-    } finally {
-      syncInFlight = false;
+      // Network-level failure (offline, DNS not ready after resume).
+      return "retry";
     }
   }
 
@@ -727,8 +760,16 @@ export default function TransactionList(props: TransactionListProps) {
       else wokeUp();
     }
 
+    function onOnline() {
+      // The wake-up sync may have fired before the network was actually up
+      // (visibilitychange wins that race) and exhausted its retries — try
+      // again now that the browser reports connectivity.
+      lastActive = 0;
+      wokeUp();
+    }
+
     document.addEventListener("visibilitychange", onVisibility);
-    document.addEventListener("resume", wokeUp);
+    globalThis.addEventListener("online", onOnline);
     globalThis.addEventListener("pageshow", wokeUp);
 
     let lastTick = Date.now();
@@ -745,7 +786,7 @@ export default function TransactionList(props: TransactionListProps) {
     return () => {
       clearInterval(heartbeat);
       document.removeEventListener("visibilitychange", onVisibility);
-      document.removeEventListener("resume", wokeUp);
+      globalThis.removeEventListener("online", onOnline);
       globalThis.removeEventListener("pageshow", wokeUp);
     };
   });
