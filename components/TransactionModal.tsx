@@ -44,6 +44,13 @@ interface TransactionModalProps {
   entities: Signal<{ id: string; name: string; color: string }[]>;
   transactionPayments: Signal<TransactionPayment[]>;
   onRecalculate: () => void;
+  /**
+   * Receives the registry's fresh `last_modified` returned by mutation
+   * endpoints, so the caller can label its cached snapshot with the version
+   * its own write produced (a stale label forces a redundant refetch on the
+   * next sync). Called with null when the server reports no stamp.
+   */
+  onServerStamp?: (stamp: string | null) => void;
   isDemo?: boolean;
   locale?: Locale;
 }
@@ -664,23 +671,29 @@ export default function TransactionModal(props: TransactionModalProps) {
         return;
       }
 
-      const saved = await res.json();
-      const serverPaidBy = users.value.find((u) => u.id === saved.userPaid) ??
+      const saved = await res.json() as EnrichedTransaction & {
+        lastModified?: string | null;
+      };
+      const { lastModified: serverStamp, ...savedTx } = saved;
+      if (serverStamp !== undefined) {
+        props.onServerStamp?.(serverStamp ?? null);
+      }
+      const serverPaidBy = users.value.find((u) => u.id === savedTx.userPaid) ??
         null;
-      const serverCreatedAt = typeof saved.createdAt === "string"
-        ? new Date(saved.createdAt)
-        : saved.createdAt;
+      const serverCreatedAt = typeof savedTx.createdAt === "string"
+        ? new Date(savedTx.createdAt)
+        : savedTx.createdAt;
       transactions.value = transactions.value.map((t) =>
         t.id === (wasEditing ?? optimisticId)
           ? {
-            ...saved,
+            ...savedTx,
             paidByUser: serverPaidBy,
             createdAt: serverCreatedAt,
           }
           : t
       );
       if (!wasEditing) {
-        const serverId = saved.id as string;
+        const serverId = savedTx.id as string;
         if (serverId && serverId !== optimisticId) {
           transactionPayments.value = transactionPayments.value.map((tp) =>
             tp.pagoId === optimisticId ? { ...tp, pagoId: serverId } : tp
@@ -743,6 +756,15 @@ export default function TransactionModal(props: TransactionModalProps) {
           restore();
           alert(t("modal.delete_error"));
           return;
+        }
+        try {
+          const data = await res.json() as { lastModified?: string | null };
+          if (data?.lastModified !== undefined) {
+            props.onServerStamp?.(data.lastModified ?? null);
+          }
+        } catch {
+          // No JSON body (e.g. a 204) — stamp unknown; the next sync
+          // refetches and relabels.
         }
       } catch {
         restore();

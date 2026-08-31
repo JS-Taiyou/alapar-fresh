@@ -675,7 +675,8 @@ export default function TransactionList(props: TransactionListProps) {
       };
       const cached = await cache.getRegistrySnapshot(rid);
       if (rid !== registryId.value) return "done";
-      if (cached?.lastModified === lastModified) return "done";
+      // Null stamp = version unknown → always refetch, never "in sync".
+      if (lastModified && cached?.lastModified === lastModified) return "done";
 
       const dashRes = await fetch(`/api/dashboard?registryId=${rid}`, {
         cache: "no-store",
@@ -1189,6 +1190,7 @@ export default function TransactionList(props: TransactionListProps) {
         entities={props.entities}
         transactionPayments={transactionPayments}
         onRecalculate={recalculate}
+        onServerStamp={(stamp) => props.lastModified.value = stamp}
         isDemo={props.isDemo}
         locale={props.locale}
       />

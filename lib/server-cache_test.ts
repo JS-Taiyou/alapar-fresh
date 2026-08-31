@@ -133,6 +133,21 @@ describe("getCachedTransactions", () => {
     assertEquals(result.hit, false);
     assertEquals(result.transactions.length, 1);
   });
+
+  it("never hits on a NULL last_modified (version unknown, null === null must not match)", async () => {
+    __setQueryResult({ rows: [{ last_modified: null }] });
+    let fetcherCalls = 0;
+    const fetcher = (): Promise<Transaction[]> => {
+      fetcherCalls++;
+      return Promise.resolve([{ id: "tx-1" } as Transaction]);
+    };
+
+    await getCachedTransactions("reg-1", fetcher);
+    const second = await getCachedTransactions("reg-1", fetcher);
+
+    assertEquals(second.hit, false);
+    assertEquals(fetcherCalls, 2);
+  });
 });
 
 describe("cross-dataset isolation", () => {
@@ -170,6 +185,20 @@ describe("cross-dataset isolation", () => {
 
     assertEquals(second.length, 0);
     assertEquals(spawnFetcherCalls, 1); // empty list IS a hit
+  });
+
+  it("never hits spawn candidates on a NULL last_modified either", async () => {
+    __setQueryResult({ rows: [{ last_modified: null }] });
+    let spawnFetcherCalls = 0;
+    const fetcher = (): Promise<Transaction[]> => {
+      spawnFetcherCalls++;
+      return Promise.resolve([]);
+    };
+
+    await getCachedSpawnCandidates("reg-1", fetcher);
+    await getCachedSpawnCandidates("reg-1", fetcher);
+
+    assertEquals(spawnFetcherCalls, 2);
   });
 
   it("keeps both datasets in one entry without clobbering each other", async () => {

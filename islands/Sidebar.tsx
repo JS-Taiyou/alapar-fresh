@@ -364,7 +364,8 @@ export default function Sidebar(props: SidebarProps) {
         lastModified: string | null;
       };
 
-      if (lastModified === cachedLastModified) return;
+      // Null stamp = version unknown → always refetch, never "in sync".
+      if (lastModified && lastModified === cachedLastModified) return;
 
       const dashRes = await fetch(`/api/dashboard?registryId=${registryId}`, {
         cache: "no-store",

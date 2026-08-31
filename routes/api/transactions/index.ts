@@ -9,6 +9,7 @@ import {
 } from "../../../lib/store.ts";
 import {
   getCachedTransactions,
+  getStamp,
   invalidateRegistry,
 } from "../../../lib/server-cache.ts";
 import { sendPushToRegistry } from "../../../lib/push.ts";
@@ -167,6 +168,10 @@ export const handler = define.handlers({
       console.error("[push] sendPushToRegistry failed:", err)
     );
 
-    return Response.json(tx);
+    // The fresh stamp lets the creating client label its snapshot with the
+    // version its own write produced (otherwise it stores the pre-mutation
+    // stamp and forces a redundant refetch on the next sync).
+    const lastModified = await getStamp(registryId);
+    return Response.json({ ...tx, lastModified });
   },
 });

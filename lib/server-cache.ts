@@ -83,8 +83,11 @@ export async function getCachedTransactions(
     : await getStamp(registryId);
   const entry = cache.get(registryId);
 
+  // `stamp !== null`: a NULL last_modified means "version unknown" and must
+  // never be a hit — comparing null === null would pin pre-mutation data in
+  // the cache (and in the client's snapshot) forever.
   if (
-    entry && entry.transactions !== undefined &&
+    entry && entry.transactions !== undefined && stamp !== null &&
     entry.lastModified === stamp && Date.now() - entry.cachedAt < CACHE_TTL_MS
   ) {
     return { transactions: entry.transactions, hit: true };
@@ -112,8 +115,9 @@ export async function getCachedSpawnCandidates(
     : await getStamp(registryId);
   const entry = cache.get(registryId);
 
+  // Same null guard as getCachedTransactions: unknown version, no hits.
   if (
-    entry && entry.spawnCandidates !== undefined &&
+    entry && entry.spawnCandidates !== undefined && stamp !== null &&
     entry.lastModified === stamp && Date.now() - entry.cachedAt < CACHE_TTL_MS
   ) {
     return entry.spawnCandidates;

@@ -7,7 +7,7 @@ import {
   getUsers,
   updateTransaction,
 } from "../../../lib/store.ts";
-import { invalidateRegistry } from "../../../lib/server-cache.ts";
+import { getStamp, invalidateRegistry } from "../../../lib/server-cache.ts";
 import { sendPushToRegistry } from "../../../lib/push.ts";
 import { parseTransactionForm } from "../../../lib/transaction-validation.ts";
 import { formatMoney } from "../../../lib/format.ts";
@@ -98,7 +98,10 @@ export const handler = define.handlers({
       url: "/dashboard",
     }, userId).catch(() => {});
 
-    return Response.json(updated);
+    // Fresh stamp so the editing client labels its snapshot with the version
+    // its own write produced.
+    const lastModified = await getStamp(tx.registry_id);
+    return Response.json({ ...updated, lastModified });
   },
   async DELETE(ctx) {
     const userId = ctx.state.user?.id;
@@ -122,6 +125,11 @@ export const handler = define.handlers({
         registryId: tx.registry_id,
         url: "/dashboard",
       }, userId).catch(() => {});
+
+      // 200 + the fresh stamp (204 can't carry a body) so the deleting
+      // client can label its snapshot with the version its write produced.
+      const lastModified = await getStamp(tx.registry_id);
+      return Response.json({ lastModified });
     }
 
     return new Response(null, { status: 204 });
