@@ -112,6 +112,27 @@ async function deleteTransactionBalances(
   );
 }
 
+/**
+ * Bump the registry's `last_modified` stamp — the version every cache layer
+ * (server in-memory, client IndexedDB snapshot) validates freshness against.
+ *
+ * Always call this INSIDE the mutation's own transaction (pass the executor),
+ * never as a standalone statement after it: a post-commit fire-and-forget
+ * UPDATE can fail silently, leaving the stamp unchanged while the data did
+ * change — every cache would then conclude "fresh" and keep serving
+ * pre-mutation rows. Sharing the transaction makes data + stamp commit
+ * atomically.
+ */
+export async function touchRegistryStamp(
+  registryId: string,
+  q: QueryFn = query,
+): Promise<void> {
+  await q(
+    "UPDATE registries SET last_modified = NOW() WHERE id = $1",
+    [registryId],
+  );
+}
+
 const MONTHS_ES = [
   "Ene",
   "Feb",
@@ -406,6 +427,7 @@ export async function createTransaction(
       );
     }
     await writeTransactionBalances(tx, executor);
+    await touchRegistryStamp(tx.registry_id, executor);
     return tx;
   };
   if (q) return await insert(q);
@@ -454,6 +476,7 @@ export async function updateTransaction(
       await deleteTransactionBalances(id, q);
       await writeTransactionBalances(updated, q);
     }
+    await touchRegistryStamp(updated.registry_id, q);
     return updated;
   });
 }
@@ -462,11 +485,19 @@ export async function deleteTransaction(
   id: string,
   userId: string,
 ): Promise<boolean> {
-  const result = await query(
-    `DELETE FROM transactions WHERE id = $1 AND registry_id IN (SELECT rm.registry_id FROM registry_members rm WHERE rm.user_id = $2 AND rm.registry_id = transactions.registry_id)`,
-    [id, userId],
-  );
-  return (result.rowCount ?? 0) > 0;
+  // Delete + stamp bump are one unit: RETURNING captures the registry without
+  // a second read, and the bump commits with the delete.
+  return await withTransaction(async (q) => {
+    const result = await q(
+      `DELETE FROM transactions WHERE id = $1 AND registry_id IN (SELECT rm.registry_id FROM registry_members rm WHERE rm.user_id = $2 AND rm.registry_id = transactions.registry_id) RETURNING registry_id`,
+      [id, userId],
+    );
+    const deleted = (result.rowCount ?? 0) > 0;
+    if (deleted) {
+      await touchRegistryStamp(result.rows[0].registry_id as string, q);
+    }
+    return deleted;
+  });
 }
 
 export async function getExercises(registryId: string): Promise<Exercise[]> {
@@ -533,6 +564,10 @@ export async function createExercise(
     SELECT * FROM new_exercise`,
     [registryId],
   );
+  // Archiving a period is a registry mutation even when no carry-forward
+  // ajustes are written — bump inside the caller's transaction (the cortar
+  // route always passes one).
+  await touchRegistryStamp(registryId, q);
   return rowToExercise(result.rows[0]);
 }
 
@@ -726,6 +761,7 @@ export async function cloneTransactionForNextPeriod(
     );
     const cloned = rowToTransaction(result.rows[0]);
     await writeTransactionBalances(cloned, q);
+    await touchRegistryStamp(cloned.registry_id, q);
     return cloned;
   });
 }
@@ -792,6 +828,10 @@ export async function batchCloneTransactions(
     // One batched INSERT for all cloned transactions' deltas — cloning a
     // large batch must not mean one balance query per row against the pool.
     await writeTransactionBalancesBatch(rows, q);
+    // A batch may span several of the user's registries — stamp each once.
+    for (const registryId of new Set(rows.map((r) => r.registry_id))) {
+      await touchRegistryStamp(registryId, q);
+    }
     return rows;
   });
   return cloned;
@@ -835,7 +875,7 @@ export async function createEntity(
   };
   entities.push(entity);
   const result = await query(
-    `UPDATE registries SET entities_json = $1 WHERE id = $2
+    `UPDATE registries SET entities_json = $1, last_modified = NOW() WHERE id = $2
      AND EXISTS (
        SELECT 1 FROM registry_members rm
        WHERE rm.registry_id = registries.id AND rm.user_id = $3
@@ -862,7 +902,7 @@ export async function updateEntity(
     color: color ?? entities[idx].color,
   };
   const result = await query(
-    `UPDATE registries SET entities_json = $1 WHERE id = $2
+    `UPDATE registries SET entities_json = $1, last_modified = NOW() WHERE id = $2
      AND EXISTS (
        SELECT 1 FROM registry_members rm
        WHERE rm.registry_id = registries.id AND rm.user_id = $3
@@ -901,7 +941,7 @@ export async function deleteEntity(
   if (idx === -1) return false;
   entities.splice(idx, 1);
   const result = await query(
-    `UPDATE registries SET entities_json = $1 WHERE id = $2
+    `UPDATE registries SET entities_json = $1, last_modified = NOW() WHERE id = $2
      AND EXISTS (
        SELECT 1 FROM registry_members rm
        WHERE rm.registry_id = registries.id AND rm.user_id = $3
@@ -930,7 +970,7 @@ export async function setDefaultSplit(
   const memberCount = await getRegistryMemberCount(registryId);
   // Owner-scoped: the UPDATE no-ops unless `ownerId` owns the registry.
   const result = await query(
-    `UPDATE registries SET default_split_json = $1, default_split_member_count = $2 WHERE id = $3
+    `UPDATE registries SET default_split_json = $1, default_split_member_count = $2, last_modified = NOW() WHERE id = $3
      AND EXISTS (
        SELECT 1 FROM registry_members rm
        WHERE rm.registry_id = registries.id AND rm.user_id = $4 AND rm.role = 'owner'
@@ -945,7 +985,7 @@ export async function clearDefaultSplit(
   q: QueryFn = query,
 ): Promise<void> {
   await q(
-    "UPDATE registries SET default_split_json = NULL, default_split_member_count = NULL WHERE id = $1",
+    "UPDATE registries SET default_split_json = NULL, default_split_member_count = NULL, last_modified = NOW() WHERE id = $1",
     [registryId],
   );
 }
@@ -959,7 +999,7 @@ export async function clearDefaultSplitForOwner(
   ownerId: string,
 ): Promise<boolean> {
   const result = await query(
-    `UPDATE registries SET default_split_json = NULL, default_split_member_count = NULL WHERE id = $1
+    `UPDATE registries SET default_split_json = NULL, default_split_member_count = NULL, last_modified = NOW() WHERE id = $1
      AND EXISTS (
        SELECT 1 FROM registry_members rm
        WHERE rm.registry_id = registries.id AND rm.user_id = $2 AND rm.role = 'owner'
@@ -1134,6 +1174,10 @@ export async function useInvitation(
         JSON.stringify({ code }),
       ],
     );
+
+    // The member list is part of every registry snapshot — a new member must
+    // invalidate existing members' cached dashboards.
+    await touchRegistryStamp(invitation.registryId, q);
 
     return invitation.registryId;
   });

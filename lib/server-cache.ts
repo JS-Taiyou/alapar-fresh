@@ -41,12 +41,17 @@ function evictIfNeeded(): void {
   }
 }
 
+/**
+ * Evict the registry's in-memory entry after a mutation.
+ *
+ * The `last_modified` bump itself now happens INSIDE the mutation's SQL
+ * transaction (see `touchRegistryStamp` in store.ts) — data and stamp commit
+ * atomically, and entries cached by other isolates miss on the stamp
+ * comparison. This eviction only saves this isolate from serving a stale
+ * entry during the stamp-read race window right after commit.
+ */
 export function invalidateRegistry(registryId: string): void {
   cache.delete(registryId);
-  query(
-    "UPDATE registries SET last_modified = NOW() WHERE id = $1",
-    [registryId],
-  ).catch(() => {});
 }
 
 export function clearAll(): void {

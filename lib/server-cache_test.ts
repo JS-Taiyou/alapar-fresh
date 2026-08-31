@@ -57,15 +57,21 @@ describe("getUserActiveRegistry / setUserActiveRegistry", () => {
 });
 
 describe("invalidateRegistry", () => {
-  it("fires the last_modified UPDATE query", async () => {
+  it("issues no queries — the stamp bump lives in the mutation's transaction", async () => {
     invalidateRegistry("reg-1");
-    // The query is fire-and-forget; let it settle.
     await Promise.resolve();
-    const updateCalls = __queryLog.filter((c) =>
-      c.text.includes("UPDATE registries SET last_modified")
-    );
-    assertEquals(updateCalls.length, 1);
-    assertEquals(updateCalls[0].params, ["reg-1"]);
+    assertEquals(__queryLog.length, 0);
+  });
+
+  it("evicts a cached dataset so the next read is a miss", async () => {
+    __setQueryResult({ rows: [{ last_modified: STAMP }] });
+    const fetcher = () => Promise.resolve([{ id: "tx-1" } as Transaction]);
+    await getCachedTransactions("reg-1", fetcher);
+
+    invalidateRegistry("reg-1");
+
+    const second = await getCachedTransactions("reg-1", fetcher);
+    assertEquals(second.hit, false);
   });
 });
 
