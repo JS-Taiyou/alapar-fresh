@@ -9,6 +9,7 @@
 import { assertEquals } from "@std/assert";
 import { describe, it } from "@std/testing/bdd";
 import {
+  channelStatusAction,
   MAX_RECOVERY_ATTEMPTS,
   RECOVERABLE_STATUSES,
   RECOVERY_BACKOFF_MS,
@@ -43,6 +44,23 @@ describe("shouldRecover", () => {
       RECOVERABLE_STATUSES,
       new Set(["CHANNEL_ERROR", "TIMED_OUT"]),
     );
+  });
+});
+
+describe("channelStatusAction", () => {
+  it("maps SUBSCRIBED to resync (events may have been missed while dead)", () => {
+    assertEquals(channelStatusAction("SUBSCRIBED"), "resync");
+  });
+
+  it("maps recoverable errors to recover", () => {
+    assertEquals(channelStatusAction("CHANNEL_ERROR"), "recover");
+    assertEquals(channelStatusAction("TIMED_OUT"), "recover");
+  });
+
+  it("maps CLOSED and unknown statuses to ignore (SDK handles them)", () => {
+    assertEquals(channelStatusAction("CLOSED"), "ignore");
+    assertEquals(channelStatusAction("UNKNOWN"), "ignore");
+    assertEquals(channelStatusAction(""), "ignore");
   });
 });
 

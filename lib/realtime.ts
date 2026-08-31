@@ -17,6 +17,23 @@ type ChangeHandler = (payload: {
 
 let onChange: ChangeHandler | null = null;
 
+/**
+ * Catch-up hook, fired every time the channel reaches SUBSCRIBED — including
+ * after recovery and after the SDK's own socket-level auto-reconnect.
+ *
+ * Whatever killed the channel (token expiry, network blip, device sleep) also
+ * dropped every postgres_changes event in that window, and resubscribing does
+ * NOT replay them: the only way to learn what was missed is to fetch. The
+ * registered hook is expected to be stamp-gated (one cheap POST when the
+ * registry is already in sync, a full refetch when it isn't).
+ */
+let onResync: (() => void) | null = null;
+
+/** Register (or clear, with null) the SUBSCRIBED catch-up hook. */
+export function setOnResync(cb: (() => void) | null): void {
+  onResync = cb;
+}
+
 // --- Recovery state -------------------------------------------------------
 // When the channel errors (token expiry, network blip, mobile sleep), we
 // attempt to recover by fetching a fresh token and resubscribing.
@@ -51,6 +68,24 @@ export const RECOVERY_BACKOFF_MS = [1000, 2000, 4000];
  */
 export function shouldRecover(status: string): boolean {
   return RECOVERABLE_STATUSES.has(status);
+}
+
+/**
+ * What a channel status event should trigger. Exported for unit testing.
+ *
+ * `resync`: SUBSCRIBED — the channel (re)established; events dropped while it
+ *   was dead can only be recovered by a fetch, so fire the catch-up hook.
+ * `recover`: CHANNEL_ERROR / TIMED_OUT — tear down and resubscribe with a
+ *   fresh token.
+ * `ignore`: everything else. CLOSED is excluded because the SDK fires it
+ *   during normal lifecycle and auto-reconnects on its own.
+ */
+export function channelStatusAction(
+  status: string,
+): "resync" | "recover" | "ignore" {
+  if (status === "SUBSCRIBED") return "resync";
+  if (shouldRecover(status)) return "recover";
+  return "ignore";
 }
 
 function getSupabase(): SupabaseClient {
@@ -153,10 +188,13 @@ export async function subscribeToRegistry(
     .subscribe((status, err) => {
       console.log("[realtime] status:", status, err ?? "");
 
-      // Only trigger recovery if we're not already recovering, and only for
-      // genuine error statuses (CHANNEL_ERROR / TIMED_OUT). CLOSED is excluded
-      // because the SDK fires it during normal lifecycle and auto-reconnects.
-      if (shouldRecover(status) && !recovering) {
+      const action = channelStatusAction(status);
+      if (action === "resync") {
+        onResync?.();
+        return;
+      }
+
+      if (action === "recover" && !recovering) {
         recovering = true;
         void recoverChannel();
       }

@@ -32,6 +32,7 @@ import {
 } from "../lib/calculations.ts";
 import {
   resubscribe,
+  setOnResync,
   setupRealtimeConfig,
   subscribeToRegistry,
   unsubscribeAll,
@@ -402,6 +403,10 @@ export default function TransactionList(props: TransactionListProps) {
     let lastNotificationAt = 0;
     const NOTIFICATION_COOLDOWN = 15_000;
 
+    // Events dropped while the channel was dead are backfilled by a
+    // stamp-gated fetch every time the channel (re)establishes.
+    setOnResync(() => void syncRegistry());
+
     subscribeToRegistry(
       rid,
       (payload) => {
@@ -504,7 +509,10 @@ export default function TransactionList(props: TransactionListProps) {
       }
     });
 
-    return () => unsubscribeAll();
+    return () => {
+      setOnResync(null);
+      unsubscribeAll();
+    };
   });
 
   useSignalEffect(() => {
@@ -604,6 +612,96 @@ export default function TransactionList(props: TransactionListProps) {
       });
   });
 
+  /**
+   * Stamp-gated catch-up: compare the server's `last_modified` against the
+   * cached snapshot and refetch the full registry only when it moved.
+   *
+   * Used by three callers that can each discover missed changes: the realtime
+   * channel reaching SUBSCRIBED (events dropped while it was dead), the
+   * wake-up path (visibility/heartbeat), and — via the same wake-up — the
+   * `online` reconnect. An in-flight guard keeps concurrent triggers from
+   * racing two fetches and double-applying snapshots.
+   */
+  let syncInFlight = false;
+  async function syncRegistry(): Promise<void> {
+    if (props.isDemo) return;
+    const rid = registryId.value;
+    if (!rid) return;
+    if (syncInFlight) return;
+    syncInFlight = true;
+    try {
+      const stampRes = await fetch(`/api/stamp/${rid}`, { method: "POST" });
+      if (rid !== registryId.value) return;
+      // Dead session (expired refresh token): go to login instead of
+      // silently leaving the screen frozen on stale data.
+      if (isAuthFailure(stampRes)) {
+        redirectToLogin();
+        return;
+      }
+      if (!stampRes.ok) return;
+      const { lastModified } = await stampRes.json() as {
+        lastModified: string | null;
+      };
+      const cached = await cache.getRegistrySnapshot(rid);
+      if (rid !== registryId.value) return;
+      if (cached?.lastModified === lastModified) return;
+
+      const dashRes = await fetch(`/api/dashboard?registryId=${rid}`);
+      if (rid !== registryId.value) return;
+      if (isAuthFailure(dashRes)) {
+        redirectToLogin();
+        return;
+      }
+      if (!dashRes.ok) return;
+      const data = await dashRes.json() as {
+        transactions: unknown[];
+        transactionPayments: TransactionPayment[];
+        balance: number;
+        balanceEntries: BalanceBreakdownEntry[];
+        users: Participant[];
+        defaultSplit: DefaultSplit | null;
+        spawnCandidates: SpawnCandidate[];
+        entityIds: string[];
+        entities: { id: string; name: string; color: string }[];
+      };
+
+      transactions.value = (data.transactions as EnrichedTransaction[]).map((
+        t,
+      ) => ({
+        ...t,
+        createdAt:
+          typeof (t as unknown as { createdAt: unknown }).createdAt === "string"
+            ? new Date((t as unknown as { createdAt: string }).createdAt)
+            : t.createdAt,
+      }));
+      balance.value = data.balance;
+      balanceEntries.value = data.balanceEntries;
+      if (data.defaultSplit !== undefined) {
+        defaultSplit.value = data.defaultSplit;
+      }
+      if (data.spawnCandidates) {
+        props.spawnCandidates.value = data.spawnCandidates;
+      }
+      if (data.users) {
+        users.value = data.users;
+      }
+      if (data.entityIds) {
+        props.entityIds.value = new Set(data.entityIds);
+      }
+      if (data.entities) {
+        props.entities.value = data.entities;
+      }
+      if (data.transactionPayments) {
+        transactionPayments.value = data.transactionPayments;
+      }
+      props.lastModified.value = lastModified;
+    } catch {
+      /* catch-up failure is non-critical */
+    } finally {
+      syncInFlight = false;
+    }
+  }
+
   useSignalEffect(() => {
     let lastActive = Date.now();
     const FRESHNESS_MS = 30_000;
@@ -621,75 +719,7 @@ export default function TransactionList(props: TransactionListProps) {
       if (elapsed < FRESHNESS_MS) return;
 
       resubscribe().catch(() => {});
-
-      try {
-        const stampRes = await fetch(`/api/stamp/${rid}`, { method: "POST" });
-        if (rid !== registryId.value) return;
-        // Dead session (expired refresh token): go to login instead of
-        // silently leaving the screen frozen on stale data.
-        if (isAuthFailure(stampRes)) {
-          redirectToLogin();
-          return;
-        }
-        if (!stampRes.ok) return;
-        const { lastModified } = await stampRes.json() as {
-          lastModified: string | null;
-        };
-        const cached = await cache.getRegistrySnapshot(rid);
-        if (rid !== registryId.value) return;
-        if (cached?.lastModified === lastModified) return;
-
-        const dashRes = await fetch(`/api/dashboard?registryId=${rid}`);
-        if (rid !== registryId.value) return;
-        if (isAuthFailure(dashRes)) {
-          redirectToLogin();
-          return;
-        }
-        if (!dashRes.ok) return;
-        const data = await dashRes.json() as {
-          transactions: unknown[];
-          transactionPayments: TransactionPayment[];
-          balance: number;
-          balanceEntries: BalanceBreakdownEntry[];
-          users: Participant[];
-          defaultSplit: DefaultSplit | null;
-          spawnCandidates: SpawnCandidate[];
-          entityIds: string[];
-          entities: { id: string; name: string; color: string }[];
-        };
-
-        transactions.value = (data.transactions as EnrichedTransaction[]).map((
-          t,
-        ) => ({
-          ...t,
-          createdAt:
-            typeof (t as unknown as { createdAt: unknown }).createdAt ===
-                "string"
-              ? new Date((t as unknown as { createdAt: string }).createdAt)
-              : t.createdAt,
-        }));
-        balance.value = data.balance;
-        balanceEntries.value = data.balanceEntries;
-        if (data.defaultSplit !== undefined) {
-          defaultSplit.value = data.defaultSplit;
-        }
-        if (data.spawnCandidates) {
-          props.spawnCandidates.value = data.spawnCandidates;
-        }
-        if (data.users) {
-          users.value = data.users;
-        }
-        if (data.entityIds) {
-          props.entityIds.value = new Set(data.entityIds);
-        }
-        if (data.entities) {
-          props.entities.value = data.entities;
-        }
-        if (data.transactionPayments) {
-          transactionPayments.value = data.transactionPayments;
-        }
-        props.lastModified.value = lastModified;
-      } catch { /* wake-up refresh failure non-critical */ }
+      await syncRegistry();
     }
 
     function onVisibility() {
