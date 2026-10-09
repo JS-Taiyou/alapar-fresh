@@ -231,6 +231,55 @@ describe("getRegistryPlan", () => {
     });
     assertEquals((await getRegistryPlan("r1"))!.isPro, true);
   });
+
+  // Multi-member rows: one row per member, each with their own subscription
+  // state — any live member keeps the whole group Pro.
+  it("member-based: owner's dead sub + another member active → pro", async () => {
+    __setQueryResult({
+      rows: [
+        { plan: "pro", sub_status: "canceled", grace_until: null },
+        { plan: "pro", sub_status: "active", grace_until: null },
+      ],
+    });
+    assertEquals((await getRegistryPlan("r1"))!.isPro, true);
+  });
+
+  it("member-based: all members' subs dead → free (last Pro member lapsed)", async () => {
+    __setQueryResult({
+      rows: [
+        { plan: "pro", sub_status: "canceled", grace_until: null },
+        { plan: "pro", sub_status: "revoked", grace_until: null },
+      ],
+    });
+    assertEquals((await getRegistryPlan("r1"))!.isPro, false);
+  });
+
+  it("member-based: one member paid-through keeps the group Pro", async () => {
+    const past = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const future = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    __setQueryResult({
+      rows: [
+        { plan: "free", sub_status: null },
+        {
+          plan: "free",
+          sub_status: "canceled",
+          grace_until: past,
+          current_period_end: future,
+        },
+      ],
+    });
+    assertEquals((await getRegistryPlan("r1"))!.isPro, true);
+  });
+
+  it("member-based: no member ever subscribed + pro column → pro (no contradiction)", async () => {
+    __setQueryResult({
+      rows: [
+        { plan: "pro", sub_status: null },
+        { plan: "pro", sub_status: null },
+      ],
+    });
+    assertEquals((await getRegistryPlan("r1"))!.isPro, true);
+  });
 });
 
 // ---------------------------------------------------------------------------

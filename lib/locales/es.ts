@@ -219,8 +219,6 @@ export const es: Record<string, string> = {
   "billing.grandfathered_badge": "PRO",
   "billing.upgrade_hint_owner":
     "Desbloquea miembros y plantillas ilimitadas, e historial completo.",
-  "billing.upgrade_hint_member":
-    "Pídele al dueño del grupo que mejore a Pro para desbloquear esto.",
   "billing.group_full":
     "Este grupo llegó al límite de miembros del plan gratuito. El dueño puede mejorarlo a Pro para invitar a más personas.",
   "billing.templates_full":
@@ -265,10 +263,12 @@ export const es: Record<string, string> = {
   "pricing.active_until": "Activo hasta {date}",
   "pricing.cancel_scheduled": "Cancelado — activo hasta {date}",
   "pricing.grandfathered_note": "Early adopter: Pro para siempre",
+  "pro.crown_sub": "Pro — gestionar suscripción",
+  "pro.crown_founding": "Pro — miembro fundador (para siempre)",
   "pricing.cancel_link": "Cancelar suscripción",
   "pricing.cancel_title": "Cancelar suscripción",
   "pricing.cancel_body":
-    "Tu suscripción seguirá activa hasta el {date}. Después, tu grupo volverá al plan gratuito — nadie pierde datos, solo se aplican los límites.",
+    "Tu suscripción seguirá activa hasta el {date}. Después, cualquier grupo sin otro miembro Pro volverá al plan gratuito — nadie pierde datos, solo se aplican los límites.",
   "pricing.cancel_confirm": "Sí, cancelar",
   "pricing.keep_sub": "Mantener suscripción",
   "pricing.reactivate": "Reactivar",
@@ -278,7 +278,7 @@ export const es: Record<string, string> = {
 
   // --- Billing: already-subscribed guard + plan switch ---
   "billing.already_subscribed":
-    "Ya tienes una suscripción activa — cubre todos tus registros. Para cambiar de plan, usa la opción de cambio de abajo.",
+    "Ya tienes una suscripción activa — cubre todos los grupos en los que estás. Para cambiar de plan, usa la opción de cambio de abajo.",
   "billing.switch_to_yearly": "Cambiar a plan anual",
   "billing.switch_to_monthly": "Cambiar a plan mensual",
   "billing.switch_title": "¿Cambiar de plan?",

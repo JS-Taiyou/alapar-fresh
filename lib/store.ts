@@ -4,6 +4,7 @@ import {
   countRegistryMembers,
   getRegistryPlan,
   GroupFullError,
+  USER_PRO_SQL,
 } from "./entitlements.ts";
 import type {
   Entity,
@@ -182,7 +183,7 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
   participants: Participant[];
 }> {
   const userResult = await query(
-    `SELECT u.* FROM users u WHERE u.supabase_auth_id = $1`,
+    `SELECT u.*, ${USER_PRO_SQL} FROM users u WHERE u.supabase_auth_id = $1`,
     [supabaseAuthId],
   );
   if (userResult.rows.length === 0) {
@@ -231,7 +232,7 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
     isOwner = activeRow.membership_role === "owner";
 
     const usersResult = await query(
-      `SELECT u.* FROM users u
+      `SELECT u.*, ${USER_PRO_SQL} FROM users u
        JOIN registry_members rm ON rm.user_id = u.id
        WHERE rm.registry_id = $1`,
       [activeRegistry.id],
@@ -241,7 +242,12 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
     entities = await getEntities(activeRegistry.id, user.id);
 
     participants = [
-      ...registryUsers.map((u) => ({ id: u.id, name: u.name, color: u.color })),
+      ...registryUsers.map((u) => ({
+        id: u.id,
+        name: u.name,
+        color: u.color,
+        pro: u.pro,
+      })),
       ...entities.map((e) => ({ id: e.id, name: e.name, color: e.color })),
     ];
   }
@@ -260,7 +266,7 @@ export async function resolveUserState(supabaseAuthId: string): Promise<{
 
 export async function getUsers(registryId: string): Promise<User[]> {
   const result = await query(
-    `SELECT u.* FROM users u
+    `SELECT u.*, ${USER_PRO_SQL} FROM users u
      JOIN registry_members rm ON rm.user_id = u.id
      WHERE rm.registry_id = $1`,
     [registryId],

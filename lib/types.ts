@@ -2,12 +2,26 @@ export interface Participant {
   id: string;
   name: string;
   color: string;
+  /**
+   * Present (possibly null) only on participants backed by a real app USER:
+   * the crown badge renders it. Entities never set it.
+   */
+  pro?: "subscribed" | "grandfathered" | null;
 }
 
 export interface User extends Participant {
   email: string;
   supabaseAuthId: string | null;
   createdAt: Date;
+  /**
+   * Why this user personally grants Pro to every group they're in:
+   *   'subscribed'    — live Polar subscription (trialing/active/paid-through/grace)
+   *   'grandfathered' — founding member: owns a grandfathered registry, Pro forever
+   *   null            — not Pro (the crown UI renders nothing)
+   * Computed in SQL (USER_PRO_SQL in lib/entitlements.ts) on queries feeding the UI;
+   * absent on other queries → rowToUser maps it to null.
+   */
+  pro: "subscribed" | "grandfathered" | null;
 }
 
 export interface Entity extends Participant {}

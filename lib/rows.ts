@@ -50,6 +50,8 @@ export function rowToUser(row: Record<string, unknown>): User {
     email: row.email as string,
     supabaseAuthId: (row.supabase_auth_id as string) ?? null,
     createdAt: new Date(row.created_at as string),
+    // Absent on queries that didn't select USER_PRO_SQL — treated as not Pro.
+    pro: (row.pro as User["pro"]) ?? null,
   };
 }
 

@@ -6,7 +6,7 @@ import { getCookie } from "./lib/auth-cookies.ts";
 import { query } from "./lib/db.ts";
 import { needsFullState, routeGuard } from "./lib/routing.ts";
 import { resolveLocale } from "./lib/i18n.ts";
-import { getRegistryPlan } from "./lib/entitlements.ts";
+import { getRegistryPlan, USER_PRO_SQL } from "./lib/entitlements.ts";
 
 const isDev = !Deno.env.get("DENO_DEPLOYMENT_ID");
 function devLog(...args: unknown[]) {
@@ -139,7 +139,7 @@ app.use(define.middleware(async (ctx) => {
   if (!fullStateNeeded) {
     devLog("  Lightweight path, querying user...");
     const userResult = await query(
-      `SELECT u.* FROM users u WHERE u.supabase_auth_id = $1`,
+      `SELECT u.*, ${USER_PRO_SQL} FROM users u WHERE u.supabase_auth_id = $1`,
       [authUser.id],
     );
     if (userResult.rows.length === 0) {
@@ -168,6 +168,7 @@ app.use(define.middleware(async (ctx) => {
         color: row.color as string,
         supabaseAuthId: row.supabase_auth_id as string,
         createdAt: row.created_at as Date,
+        pro: (row.pro as "subscribed" | "grandfathered" | null) ?? null,
       };
     }
     const response = await ctx.next();

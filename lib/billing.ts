@@ -732,15 +732,18 @@ export async function handleSubscriptionEvent(
   const proAgain = status === "trialing" || status === "active" ||
     status === "past_due";
   if (proAgain) {
-    // One subscription unlocks every registry the user owns. Only ever
-    // upgrade the column here (WHERE plan = 'free') — never touch
-    // 'grandfathered', which is a permanent state by design.
+    // One subscription makes every group the user belongs to Pro — benefits
+    // are per-user (a subscribed member carries their whole group). Only
+    // ever upgrade the column here (WHERE plan = 'free') — never touch
+    // 'grandfathered', which is a permanent state by design. Demotion is
+    // lazy: getRegistryPlan demotes plan='pro' → free on read once no
+    // member's subscription is live anymore.
     await query(
       `UPDATE registries SET plan = 'pro'
        WHERE plan = 'free'
          AND id IN (
            SELECT rm.registry_id FROM registry_members rm
-           WHERE rm.user_id = $1 AND rm.role = 'owner'
+           WHERE rm.user_id = $1
          )`,
       [userId],
     );

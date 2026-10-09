@@ -2,6 +2,8 @@ import { useSignal } from "@preact/signals";
 import type { DefaultSplit, User } from "../lib/types.ts";
 import { initials, sanitizeDecimal } from "../lib/format.ts";
 import Modal from "../components/Modal.tsx";
+import ProBadge from "../components/ProBadge.tsx";
+import type { Locale } from "../lib/i18n.ts";
 
 interface DefaultSplitConfigProps {
   registryId: string;
@@ -10,6 +12,7 @@ interface DefaultSplitConfigProps {
   isOwner: boolean;
   autoOpen?: boolean;
   onClose?: () => void;
+  locale?: Locale;
 }
 
 export default function DefaultSplitConfig(props: DefaultSplitConfigProps) {
@@ -234,8 +237,12 @@ export default function DefaultSplitConfig(props: DefaultSplitConfigProps) {
                             >
                               {userInitials}
                             </div>
-                            <span class="text-sm font-medium text-white">
+                            <span class="text-sm font-medium text-white flex items-center gap-1.5">
                               {user.name}
+                              <ProBadge
+                                pro={user.pro}
+                                locale={props.locale}
+                              />
                             </span>
                           </div>
                         </td>

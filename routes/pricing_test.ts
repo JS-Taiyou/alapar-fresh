@@ -57,22 +57,36 @@ describe("pricing GET — anonymous", () => {
     assertEquals(result.data.prices.monthly, 1.99);
     assertEquals(result.data.prices.yearly, 15);
     assertEquals(result.data.userSub, null);
-    assertEquals(result.data.ownedFreeCount, 0);
+    assertEquals(result.data.freeGroupsCount, 0);
     assertEquals(result.data.hasNoRegistries, false);
   });
 });
 
 describe("pricing GET — authenticated (per-user model)", () => {
-  it("counts owned free registries as upgrade candidates", async () => {
+  it("counts effectively-free groups as upgrade candidates (owner or member)", async () => {
     stubFor([
       { role: "owner", plan: "free" },
       { role: "owner", plan: "free" },
       { role: "member", plan: "pro" },
     ], undefined);
     const result = await handler.GET!(ctxFor({ id: "u1" }) as never);
-    assertEquals(result.data.ownedFreeCount, 2);
-    assertEquals(result.data.hasMemberOnly, true);
+    assertEquals(result.data.freeGroupsCount, 2);
     assertEquals(result.data.userSub, null);
+  });
+
+  it("a free group the user merely BELONGS to is an upgrade candidate", async () => {
+    stubFor([{ role: "member", plan: "free" }], undefined);
+    const result = await handler.GET!(ctxFor({ id: "u1" }) as never);
+    assertEquals(result.data.freeGroupsCount, 1);
+  });
+
+  it("a free group kept Pro by ANOTHER member is not a candidate", async () => {
+    stubFor([
+      { role: "member", plan: "free", member_pro: true },
+      { role: "owner", plan: "free" },
+    ], undefined);
+    const result = await handler.GET!(ctxFor({ id: "u1" }) as never);
+    assertEquals(result.data.freeGroupsCount, 1);
   });
 
   it("a live subscription unlocks everything: no candidates, Active state", async () => {
@@ -81,7 +95,7 @@ describe("pricing GET — authenticated (per-user model)", () => {
       { role: "owner", plan: "free" },
     ], SUB_ACTIVE);
     const result = await handler.GET!(ctxFor({ id: "u1" }) as never);
-    assertEquals(result.data.ownedFreeCount, 0);
+    assertEquals(result.data.freeGroupsCount, 0);
     assertEquals(result.data.userSub?.currentPeriodEnd, "2026-09-01T00:00:00Z");
     assertEquals(result.data.userSub?.cancelScheduled, false);
   });
@@ -104,7 +118,7 @@ describe("pricing GET — authenticated (per-user model)", () => {
     });
     const result = await handler.GET!(ctxFor({ id: "u1" }) as never);
     assertEquals(result.data.userSub, null);
-    assertEquals(result.data.ownedFreeCount, 1);
+    assertEquals(result.data.freeGroupsCount, 1);
   });
 
   it("canceled-but-paid-through counts as live (rest of the cycle)", async () => {
@@ -116,7 +130,7 @@ describe("pricing GET — authenticated (per-user model)", () => {
     });
     const result = await handler.GET!(ctxFor({ id: "u1" }) as never);
     assertEquals(result.data.userSub !== null, true);
-    assertEquals(result.data.ownedFreeCount, 0);
+    assertEquals(result.data.freeGroupsCount, 0);
   });
 
   it("flags grandfathered ownership", async () => {
@@ -126,7 +140,7 @@ describe("pricing GET — authenticated (per-user model)", () => {
     ], undefined);
     const result = await handler.GET!(ctxFor({ id: "u1" }) as never);
     assertEquals(result.data.hasGrandfatheredOwned, true);
-    assertEquals(result.data.ownedFreeCount, 1);
+    assertEquals(result.data.freeGroupsCount, 1);
   });
 
   it("marks a brand-new user with no registries", async () => {

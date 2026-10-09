@@ -16,6 +16,7 @@ import DefaultSplitConfig from "./DefaultSplitConfig.tsx";
 import LocaleToggle from "./LocaleToggle.tsx";
 import UpgradeButton from "./UpgradeButton.tsx";
 import Modal from "../components/Modal.tsx";
+import ProBadge from "../components/ProBadge.tsx";
 import Toaster, { showUpgradeToast } from "./Toaster.tsx";
 import {
   type EnrichedTransaction,
@@ -30,6 +31,8 @@ interface SidebarProps {
   activeRegistryId: string;
   userName: string;
   userInitials: string;
+  /** The current user's personal Pro status (drives the crown by the name). */
+  userPro: User["pro"];
   isOwner: boolean;
   ownerRegistryIds: Set<string>;
   entities: Entity[];
@@ -603,8 +606,9 @@ export default function Sidebar(props: SidebarProps) {
             {props.userInitials}
           </div>
           <div class="flex flex-col min-w-0 whitespace-nowrap">
-            <span class="text-sm font-semibold text-white truncate">
+            <span class="text-sm font-semibold text-white truncate flex items-center gap-1.5">
               {props.userName}
+              <ProBadge pro={props.userPro} locale={props.locale} size="md" />
             </span>
             <span class="text-xs text-zinc-400">A la par</span>
           </div>
@@ -984,10 +988,7 @@ export default function Sidebar(props: SidebarProps) {
           </span>
         </button>
         {props.showUpgrade && props.activeRegistryId && (
-          <UpgradeButton
-            locale={props.locale ?? "es"}
-            isOwner={props.isOwner}
-          />
+          <UpgradeButton locale={props.locale ?? "es"} />
         )}
         {(!collapsed.value || mobileOpen.value) && (
           <LocaleToggle locale={props.locale ?? "es"} full class="my-1" />
@@ -1249,6 +1250,7 @@ export default function Sidebar(props: SidebarProps) {
           )?.defaultSplit ?? null}
           isOwner={props.ownerRegistryIds.has(showSplitConfig.value)}
           autoOpen
+          locale={props.locale}
           onClose={() => showSplitConfig.value = null}
         />
       )}

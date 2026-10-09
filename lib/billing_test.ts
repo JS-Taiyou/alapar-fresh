@@ -159,16 +159,14 @@ describe("handleSubscriptionEvent", () => {
     assertEquals(upsert!.params[6], true);
   });
 
-  it("flips plan to pro on EVERY registry the subscriber owns", async () => {
+  it("flips plan to pro on EVERY group the subscriber belongs to", async () => {
     await handleSubscriptionEvent(activeEvent);
     const flip = __queryLog.find((c) => c.text.includes("SET plan = 'pro'"));
     assert(flip, "expected plan flip to pro");
-    // Scoped to the user's OWNED registries via the subselect.
+    // Member-based: any membership counts (a subscribed member carries
+    // their whole group) — the flip must NOT be role-scoped.
     assertEquals(flip!.params[0], "user-1");
-    assertEquals(
-      flip!.text.includes("rm.role = 'owner'"),
-      true,
-    );
+    assertEquals(flip!.text.includes("rm.role"), false);
   });
 
   it("past_due ALSO sets the grace window (one failed charge ≠ instant cut)", async () => {

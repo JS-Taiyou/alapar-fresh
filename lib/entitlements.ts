@@ -1,13 +1,15 @@
 /**
  * Plan entitlements — what a registry can do on 'free' vs 'pro'.
  *
- * The paid unit is the registry (group): the owner pays, the whole group
- * benefits. Joining groups is never gated.
+ * The paid unit is the USER: any member with an active subscription makes
+ * the whole group Pro (a subscriber in 3 groups unlocks all 3). Joining
+ * groups is never gated; a group keeps Pro until its last Pro member leaves
+ * or their subscription lapses.
  *
- * Plan resolution order:
- *   1. registries.plan = 'pro' | 'grandfathered' → unlimited
- *   2. active subscription (trialing/active, or past_due within grace_until)
- *      → unlimited
+ * Plan resolution order (per registry):
+ *   1. registries.plan = 'grandfathered' → unlimited (permanent)
+ *   2. ANY member's subscription live (trialing/active, paid-through,
+ *      or within grace) → unlimited
  *   3. otherwise → free limits
  *
  * All limits are enforced server-side at the mutation/API boundary; the UI
@@ -15,6 +17,37 @@
  */
 
 import { query } from "./db.ts";
+
+/**
+ * SQL predicate (expects the registry_subscriptions row aliased `rs`): true
+ * when that subscription is live per the matrix — trialing/active, canceled
+ * but paid-through, or inside its dunning/cancel grace window. Shared by
+ * every query that needs per-user Pro status in SQL (USER_PRO_SQL, the
+ * create cap, the pricing page) so it can't drift from resolveEffectivePlan.
+ */
+export const SUB_LIVE_SQL = `rs.status IN ('trialing', 'active')
+  OR (rs.status = 'canceled' AND rs.current_period_end > now())
+  OR (rs.status IN ('past_due', 'canceled', 'revoked') AND rs.grace_until > now())`;
+
+/**
+ * SQL column computing a USER's personal Pro status; requires the users
+ * table aliased `u` in the enclosing query. Drives the crown badge:
+ *   'subscribed'    → live subscription (crown links to /pricing to manage)
+ *   'grandfathered' → founding member, owns a grandfathered registry (Pro
+ *                     forever; the crown is inert)
+ *   NULL            → not Pro
+ */
+export const USER_PRO_SQL = `CASE
+  WHEN EXISTS (
+    SELECT 1 FROM registry_subscriptions rs
+    WHERE rs.user_id = u.id AND (${SUB_LIVE_SQL})
+  ) THEN 'subscribed'
+  WHEN EXISTS (
+    SELECT 1 FROM registry_members fm
+    JOIN registries fr ON fr.id = fm.registry_id
+    WHERE fm.user_id = u.id AND fm.role = 'owner' AND fr.plan = 'grandfathered'
+  ) THEN 'grandfathered'
+END AS pro`;
 
 export type RegistryPlan = "free" | "pro" | "grandfathered";
 
@@ -116,10 +149,12 @@ export function resolveEffectivePlan(
  * Resolve the effective plan for a registry. Returns null when the registry
  * doesn't exist.
  *
- * One round trip: `registries.plan` plus the subscription mirror of the
- * registry's OWNER — a subscription is per-user and unlocks every registry
- * the subscriber owns (grandfathering stays per-registry via the plan
- * column). Semantics live in {@link resolveEffectivePlan} — the single
+ * One round trip: `registries.plan` plus the subscription mirror of EVERY
+ * member. A subscription is per-USER: any member's live subscription makes
+ * the whole group Pro (grandfathering stays per-registry via the plan
+ * column). A group keeps Pro until the last Pro member is evicted or their
+ * subscription lapses — demotion happens right here, on read, with no
+ * background job. Semantics live in {@link resolveEffectivePlan} — the single
  * source of truth the UI reads via ctx.state.activeRegistryPlan (populated
  * with this same function on full-state paths) and enforcement must call.
  */
@@ -132,28 +167,53 @@ export async function getRegistryPlan(
             rs.grace_until,
             rs.current_period_end
      FROM registries r
-     LEFT JOIN LATERAL (
-       SELECT rs.status, rs.grace_until, rs.current_period_end
-       FROM registry_subscriptions rs
-       WHERE rs.user_id = (
-         SELECT rm.user_id FROM registry_members rm
-         WHERE rm.registry_id = r.id AND rm.role = 'owner'
-         ORDER BY rm.joined_at
-         LIMIT 1
-       )
-     ) rs ON true
+     LEFT JOIN registry_members rm ON rm.registry_id = r.id
+     LEFT JOIN registry_subscriptions rs ON rs.user_id = rm.user_id
      WHERE r.id = $1`,
     [registryId],
   );
   if (result.rows.length === 0) return null;
 
-  const row = result.rows[0];
-  const effective = resolveEffectivePlan(
-    row.plan as RegistryPlan,
-    row.sub_status as string | null,
-    row.grace_until ? new Date(row.grace_until as string) : null,
-    row.current_period_end ? new Date(row.current_period_end as string) : null,
-  );
+  // One row per member, each carrying that member's subscription state
+  // (nulls when they never subscribed). The registry-level plan column is
+  // the same on every row.
+  const registryPlan = result.rows[0].plan as RegistryPlan;
+  let anyMemberPro = false;
+  let anyMemberSubscribed = false;
+  for (const row of result.rows) {
+    const subStatus = row.sub_status as string | null;
+    if (subStatus !== null) anyMemberSubscribed = true;
+    // Members are resolved with plan='free': the registry's own column must
+    // not leak in and make everyone Pro. The matrix's live/paid-through/grace
+    // rows are exactly the per-user Pro states we want.
+    if (
+      resolveEffectivePlan(
+        "free",
+        subStatus,
+        row.grace_until ? new Date(row.grace_until as string) : null,
+        row.current_period_end
+          ? new Date(row.current_period_end as string)
+          : null,
+      ) !== "free"
+    ) {
+      anyMemberPro = true;
+      break;
+    }
+  }
+
+  let effective: RegistryPlan;
+  if (registryPlan === "grandfathered") {
+    effective = "grandfathered";
+  } else if (anyMemberPro) {
+    effective = "pro";
+  } else if (registryPlan === "pro" && !anyMemberSubscribed) {
+    // Column says pro and NO member has a subscription row contradicting it
+    // (the multi-member generalization of the defensive no-contradiction
+    // branch in resolveEffectivePlan).
+    effective = "pro";
+  } else {
+    effective = "free";
+  }
 
   return {
     plan: effective,
@@ -171,33 +231,25 @@ export async function getRegistryPlan(
  *   - Post-migration, most users own 1-2 grandfathered registries; counting
  *     those would lock long-time users out of ever creating a new group
  *     (a regression against their pre-billing "unlimited").
- *   - A paying customer with 2 Pro groups must still be able to start a
- *     3rd (they can upgrade it after creating — the upgrade flow is
- *     per-registry and runs AFTER creation).
+ *   - A paying customer must still be able to start new groups (their
+ *     subscription unlocks them after creation).
  *
- * "Effectively free" = plan 'free' AND the OWNER's subscription (if any) is
- * not live/graced/paid-through — mirroring resolveEffectivePlan's matrix in
- * SQL. A subscribed owner's registries never count against the cap (Pro
- * unlocks all of them); neither do grandfathered/Pro-column ones.
+ * "Effectively free" mirrors getRegistryPlan: plan 'free' AND no member of
+ * the group has a live subscription. A group kept Pro by ANOTHER member
+ * therefore doesn't count against this owner's cap either.
  */
 export async function countOwnedRegistries(userId: string): Promise<number> {
   const result = await query(
     `SELECT count(*)::int AS cnt
      FROM registry_members rm
      JOIN registries r ON r.id = rm.registry_id
-     LEFT JOIN registry_subscriptions rs ON rs.user_id = rm.user_id
      WHERE rm.user_id = $1
        AND rm.role = 'owner'
        AND r.plan = 'free'
-       AND (
-         rs.status IS NULL
-         OR (
-           rs.status IN ('past_due', 'canceled', 'revoked')
-           AND (rs.grace_until IS NULL OR rs.grace_until <= now())
-           AND (rs.status <> 'canceled'
-             OR rs.current_period_end IS NULL
-             OR rs.current_period_end <= now())
-         )
+       AND NOT EXISTS (
+         SELECT 1 FROM registry_members rm2
+         JOIN registry_subscriptions rs ON rs.user_id = rm2.user_id
+         WHERE rm2.registry_id = r.id AND (${SUB_LIVE_SQL})
        )`,
     [userId],
   );

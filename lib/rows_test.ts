@@ -31,7 +31,24 @@ describe("rowToUser", () => {
       email: "alice@example.com",
       supabaseAuthId: "auth-uuid-1",
       createdAt: new Date("2024-01-15T10:00:00Z"),
+      // No `pro` column in the row → maps to null (not Pro).
+      pro: null,
     });
+  });
+
+  it("maps the computed pro column when present", () => {
+    assertEquals(
+      rowToUser({
+        id: "u-2",
+        name: "Bob",
+        color: "#00ff00",
+        email: "bob@example.com",
+        supabase_auth_id: null,
+        created_at: "2024-01-15T10:00:00Z",
+        pro: "grandfathered",
+      }).pro,
+      "grandfathered",
+    );
   });
 
   it("coerces a null supabase_auth_id to null (not undefined)", () => {

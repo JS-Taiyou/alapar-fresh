@@ -1,6 +1,10 @@
 import { define } from "../utils.ts";
 import { query } from "../lib/db.ts";
-import { FREE_LIMITS, resolveEffectivePlan } from "../lib/entitlements.ts";
+import {
+  FREE_LIMITS,
+  resolveEffectivePlan,
+  SUB_LIVE_SQL,
+} from "../lib/entitlements.ts";
 import {
   FALLBACK_PRICES,
   getPolarPrices,
@@ -16,18 +20,18 @@ import { formatDate, type Locale, t as translate } from "../lib/i18n.ts";
  * Public pricing page. All paywall CTAs in the app funnel here.
  *
  * Session-aware (public path + auth cookies → ctx.state.user via the
- * middleware's lightweight branch; registry data is queried here because
- * the lightweight branch doesn't populate it):
+ * middleware's lightweight branch; registry data is queried here because the
+ * lightweight branch doesn't populate it):
  *
  *   anonymous        → "Suscribirse" to signup (+login link), both
  *                      round-tripping back via ?redirect=/pricing — a
- *                      subscription requires an account that owns a registry.
- *   owns free groups → upgrade CTA straight into the Polar checkout. ONE
- *                      subscription (per-user) unlocks every registry the
- *                      subscriber owns.
+ *                      subscription requires an account.
+ *   in free groups   → upgrade CTA straight into the Polar checkout. ONE
+ *                      subscription (per-user) makes every group the user
+ *                      belongs to Pro — owner or member alike.
  *   live subscription → "Activo" badge + discrete cancel/reactivate/manage
  *                      actions (island) for the rest of the billing cycle.
- *   no owned groups  → create-first CTA (or ask-the-owner hint for members).
+ *   no groups at all → create-first CTA.
  *
  * Prices come from Polar (cached; the dashboard is the source of truth so a
  * price change never needs a deploy) with static fallbacks when unreachable.
@@ -42,12 +46,12 @@ interface UserSubState {
 
 interface PricingData {
   interval: "monthly" | "yearly";
-  /** The user's live subscription (per-user: unlocks every owned registry). */
+  /** The user's live subscription (per-user: unlocks every group they're in). */
   userSub: UserSubState | null;
-  /** Registries the user owns that are NOT yet Pro (upgrade candidates). */
-  ownedFreeCount: number;
+  /** Groups the user belongs to (any role) whose EFFECTIVE plan is free —
+   * subscribing makes every one of them Pro. */
+  freeGroupsCount: number;
   hasGrandfatheredOwned: boolean;
-  hasMemberOnly: boolean;
   hasNoRegistries: boolean;
   /** Set when the checkout guard bounced an already-subscribed user back. */
   alreadySubscribed: boolean;
@@ -70,9 +74,8 @@ export const handler = define.handlers({
     const data: PricingData = {
       interval,
       userSub: null,
-      ownedFreeCount: 0,
+      freeGroupsCount: 0,
       hasGrandfatheredOwned: false,
-      hasMemberOnly: false,
       hasNoRegistries: false,
       alreadySubscribed: url.searchParams.get("already_subscribed") === "1",
       prices,
@@ -82,7 +85,12 @@ export const handler = define.handlers({
     if (userId) {
       const [memberships, sub] = await Promise.all([
         query(
-          `SELECT rm.role, r.plan
+          `SELECT rm.role, r.plan,
+                  EXISTS (
+                    SELECT 1 FROM registry_members rm2
+                    JOIN registry_subscriptions rs ON rs.user_id = rm2.user_id
+                    WHERE rm2.registry_id = r.id AND (${SUB_LIVE_SQL})
+                  ) AS member_pro
            FROM registry_members rm
            JOIN registries r ON r.id = rm.registry_id
            WHERE rm.user_id = $1`,
@@ -144,18 +152,17 @@ export const handler = define.handlers({
       }
 
       for (const row of memberships.rows) {
-        if (row.role !== "owner") {
-          data.hasMemberOnly = true;
-          continue;
-        }
         if (row.plan === "grandfathered") {
-          data.hasGrandfatheredOwned = true;
+          // Founding-member note only for OWNERS of a grandfathered group —
+          // a mere member of one isn't "founding".
+          if (row.role === "owner") data.hasGrandfatheredOwned = true;
           continue;
         }
-        // A live subscription unlocks every owned registry; grandfathered
-        // ones are Pro on their own. Everything else is an upgrade candidate.
-        if (!subLive && row.plan === "free") {
-          data.ownedFreeCount++;
+        // Upgrade candidates: effectively-free groups the user is in — not
+        // grandfathered, not Pro via any member (including this user when
+        // subLive, which the !subLive guard already covers), column free.
+        if (!subLive && row.plan === "free" && row.member_pro !== true) {
+          data.freeGroupsCount++;
         }
       }
     }
@@ -360,7 +367,7 @@ export default define.page(function PricingPage(ctx) {
                   </div>
                 )}
 
-                {isAuthed && !data.userSub && data.ownedFreeCount > 0 && (
+                {isAuthed && !data.userSub && data.freeGroupsCount > 0 && (
                   <a
                     href={`/api/billing/checkout?interval=${interval}`}
                     class="w-full py-3 text-center text-sm font-semibold bg-primary hover:bg-primary-light text-white rounded-custom transition-all shadow-lg active:scale-95"
@@ -375,14 +382,7 @@ export default define.page(function PricingPage(ctx) {
                   </p>
                 )}
 
-                {isAuthed && !data.userSub && data.ownedFreeCount === 0 &&
-                  data.hasMemberOnly && (
-                  <p class="text-center text-xs text-zinc-400 px-2">
-                    {t("billing.upgrade_hint_member")}
-                  </p>
-                )}
-
-                {isAuthed && data.hasNoRegistries && (
+                {isAuthed && !data.userSub && data.hasNoRegistries && (
                   <div class="text-center space-y-2">
                     <p class="text-xs text-zinc-400 px-2">
                       {t("pricing.create_first_hint")}

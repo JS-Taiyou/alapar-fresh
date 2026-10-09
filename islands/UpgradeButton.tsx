@@ -4,23 +4,13 @@ import { type Locale, t as translate } from "../lib/i18n.ts";
  * "Upgrade to Pro" CTA in the sidebar (free-plan active registry only).
  * Funnels to the public pricing page — the tier comparison, interval
  * switcher and checkout all live there.
+ *
+ * Shown identically for owners and members: a subscription is per-user and
+ * makes every group the subscriber belongs to Pro, so ANY member can lift
+ * the group's limits.
  */
-export default function UpgradeButton(
-  { locale, isOwner }: { locale: Locale; isOwner: boolean },
-) {
+export default function UpgradeButton({ locale }: { locale: Locale }) {
   const t = (key: string) => translate(locale, key);
-
-  if (!isOwner) {
-    return (
-      <a
-        href="/pricing"
-        class="w-full text-center text-xs text-zinc-500 hover:text-zinc-300 px-2 py-1 transition-colors"
-        title={t("billing.upgrade_hint_member")}
-      >
-        {t("billing.upgrade_hint_member")}
-      </a>
-    );
-  }
 
   return (
     <a

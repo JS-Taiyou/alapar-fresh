@@ -17,6 +17,7 @@ import {
   registrySwitch,
 } from "./shared-signals.ts";
 import { rowToEnrichedTransaction } from "../lib/rows.ts";
+import ProBadge from "../components/ProBadge.tsx";
 
 function dedupById<T extends { id: string }>(items: T[]): T[] {
   const seen = new Set<string>();
@@ -962,6 +963,11 @@ export default function TransactionList(props: TransactionListProps) {
                         {userInitials}
                       </div>
                       {user.name.split(" ")[0]}
+                      <ProBadge
+                        pro={user.pro ?? null}
+                        locale={props.locale}
+                        linked={false}
+                      />
                     </button>
                   );
                 })}
