@@ -2,6 +2,7 @@ import { Head } from "fresh/runtime";
 import { define } from "../../utils.ts";
 import { syncCheckout } from "../../lib/billing.ts";
 import { t } from "../../lib/i18n.ts";
+import BillingSuccessRetry from "../../islands/BillingSuccessRetry.tsx";
 
 /**
  * GET /billing/success?checkout_id=… — Polar redirects here after checkout.
@@ -73,9 +74,21 @@ export default define.page(function BillingSuccess(ctx) {
         >
           {t(locale, "billing.back_to_dashboard")}
         </a>
+        {
+          /* Pending means the webhook hasn't landed yet — reload a few times
+            instead of leaving the user on a stale "Processing…" page. */
+        }
+        <BillingSuccessRetry activated={activated} />
       </div>
       <Head>
-        <title>{t(locale, "billing.success_title")}</title>
+        <title>
+          {t(
+            locale,
+            activated
+              ? "billing.success_title"
+              : "billing.success_pending_title",
+          )}
+        </title>
       </Head>
     </main>
   );

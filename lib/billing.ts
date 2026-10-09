@@ -125,20 +125,38 @@ export async function syncCheckout(
   const res = await fetch(`${apiBase()}/checkouts/${checkoutId}`, {
     headers: { Authorization: `Bearer ${oat()}` },
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    // 401/403 = bad or wrong-org token; 404 = checkout belongs to another
+    // org (or prod token vs sandbox link). Without this line the success
+    // page just says "Processing…" forever and the logs show nothing.
+    console.error(
+      `[billing] syncCheckout: GET /checkouts/${checkoutId} -> ${res.status} ${res.statusText}`,
+    );
+    return null;
+  }
   const checkout = await res.json() as {
     status: string;
     subscription_id?: string | null;
   };
   // No subscription attached yet → checkout not completed (or abandoned).
-  if (!checkout.subscription_id) return null;
+  if (!checkout.subscription_id) {
+    console.error(
+      `[billing] syncCheckout: checkout ${checkoutId} (status=${checkout.status}) has no subscription_id yet`,
+    );
+    return null;
+  }
 
   // Pull the subscription for status/period detail.
   const subRes = await fetch(
     `${apiBase()}/subscriptions/${checkout.subscription_id}`,
     { headers: { Authorization: `Bearer ${oat()}` } },
   );
-  if (!subRes.ok) return null;
+  if (!subRes.ok) {
+    console.error(
+      `[billing] syncCheckout: GET /subscriptions/${checkout.subscription_id} -> ${subRes.status} ${subRes.statusText}`,
+    );
+    return null;
+  }
   const sub = await subRes.json() as {
     status: string;
     current_period_end: string | null;
@@ -273,11 +291,13 @@ export async function getPolarPrices(): Promise<PolarPrices> {
   }
 
   let prices: PolarPrices = { monthly: null, yearly: null };
+  let fetched = false;
   try {
     const res = await fetch(`${apiBase()}/products/`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.ok) {
+      fetched = true;
       const data = await res.json() as {
         items?: {
           prices?: {
@@ -304,12 +324,20 @@ export async function getPolarPrices(): Promise<PolarPrices> {
         monthly: found.month.length ? Math.min(...found.month) : null,
         yearly: found.year.length ? Math.min(...found.year) : null,
       };
+    } else {
+      // A bad token must not be silent: the pricing page quietly falls back
+      // to hardcoded prices and the mismatch looks like a Polar bug.
+      console.error(
+        `[billing] getPolarPrices: GET /products/ -> ${res.status} ${res.statusText}`,
+      );
     }
   } catch {
     // Network failure — fall through with nulls; the page uses fallbacks.
   }
 
-  priceCache = { at: Date.now(), prices };
+  // Only cache successful fetches: caching nulls would pin the fallback
+  // price for PRICE_CACHE_MS after credentials are fixed.
+  if (fetched) priceCache = { at: Date.now(), prices };
   return prices;
 }
 
@@ -358,20 +386,24 @@ const HMAC_TOLERANCE_SECONDS = 5 * 60;
  */
 export async function verifyWebhook(
   req: Request,
-): Promise<{ valid: boolean; payload?: Record<string, unknown> }> {
+): Promise<
+  { valid: boolean; reason?: string; payload?: Record<string, unknown> }
+> {
   const secret = Deno.env.get("POLAR_WEBHOOK_SECRET");
-  if (!secret) return { valid: false }; // fail-closed when unconfigured
+  if (!secret) return { valid: false, reason: "POLAR_WEBHOOK_SECRET unset" }; // fail-closed when unconfigured
 
   const msgId = req.headers.get("webhook-id");
   const msgTimestamp = req.headers.get("webhook-timestamp");
   const msgSignature = req.headers.get("webhook-signature");
-  if (!msgId || !msgTimestamp || !msgSignature) return { valid: false };
+  if (!msgId || !msgTimestamp || !msgSignature) {
+    return { valid: false, reason: "missing webhook-* headers" };
+  }
 
   // Replay protection. `abs()` also rejects FUTURE timestamps (skewed-clock
   // forgeries), not just old ones.
   const age = Math.abs(Date.now() / 1000 - Number(msgTimestamp));
   if (!Number.isFinite(age) || age > HMAC_TOLERANCE_SECONDS) {
-    return { valid: false };
+    return { valid: false, reason: `timestamp off by ${Math.round(age)}s` };
   }
 
   // Raw body — must be byte-identical to what Polar signed.
@@ -380,7 +412,12 @@ export async function verifyWebhook(
   // Polar secrets ship as `polar_whsec_…` (or plain `whsec_…`); the spec
   // prefix is not part of the base64 key material. Strip both, re-pad, decode.
   const secretB64 = secret.replace(/^polar_/, "").replace(/^whsec_/, "");
-  const keyBytes = base64Decode(secretB64);
+  let keyBytes: Uint8Array<ArrayBuffer>;
+  try {
+    keyBytes = base64Decode(secretB64);
+  } catch {
+    return { valid: false, reason: "secret is not valid base64" };
+  }
 
   const signedContent = `${msgId}.${msgTimestamp}.${rawBody}`;
   const key = await crypto.subtle.importKey(
@@ -403,7 +440,7 @@ export async function verifyWebhook(
     const [version, sig] = part.split(",");
     return version === "v1" && timingSafeEqual(sig, expected);
   });
-  if (!passed) return { valid: false };
+  if (!passed) return { valid: false, reason: "signature mismatch" };
 
   // Only parse AFTER the signature is proven — a hostile body can't even
   // trigger a JSON.parse exception before then.
@@ -413,7 +450,7 @@ export async function verifyWebhook(
       payload: JSON.parse(rawBody) as Record<string, unknown>,
     };
   } catch {
-    return { valid: false };
+    return { valid: false, reason: "body is not valid JSON" };
   }
 }
 

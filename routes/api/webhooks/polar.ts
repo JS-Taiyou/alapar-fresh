@@ -32,8 +32,11 @@ import {
  */
 export const handler = define.handlers({
   async POST(ctx) {
-    const { valid, payload } = await verifyWebhook(ctx.req);
+    const { valid, reason, payload } = await verifyWebhook(ctx.req);
     if (!valid || !payload) {
+      // Polar's dashboard only shows "401"; this line is what tells YOU
+      // whether it's a secret mismatch, an unset env var, or a replay.
+      console.warn(`[billing] webhook rejected: ${reason ?? "unknown"}`);
       return new Response("invalid signature", { status: 401 });
     }
 
