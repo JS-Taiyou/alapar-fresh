@@ -180,6 +180,7 @@ export default function BillingActions(props: BillingActionsProps) {
         <Modal
           onClose={() => showCancelModal.value = false}
           title={t("pricing.cancel_title")}
+          closeLabel={t("common.close")}
           footer={
             <>
               <button
@@ -215,6 +216,7 @@ export default function BillingActions(props: BillingActionsProps) {
         <Modal
           onClose={() => showSwitchModal.value = false}
           title={t("billing.switch_title")}
+          closeLabel={t("common.close")}
           footer={
             <>
               <button

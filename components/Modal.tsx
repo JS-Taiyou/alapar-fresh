@@ -15,6 +15,11 @@ interface ModalProps {
   closeOnBackdrop?: boolean;
   children: ComponentChildren;
   footer?: ComponentChildren;
+  /**
+   * Accessible label for the × button. Defaults to Spanish ("Cerrar") to
+   * match the pre-i18n callers; localized callers pass t(locale, "common.close").
+   */
+  closeLabel?: string;
 }
 
 /**
@@ -69,7 +74,7 @@ export default function Modal(props: ModalProps) {
           <button
             type="button"
             onClick={props.onClose}
-            aria-label="Cerrar"
+            aria-label={props.closeLabel ?? "Cerrar"}
             class="text-zinc-400 hover:text-white transition-colors shrink-0"
           >
             <svg
