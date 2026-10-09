@@ -270,4 +270,50 @@ export const en: Record<string, string> = {
   "pricing.create_first": "Create your first group",
   "pricing.create_first_hint":
     "Pro is purchased per group — create yours to get started.",
+
+  // --- Demo tour (driver.js) ---
+  "tour.button_title": "Guided tour",
+  "tour.next": "Next →",
+  "tour.prev": "← Back",
+  "tour.done": "Done ✓",
+  "tour.menu_title": "🎓 Guided Tour",
+  "tour.menu_desc": "Learn A la Par's features in a few minutes.",
+  "tour.quick_title": "Quick Tour",
+  "tour.quick_sub": "The essentials in 5 steps",
+  "tour.full_title": "Full Tour",
+  "tour.full_sub": "Includes the expense and payment dialogs",
+  "tour.balance_title": "💰 Total Balance",
+  "tour.balance_desc":
+    "This is your net balance. Green = you're owed, red = you owe. Click it for a detailed per-person breakdown.",
+  "tour.search_title": "🔍 Search & Filter",
+  "tour.search_desc":
+    "Search transactions by name or filter by person with the buttons above.",
+  "tour.transactions_title": "📋 Transactions",
+  "tour.transactions_desc":
+    "All the expenses and payments in the current registry, sorted by date.",
+  "tour.transactions_full_desc":
+    "Every expense and payment in the registry. Each card shows who paid and how it was split.",
+  "tour.add_expense_title": "➕ Add Expense",
+  "tour.add_expense_desc":
+    "Use this button to log an expense. Split it evenly, by percentage, or with fixed amounts.",
+  "tour.add_expense_full_desc":
+    "Let's open the form to create an expense and see the available options.",
+  "tour.add_payment_title": "💸 Add Payment",
+  "tour.add_payment_desc":
+    "Use this button to record a payment between people and settle debts.",
+  "tour.edit_title": "✏️ Edit Transactions",
+  "tour.edit_desc":
+    "Click any transaction to see its details, edit it, or delete it.",
+  "tour.expense_type_title": "🏷️ Expense Type",
+  "tour.expense_type_desc":
+    "Choose the type: One-time (single payment), Installment (paid in parts, e.g. a laptop over months), or Recurring (repeats every period, e.g. rent).",
+  "tour.split_mode_title": "🔀 Split Mode",
+  "tour.split_mode_desc":
+    "Decide how to split the expense: Automatic (equal parts), Percentage (e.g. 60%/40%), or Fixed Amount (specific amounts per person).",
+  "tour.pay_debt_title": "✅ Settle Debt",
+  "tour.pay_debt_desc":
+    "When someone owes you, this button computes the exact amount automatically. One click and the payment is recorded for the right amount.",
+  "tour.finale_title": "🎉 That's it!",
+  "tour.finale_desc":
+    "You now know A la Par's main features. Explore the demo freely — all changes are temporary and reset on reload.",
 };

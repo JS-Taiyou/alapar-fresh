@@ -275,4 +275,50 @@ export const es: Record<string, string> = {
   "pricing.create_first": "Crea tu primer registro",
   "pricing.create_first_hint":
     "El plan Pro se contrata por registro — crea el tuyo para empezar.",
+
+  // --- Demo tour (driver.js) ---
+  "tour.button_title": "Tour guiado",
+  "tour.next": "Siguiente →",
+  "tour.prev": "← Anterior",
+  "tour.done": "Listo ✓",
+  "tour.menu_title": "🎓 Tour Guiado",
+  "tour.menu_desc": "Conoce las funciones de A la Par en pocos minutos.",
+  "tour.quick_title": "Tour Rápido",
+  "tour.quick_sub": "Lo esencial en 5 pasos",
+  "tour.full_title": "Tour Completo",
+  "tour.full_sub": "Incluye el modal de gastos y pagos",
+  "tour.balance_title": "💰 Balance Total",
+  "tour.balance_desc":
+    "Este es tu balance neto. Verde = te deben, rojo = debes. Haz clic para ver el desglose detallado por persona.",
+  "tour.search_title": "🔍 Buscar y Filtrar",
+  "tour.search_desc":
+    "Busca transacciones por nombre o filtra por persona con los botones de arriba.",
+  "tour.transactions_title": "📋 Transacciones",
+  "tour.transactions_desc":
+    "Aquí verás todos los gastos y pagos del registro actual, ordenados por fecha.",
+  "tour.transactions_full_desc":
+    "Todos los gastos y pagos del registro. Cada tarjeta muestra quién pagó y cómo se dividió.",
+  "tour.add_expense_title": "➕ Agregar Gasto",
+  "tour.add_expense_desc":
+    "Usa este botón para registrar un gasto. Puedes dividirlo entre todos en partes iguales, por porcentaje, o con montos fijos.",
+  "tour.add_expense_full_desc":
+    "Vamos a abrir el formulario para crear un gasto y ver las opciones disponibles.",
+  "tour.add_payment_title": "💸 Agregar Pago",
+  "tour.add_payment_desc":
+    "Usa este botón para registrar un pago entre personas y saldar deudas.",
+  "tour.edit_title": "✏️ Editar Transacciones",
+  "tour.edit_desc":
+    "Haz clic en cualquier transacción para ver sus detalles, editarla o eliminarla.",
+  "tour.expense_type_title": "🏷️ Tipo de Gasto",
+  "tour.expense_type_desc":
+    "Elige el tipo: Único (pago una sola vez), Parcialidad (pagos en partes, ej. un laptop a meses), o Recurrente (se repite cada periodo, ej. la renta).",
+  "tour.split_mode_title": "🔀 Modo de División",
+  "tour.split_mode_desc":
+    "Decide cómo dividir el gasto: Automático (partes iguales), Porcentaje (ej. 60%/40%), o Monto Fijo (cantidades específicas por persona).",
+  "tour.pay_debt_title": "✅ Saldar Deuda",
+  "tour.pay_debt_desc":
+    "Cuando alguien te debe, este botón calcula automáticamente el monto exacto. Un clic y el pago queda registrado por la cantidad correcta.",
+  "tour.finale_title": "🎉 ¡Eso es todo!",
+  "tour.finale_desc":
+    "Ya conoces las funciones principales de A la Par. Explora el demo libremente — todos los cambios son temporales y se reinician al recargar.",
 };

@@ -9,7 +9,8 @@ import TransactionList from "../../islands/TransactionList.tsx";
 import BalanceBreakdown from "../../islands/BalanceBreakdown.tsx";
 import DemoTour from "../../islands/DemoTour.tsx";
 import LocaleToggle from "../../islands/LocaleToggle.tsx";
-import type { Locale } from "../../lib/i18n.ts";
+import { type Locale, resolveLocale } from "../../lib/i18n.ts";
+import { getCookie } from "../../lib/auth-cookies.ts";
 import type {
   BalanceBreakdownEntry,
   DefaultSplit,
@@ -35,10 +36,12 @@ interface DemoData {
 
 export const handler = define.handlers({
   GET(ctx) {
-    const cookieHeader = ctx.req.headers.get("cookie") ?? "";
-    const locale: Locale = cookieHeader.includes("alapar-locale=en")
-      ? "en"
-      : "es";
+    // Same resolution as the middleware (cookie → Accept-Language → es) so
+    // a cookie-less English browser gets the demo in English, like the app.
+    const locale = resolveLocale(
+      getCookie(ctx.req.headers.get("cookie") ?? "", "alapar-locale"),
+      ctx.req.headers.get("accept-language"),
+    );
     const users: Participant[] = demoData.users.map((u) => ({
       id: u.id,
       name: u.name,
@@ -183,7 +186,7 @@ export default define.page(function DemoPage(ctx) {
         isDemo
         locale={locale}
       />
-      <DemoTour />
+      <DemoTour locale={locale} />
     </>
   );
 });

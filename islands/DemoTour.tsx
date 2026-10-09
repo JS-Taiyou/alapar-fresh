@@ -2,6 +2,7 @@ import { useEffect, useState } from "preact/hooks";
 import { useSignal } from "@preact/signals";
 import { driver } from "driver.js";
 import "driver.js/dist/driver.css";
+import { type Locale, tt } from "../lib/i18n.ts";
 
 /**
  * Guided tour island for the /demo page, powered by driver.js (MIT, zero deps).
@@ -9,8 +10,8 @@ import "driver.js/dist/driver.css";
  * Offers two tours the user can choose from via a floating button (bottom-left,
  * so it doesn't clash with the FABs at bottom-right):
  *
- * - **Tour Rápido** (5 steps): main-page highlights only.
- * - **Tour Completo** (10 steps): main page + modal walkthrough (type selector,
+ * - **Quick Tour** (5 steps): main-page highlights only.
+ * - **Full Tour** (10 steps): main page + modal walkthrough (type selector,
  *   split modes, pay-exact-debt button).
  *
  * The deep-dive tour programmatically opens the modal by clicking the FABs,
@@ -20,10 +21,18 @@ import "driver.js/dist/driver.css";
  *
  * A `localStorage` flag suppresses auto-prompt after the first visit, but the
  * floating button is always visible so users can replay.
+ *
+ * All copy lives in lib/locales/{en,es}.ts under `tour.*`; the locale prop
+ * comes from the server-resolved `alapar-locale` cookie like every island.
  */
 
+interface DemoTourProps {
+  locale?: Locale;
+}
+
 // driver.js is client-side only; lazy-import inside useEffect to avoid SSR.
-export default function DemoTour() {
+export default function DemoTour(props: DemoTourProps) {
+  const t = tt(props.locale ?? "es");
   const showMenu = useSignal(false);
   const [tourActive, setTourActive] = useState(false);
 
@@ -85,17 +94,16 @@ export default function DemoTour() {
     const driverObj = driver({
       showProgress: true,
       onDestroyed: () => setTourActive(false),
-      nextBtnText: "Siguiente →",
-      prevBtnText: "← Anterior",
-      doneBtnText: "Listo ✓",
+      nextBtnText: t("tour.next"),
+      prevBtnText: t("tour.prev"),
+      doneBtnText: t("tour.done"),
       popoverClass: "alapar-popover",
       steps: [
         {
           element: '[data-tour="balance-total"]',
           popover: {
-            title: "💰 Balance Total",
-            description:
-              "Este es tu balance neto. Verde = te deben, rojo = debes. Haz clic para ver el desglose detallado por persona.",
+            title: t("tour.balance_title"),
+            description: t("tour.balance_desc"),
             side: "bottom",
             align: "start",
           },
@@ -103,9 +111,8 @@ export default function DemoTour() {
         {
           element: '[data-tour="transaction-list"]',
           popover: {
-            title: "📋 Transacciones",
-            description:
-              "Aquí verás todos los gastos y pagos del registro actual, ordenados por fecha.",
+            title: t("tour.transactions_title"),
+            description: t("tour.transactions_desc"),
             side: "top",
             align: "center",
           },
@@ -113,9 +120,8 @@ export default function DemoTour() {
         {
           element: () => visibleFab("add-expense"),
           popover: {
-            title: "➕ Agregar Gasto",
-            description:
-              "Usa este botón para registrar un gasto. Puedes dividirlo entre todos en partes iguales, por porcentaje, o con montos fijos.",
+            title: t("tour.add_expense_title"),
+            description: t("tour.add_expense_desc"),
             side: "left",
             align: "center",
           },
@@ -123,9 +129,8 @@ export default function DemoTour() {
         {
           element: () => visibleFab("add-payment"),
           popover: {
-            title: "💸 Agregar Pago",
-            description:
-              "Usa este botón para registrar un pago entre personas y saldar deudas.",
+            title: t("tour.add_payment_title"),
+            description: t("tour.add_payment_desc"),
             side: "left",
             align: "center",
           },
@@ -133,9 +138,8 @@ export default function DemoTour() {
         {
           element: '[data-tour="transaction-card"]',
           popover: {
-            title: "✏️ Editar Transacciones",
-            description:
-              "Haz clic en cualquier transacción para ver sus detalles, editarla o eliminarla.",
+            title: t("tour.edit_title"),
+            description: t("tour.edit_desc"),
             side: "top",
             align: "center",
           },
@@ -157,18 +161,17 @@ export default function DemoTour() {
         closeModals();
         setTourActive(false);
       },
-      nextBtnText: "Siguiente →",
-      prevBtnText: "← Anterior",
-      doneBtnText: "Listo ✓",
+      nextBtnText: t("tour.next"),
+      prevBtnText: t("tour.prev"),
+      doneBtnText: t("tour.done"),
       popoverClass: "alapar-popover",
       steps: [
         // --- Main page (same as quick tour) ---
         {
           element: '[data-tour="balance-total"]',
           popover: {
-            title: "💰 Balance Total",
-            description:
-              "Este es tu balance neto. Verde = te deben, rojo = debes. Haz clic para ver el desglose detallado por persona.",
+            title: t("tour.balance_title"),
+            description: t("tour.balance_desc"),
             side: "bottom",
             align: "start",
           },
@@ -176,9 +179,8 @@ export default function DemoTour() {
         {
           element: '[data-tour="search-bar"]',
           popover: {
-            title: "🔍 Buscar y Filtrar",
-            description:
-              "Busca transacciones por nombre o filtra por persona con los botones de arriba.",
+            title: t("tour.search_title"),
+            description: t("tour.search_desc"),
             side: "bottom",
             align: "center",
           },
@@ -186,9 +188,8 @@ export default function DemoTour() {
         {
           element: '[data-tour="transaction-list"]',
           popover: {
-            title: "📋 Transacciones",
-            description:
-              "Todos los gastos y pagos del registro. Cada tarjeta muestra quién pagó y cómo se dividió.",
+            title: t("tour.transactions_title"),
+            description: t("tour.transactions_full_desc"),
             side: "top",
             align: "center",
           },
@@ -196,9 +197,8 @@ export default function DemoTour() {
         {
           element: () => visibleFab("add-expense"),
           popover: {
-            title: "➕ Agregar Gasto",
-            description:
-              "Vamos a abrir el formulario para crear un gasto y ver las opciones disponibles.",
+            title: t("tour.add_expense_title"),
+            description: t("tour.add_expense_full_desc"),
             side: "left",
             align: "center",
             onNextClick: async () => {
@@ -211,9 +211,8 @@ export default function DemoTour() {
         {
           element: '[data-tour="expense-type"]',
           popover: {
-            title: "🏷️ Tipo de Gasto",
-            description:
-              "Elige el tipo: Único (pago una sola vez), Parcialidad (pagos en partes, ej. un laptop a meses), o Recurrente (se repite cada periodo, ej. la renta).",
+            title: t("tour.expense_type_title"),
+            description: t("tour.expense_type_desc"),
             side: "bottom",
             align: "center",
           },
@@ -221,9 +220,8 @@ export default function DemoTour() {
         {
           element: '[data-tour="split-mode"]',
           popover: {
-            title: "🔀 Modo de División",
-            description:
-              "Decide cómo dividir el gasto: Automático (partes iguales), Porcentaje (ej. 60%/40%), o Monto Fijo (cantidades específicas por persona).",
+            title: t("tour.split_mode_title"),
+            description: t("tour.split_mode_desc"),
             side: "bottom",
             align: "end",
             onPrevClick: () => driverObj.movePrevious(),
@@ -239,9 +237,8 @@ export default function DemoTour() {
         {
           element: '[data-tour="pay-debt"]',
           popover: {
-            title: "✅ Saldar Deuda",
-            description:
-              "Cuando alguien te debe, este botón calcula automáticamente el monto exacto. Un clic y el pago queda registrado por la cantidad correcta.",
+            title: t("tour.pay_debt_title"),
+            description: t("tour.pay_debt_desc"),
             side: "bottom",
             align: "center",
             onPrevClick: async () => {
@@ -253,9 +250,8 @@ export default function DemoTour() {
         },
         {
           popover: {
-            title: "🎉 ¡Eso es todo!",
-            description:
-              "Ya conoces las funciones principales de A la Par. Explora el demo libremente — todos los cambios son temporales y se reinician al recargar.",
+            title: t("tour.finale_title"),
+            description: t("tour.finale_desc"),
             side: "top",
             align: "center",
             onDoneClick: () => {
@@ -280,7 +276,7 @@ export default function DemoTour() {
         type="button"
         onClick={() => showMenu.value = !showMenu.value}
         class="fixed bottom-8 left-8 z-50 w-14 h-14 bg-primary hover:bg-primary-light text-white rounded-full shadow-2xl flex items-center justify-center transition-all hover:scale-110 active:scale-95"
-        title="Tour guiado"
+        title={t("tour.button_title")}
       >
         <svg
           class="w-6 h-6"
@@ -308,19 +304,19 @@ export default function DemoTour() {
           {/* Menu card */}
           <div class="fixed bottom-24 left-8 z-50 bg-surface border border-border-custom rounded-custom shadow-2xl p-4 w-72 animate-fade-up">
             <h3 class="text-sm font-bold text-zinc-200 mb-3">
-              🎓 Tour Guiado
+              {t("tour.menu_title")}
             </h3>
             <p class="text-xs text-zinc-400 mb-4">
-              Conoce las funciones de A la Par en pocos minutos.
+              {t("tour.menu_desc")}
             </p>
             <button
               type="button"
               onClick={startQuickTour}
               class="w-full mb-2 px-4 py-3 bg-primary hover:bg-primary-light text-white text-sm font-semibold rounded-custom transition-all active:scale-95 text-left"
             >
-              <span class="block font-bold">Tour Rápido</span>
+              <span class="block font-bold">{t("tour.quick_title")}</span>
               <span class="block text-xs opacity-80 mt-0.5">
-                Lo esencial en 5 pasos
+                {t("tour.quick_sub")}
               </span>
             </button>
             <button
@@ -328,9 +324,9 @@ export default function DemoTour() {
               onClick={startFullTour}
               class="w-full px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-white text-sm font-semibold rounded-custom transition-all active:scale-95 text-left"
             >
-              <span class="block font-bold">Tour Completo</span>
+              <span class="block font-bold">{t("tour.full_title")}</span>
               <span class="block text-xs opacity-60 mt-0.5">
-                Incluye el modal de gastos y pagos
+                {t("tour.full_sub")}
               </span>
             </button>
           </div>
