@@ -57,6 +57,8 @@ export const en: Record<string, string> = {
   "auth.has_account": "Already have an account?",
   "auth.login_link": "Log in",
   "auth.check_email": "Check your email to confirm your account.",
+  "auth.rate_limited":
+    "Too many emails were sent recently. Please wait a few minutes and try again.",
   "auth.session_error": "Error saving session",
 
   // --- Forgot password ---

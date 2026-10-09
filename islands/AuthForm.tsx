@@ -11,6 +11,19 @@ interface AuthFormProps {
   locale?: Locale;
 }
 
+/**
+ * Map raw Supabase auth errors to user-facing copy where the raw string is
+ * an implementation detail (e.g. "email rate limit exceeded" leaking the
+ * sender's quota). Anything unrecognized is shown as-is, as before.
+ */
+function friendlyAuthError(
+  message: string,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  if (/rate limit/i.test(message)) return t("auth.rate_limited");
+  return message;
+}
+
 export default function AuthForm(props: AuthFormProps) {
   const t = (key: string, params?: Record<string, string | number>) =>
     translate(props.locale ?? "es", key, params);
@@ -95,20 +108,45 @@ export default function AuthForm(props: AuthFormProps) {
 
     try {
       if (props.mode === "signup") {
-        const { data, error: signUpError } = await client.auth.signUp({
+        // PKCE client for signup: when email confirmation is enabled, the
+        // confirmation link redirects to /auth/callback with a ?code= that
+        // AuthCallback exchanges using the verifier this client stores —
+        // the user lands logged in. (With the implicit-flow client the link
+        // returned #access_token=… to the target page, where nothing
+        // consumed it: confirmed, but forced to log in again.) Same config
+        // as the Google client below, for the same redirect-survival reason.
+        const signupClient = createClient(
+          props.supabaseUrl,
+          props.supabaseAnonKey,
+          {
+            auth: {
+              flowType: "pkce",
+              persistSession: true,
+              autoRefreshToken: false,
+              detectSessionInUrl: false,
+            },
+          },
+        );
+        const { data, error: signUpError } = await signupClient.auth.signUp({
           email: email.value,
           password: password.value,
           options: {
             data: { name: name.value },
-            emailRedirectTo: globalThis.location.origin + redirectPath,
+            emailRedirectTo: globalThis.location.origin +
+              "/auth/callback?next=" +
+              encodeURIComponent(redirectPath),
           },
         });
         if (signUpError) {
-          error.value = signUpError.message;
+          clearSupabaseBrowserStorage();
+          error.value = friendlyAuthError(signUpError.message, t);
           loading.value = false;
           return;
         }
         if (data.session) {
+          // Confirmation disabled: we hold the session in memory, cookies
+          // carry it from here — nothing may stay in web storage.
+          clearSupabaseBrowserStorage();
           await sendCallback(
             data.session.access_token,
             data.session.refresh_token,
@@ -125,7 +163,7 @@ export default function AuthForm(props: AuthFormProps) {
             password: password.value,
           });
         if (signInError) {
-          error.value = signInError.message;
+          error.value = friendlyAuthError(signInError.message, t);
           loading.value = false;
           return;
         }
