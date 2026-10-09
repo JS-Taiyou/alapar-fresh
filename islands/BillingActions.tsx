@@ -8,25 +8,35 @@ interface BillingActionsProps {
   activeUntil: string | null;
   /** Mirror's cancel_at_period_end — a cancel is already scheduled. */
   cancelScheduled: boolean;
+  /** Interval the live subscription is on; null hides the switch action
+   * (unknown, or Polar products aren't configured for both intervals). */
+  currentInterval: "monthly" | "yearly" | null;
 }
 
 /**
  * The discrete billing controls shown on /pricing to a user with a live
  * subscription: cancel (with a confirm modal stating until when the
- * subscription stays active), reactivate (undo a scheduled cancel), and the
- * hosted Polar portal for payment method / invoices. The subscription is
- * per-user — cancelling affects ALL of the subscriber's registries at once.
+ * subscription stays active), reactivate (undo a scheduled cancel), a
+ * prorated monthly↔yearly plan switch (with its own confirm modal — Polar
+ * charges/credits the difference on the SAME subscription), and the hosted
+ * Polar portal for payment method / invoices. The subscription is per-user —
+ * every action affects ALL of the subscriber's registries at once.
  */
 export default function BillingActions(props: BillingActionsProps) {
   const t = (key: string, params?: Record<string, string | number>) =>
     translate(props.locale, key, params);
 
   const showCancelModal = useSignal(false);
+  const showSwitchModal = useSignal(false);
   const busy = useSignal(false);
   const error = useSignal("");
   // Local override after a successful action so the UI reflects it without
   // needing the webhook (which only carries the flag on the next event).
   const scheduled = useSignal(props.cancelScheduled);
+
+  const targetInterval = props.currentInterval === "monthly"
+    ? "yearly"
+    : "monthly";
 
   const activeUntilText = props.activeUntil
     ? formatDate(new Date(props.activeUntil), props.locale, {
@@ -91,6 +101,26 @@ export default function BillingActions(props: BillingActionsProps) {
     busy.value = false;
   }
 
+  async function handleSwitch() {
+    busy.value = true;
+    error.value = "";
+    try {
+      const res = await fetch("/api/billing/switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ interval: targetInterval }),
+      });
+      if (!res.ok) throw new Error();
+      // Reload so the badge, period end and switch label all re-render from
+      // the mirrored state (the webhook is authoritative a beat later).
+      globalThis.location.href = "/pricing?interval=" + targetInterval;
+      return; // keep busy on while the reload lands
+    } catch {
+      error.value = t("billing.switch_error");
+    }
+    busy.value = false;
+  }
+
   return (
     <div class="space-y-2">
       {scheduled.value
@@ -131,6 +161,19 @@ export default function BillingActions(props: BillingActionsProps) {
         {t("billing.manage")}
       </button>
 
+      {props.currentInterval && !scheduled.value && (
+        <button
+          type="button"
+          onClick={() => showSwitchModal.value = true}
+          disabled={busy.value}
+          class="block text-xs text-zinc-500 hover:text-primary-light transition-colors disabled:opacity-50"
+        >
+          {targetInterval === "yearly"
+            ? t("billing.switch_to_yearly")
+            : t("billing.switch_to_monthly")}
+        </button>
+      )}
+
       {error.value && <p class="text-xs text-red-400">{error.value}</p>}
 
       {showCancelModal.value && (
@@ -162,6 +205,43 @@ export default function BillingActions(props: BillingActionsProps) {
             <p class="text-sm text-zinc-300 leading-relaxed">
               {t("pricing.cancel_body", {
                 date: activeUntilText ?? "—",
+              })}
+            </p>
+          </div>
+        </Modal>
+      )}
+
+      {showSwitchModal.value && (
+        <Modal
+          onClose={() => showSwitchModal.value = false}
+          title={t("billing.switch_title")}
+          footer={
+            <>
+              <button
+                type="button"
+                onClick={() => showSwitchModal.value = false}
+                disabled={busy.value}
+                class="px-6 py-2 text-sm font-semibold text-zinc-300 hover:text-white transition-colors disabled:opacity-50"
+              >
+                {t("billing.switch_keep")}
+              </button>
+              <button
+                type="button"
+                onClick={handleSwitch}
+                disabled={busy.value}
+                class="px-6 py-2 text-sm font-semibold text-primary hover:text-primary-light transition-colors disabled:opacity-50"
+              >
+                {busy.value ? t("common.saving") : t("billing.switch_confirm")}
+              </button>
+            </>
+          }
+        >
+          <div class="p-6">
+            <p class="text-sm text-zinc-300 leading-relaxed">
+              {t("billing.switch_body", {
+                plan: targetInterval === "yearly"
+                  ? t("billing.yearly")
+                  : t("billing.monthly"),
               })}
             </p>
           </div>

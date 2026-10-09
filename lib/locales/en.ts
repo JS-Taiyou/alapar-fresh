@@ -271,6 +271,19 @@ export const en: Record<string, string> = {
   "pricing.create_first_hint":
     "Pro is purchased per group — create yours to get started.",
 
+  // --- Billing: already-subscribed guard + plan switch ---
+  "billing.already_subscribed":
+    "You already have an active subscription — it covers every group you own. To change plans, use the switch option below.",
+  "billing.switch_to_yearly": "Switch to yearly",
+  "billing.switch_to_monthly": "Switch to monthly",
+  "billing.switch_title": "Switch plan?",
+  "billing.switch_body":
+    "Switch to the {plan} plan? The change applies to your current subscription and is prorated — you only pay (or get credited) the difference for the remaining time.",
+  "billing.switch_confirm": "Switch plan",
+  "billing.switch_keep": "Keep current plan",
+  "billing.switch_error":
+    "The plan change failed. Try again, or manage your subscription from the portal.",
+
   // --- Demo tour (driver.js) ---
   "tour.button_title": "Guided tour",
   "tour.next": "Next →",

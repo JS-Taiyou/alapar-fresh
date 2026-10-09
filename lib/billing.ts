@@ -246,6 +246,90 @@ export async function cancelSubscriptionAtPeriodEnd(
 }
 
 // ---------------------------------------------------------------------------
+// Plan switch (monthly ↔ yearly, prorated on the SAME subscription)
+// ---------------------------------------------------------------------------
+
+/**
+ * Read a subscription's product and period straight from Polar — used to know
+ * which plan the user is currently on (the local mirror deliberately doesn't
+ * store product info) and to validate before a switch.
+ */
+export async function getSubscription(
+  subscriptionId: string,
+): Promise<
+  | {
+    status: string;
+    productId: string | null;
+    currentPeriodEnd: string | null;
+  }
+  | null
+> {
+  // Called from the public pricing page — a missing token must degrade to
+  // "interval unknown" (hides the switch button), never a 500.
+  const token = Deno.env.get("POLAR_ACCESS_TOKEN");
+  if (!token) return null;
+  const res = await fetch(`${apiBase()}/subscriptions/${subscriptionId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    console.error(
+      `[billing] getSubscription: GET /subscriptions/${subscriptionId} -> ${res.status} ${res.statusText}`,
+    );
+    return null;
+  }
+  const sub = await res.json() as {
+    status: string;
+    product_id?: string | null;
+    current_period_end?: string | null;
+  };
+  return {
+    status: sub.status,
+    productId: sub.product_id ?? null,
+    currentPeriodEnd: sub.current_period_end ?? null,
+  };
+}
+
+/**
+ * Switch a subscription to another product (monthly ↔ yearly) with proration.
+ *
+ * Polar semantics (PATCH /v1/subscriptions/{id} with product_id): the SAME
+ * subscription moves to the new product and Polar issues a prorated invoice —
+ * the user is credited the unused time and charged the difference. No second
+ * subscription, no duplicate customer, nothing to cancel afterwards.
+ *
+ * `proration_behavior: "prorate"` is explicit (rather than relying on the org
+ * default) because this is a self-serve switch: the user confirms a modal
+ * that says they'll pay/receive the difference.
+ *
+ * Returns the updated period end on success (the caller mirrors it locally;
+ * the webhook remains authoritative), or null on failure.
+ */
+export async function switchSubscriptionProduct(
+  subscriptionId: string,
+  productId: string,
+): Promise<{ currentPeriodEnd: string | null } | null> {
+  const res = await fetch(`${apiBase()}/subscriptions/${subscriptionId}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${oat()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      product_id: productId,
+      proration_behavior: "prorate",
+    }),
+  });
+  if (!res.ok) {
+    console.error(
+      `[billing] switchSubscriptionProduct: PATCH /subscriptions/${subscriptionId} -> ${res.status} ${res.statusText}`,
+    );
+    return null;
+  }
+  const sub = await res.json() as { current_period_end?: string | null };
+  return { currentPeriodEnd: sub.current_period_end ?? null };
+}
+
+// ---------------------------------------------------------------------------
 // Pricing (public /pricing page)
 // ---------------------------------------------------------------------------
 
@@ -264,16 +348,29 @@ export interface PolarPrices {
   yearly: number | null;
 }
 
+/** Product ids per billing interval — needed for prorated plan switches. */
+export interface PolarProductIds {
+  monthly: string | null;
+  yearly: string | null;
+}
+
 /** Cache lifetime for fetched prices (the dashboard is the source of truth —
  * a price change must not require a deploy, but hammering the API on every
  * public page view isn't right either). */
 const PRICE_CACHE_MS = 10 * 60 * 1000;
 
-let priceCache: { at: number; prices: PolarPrices } | null = null;
+let priceCache:
+  | { at: number; prices: PolarPrices; productIds: PolarProductIds }
+  | null = null;
+
+interface PolarCatalog {
+  prices: PolarPrices;
+  productIds: PolarProductIds;
+}
 
 /**
- * Fetch the org's monthly/yearly recurring prices from Polar for display on
- * the public pricing page.
+ * One cached GET /v1/products/ powering both the displayed prices and the
+ * product ids used for plan switches.
  *
  * The OAT is org-scoped, so `GET /v1/products/` returns our products; we match
  * each interval (`month` / `year`) to its product's recurring price. If the
@@ -283,14 +380,22 @@ let priceCache: { at: number; prices: PolarPrices } | null = null;
  * Returns nulls per interval when unreachable/unconfigured — callers render
  * FALLBACK_PRICES so the page always works. Never throws.
  */
-export async function getPolarPrices(): Promise<PolarPrices> {
+async function fetchPolarCatalog(): Promise<PolarCatalog> {
   const token = Deno.env.get("POLAR_ACCESS_TOKEN");
-  if (!token) return { monthly: null, yearly: null };
+  if (!token) {
+    return {
+      prices: { monthly: null, yearly: null },
+      productIds: { monthly: null, yearly: null },
+    };
+  }
   if (priceCache && Date.now() - priceCache.at < PRICE_CACHE_MS) {
-    return priceCache.prices;
+    return priceCache;
   }
 
-  let prices: PolarPrices = { monthly: null, yearly: null };
+  let catalog: PolarCatalog = {
+    prices: { monthly: null, yearly: null },
+    productIds: { monthly: null, yearly: null },
+  };
   let fetched = false;
   try {
     const res = await fetch(`${apiBase()}/products/`, {
@@ -300,6 +405,7 @@ export async function getPolarPrices(): Promise<PolarPrices> {
       fetched = true;
       const data = await res.json() as {
         items?: {
+          id?: string;
           prices?: {
             type?: string;
             recurring_interval?: string;
@@ -308,6 +414,10 @@ export async function getPolarPrices(): Promise<PolarPrices> {
         }[];
       };
       const found: Record<string, number[]> = { month: [], year: [] };
+      const productFor: Record<string, string | null> = {
+        month: null,
+        year: null,
+      };
       for (const item of data.items ?? []) {
         for (const price of item.prices ?? []) {
           if (
@@ -317,12 +427,20 @@ export async function getPolarPrices(): Promise<PolarPrices> {
             typeof price.amount === "number"
           ) {
             found[price.recurring_interval].push(price.amount / 100);
+            // First product seen per interval wins (same tie-break as min()).
+            productFor[price.recurring_interval] ??= item.id ?? null;
           }
         }
       }
-      prices = {
-        monthly: found.month.length ? Math.min(...found.month) : null,
-        yearly: found.year.length ? Math.min(...found.year) : null,
+      catalog = {
+        prices: {
+          monthly: found.month.length ? Math.min(...found.month) : null,
+          yearly: found.year.length ? Math.min(...found.year) : null,
+        },
+        productIds: {
+          monthly: productFor.month,
+          yearly: productFor.year,
+        },
       };
     } else {
       // A bad token must not be silent: the pricing page quietly falls back
@@ -337,8 +455,18 @@ export async function getPolarPrices(): Promise<PolarPrices> {
 
   // Only cache successful fetches: caching nulls would pin the fallback
   // price for PRICE_CACHE_MS after credentials are fixed.
-  if (fetched) priceCache = { at: Date.now(), prices };
-  return prices;
+  if (fetched) priceCache = { at: Date.now(), ...catalog };
+  return catalog;
+}
+
+/** Display prices for the public pricing page (see fetchPolarCatalog). */
+export async function getPolarPrices(): Promise<PolarPrices> {
+  return (await fetchPolarCatalog()).prices;
+}
+
+/** Product ids per interval, for prorated plan switches (see fetchPolarCatalog). */
+export async function getPolarProductIds(): Promise<PolarProductIds> {
+  return (await fetchPolarCatalog()).productIds;
 }
 
 // ---------------------------------------------------------------------------

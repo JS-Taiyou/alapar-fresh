@@ -1,7 +1,12 @@
 import { define } from "../utils.ts";
 import { query } from "../lib/db.ts";
 import { FREE_LIMITS, resolveEffectivePlan } from "../lib/entitlements.ts";
-import { FALLBACK_PRICES, getPolarPrices } from "../lib/billing.ts";
+import {
+  FALLBACK_PRICES,
+  getPolarPrices,
+  getPolarProductIds,
+  getSubscription,
+} from "../lib/billing.ts";
 import { Head } from "fresh/runtime";
 import LocaleToggle from "../islands/LocaleToggle.tsx";
 import BillingActions from "../islands/BillingActions.tsx";
@@ -31,6 +36,8 @@ import { formatDate, type Locale, t as translate } from "../lib/i18n.ts";
 interface UserSubState {
   currentPeriodEnd: string | null;
   cancelScheduled: boolean;
+  /** Which interval the live subscription is on (null = unknown/offline). */
+  interval: "monthly" | "yearly" | null;
 }
 
 interface PricingData {
@@ -42,6 +49,8 @@ interface PricingData {
   hasGrandfatheredOwned: boolean;
   hasMemberOnly: boolean;
   hasNoRegistries: boolean;
+  /** Set when the checkout guard bounced an already-subscribed user back. */
+  alreadySubscribed: boolean;
   prices: { monthly: number; yearly: number };
 }
 
@@ -65,6 +74,7 @@ export const handler = define.handlers({
       hasGrandfatheredOwned: false,
       hasMemberOnly: false,
       hasNoRegistries: false,
+      alreadySubscribed: url.searchParams.get("already_subscribed") === "1",
       prices,
     };
 
@@ -79,7 +89,7 @@ export const handler = define.handlers({
           [userId],
         ),
         query(
-          `SELECT status, grace_until, current_period_end, cancel_at_period_end
+          `SELECT polar_subscription_id, status, grace_until, current_period_end, cancel_at_period_end
            FROM registry_subscriptions WHERE user_id = $1`,
           [userId],
         ),
@@ -92,6 +102,7 @@ export const handler = define.handlers({
       let subLive = false;
       const subRow = sub.rows[0] as
         | {
+          polar_subscription_id?: string;
           status: string;
           grace_until: string | null;
           current_period_end: string | null;
@@ -111,7 +122,24 @@ export const handler = define.handlers({
           data.userSub = {
             currentPeriodEnd: subRow.current_period_end,
             cancelScheduled: subRow.cancel_at_period_end === true,
+            interval: null,
           };
+          // Which plan the subscriber is on (for the switch button label).
+          // One extra Polar read per subscriber view; silent-null on failure
+          // simply hides the switch button.
+          if (subRow.polar_subscription_id) {
+            const [productIds, currentSub] = await Promise.all([
+              getPolarProductIds(),
+              getSubscription(subRow.polar_subscription_id),
+            ]);
+            if (currentSub?.productId) {
+              data.userSub.interval = currentSub.productId === productIds.yearly
+                ? "yearly"
+                : currentSub.productId === productIds.monthly
+                ? "monthly"
+                : null;
+            }
+          }
         }
       }
 
@@ -253,6 +281,16 @@ export default define.page(function PricingPage(ctx) {
             </div>
           </div>
 
+          {
+            /* Shown when the checkout guard bounced an already-subscribed
+              user back here (stale tab, hand-typed URL, double-click). */
+          }
+          {data.alreadySubscribed && (
+            <div class="mb-6 text-sm text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-custom px-4 py-3 text-center">
+              {t("billing.already_subscribed")}
+            </div>
+          )}
+
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
             {/* Free tier */}
             <div class="bg-surface border border-border-custom rounded-custom p-6 sm:p-8 flex flex-col">
@@ -317,6 +355,7 @@ export default define.page(function PricingPage(ctx) {
                       locale={locale}
                       activeUntil={data.userSub.currentPeriodEnd}
                       cancelScheduled={data.userSub.cancelScheduled}
+                      currentInterval={data.userSub.interval}
                     />
                   </div>
                 )}

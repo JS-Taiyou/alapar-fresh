@@ -276,6 +276,19 @@ export const es: Record<string, string> = {
   "pricing.create_first_hint":
     "El plan Pro se contrata por registro — crea el tuyo para empezar.",
 
+  // --- Billing: already-subscribed guard + plan switch ---
+  "billing.already_subscribed":
+    "Ya tienes una suscripción activa — cubre todos tus registros. Para cambiar de plan, usa la opción de cambio de abajo.",
+  "billing.switch_to_yearly": "Cambiar a plan anual",
+  "billing.switch_to_monthly": "Cambiar a plan mensual",
+  "billing.switch_title": "¿Cambiar de plan?",
+  "billing.switch_body":
+    "¿Cambiar al plan {plan}? El cambio se aplica sobre tu suscripción actual y se prorratea — solo pagas (o se te acredita) la diferencia por el tiempo restante.",
+  "billing.switch_confirm": "Cambiar de plan",
+  "billing.switch_keep": "Mantener plan actual",
+  "billing.switch_error":
+    "El cambio de plan falló. Inténtalo de nuevo o gestiona tu suscripción desde el portal.",
+
   // --- Demo tour (driver.js) ---
   "tour.button_title": "Tour guiado",
   "tour.next": "Siguiente →",
