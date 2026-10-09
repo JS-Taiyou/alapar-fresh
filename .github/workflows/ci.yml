@@ -17,7 +17,11 @@ jobs:
       - name: Setup Deno
         uses: denoland/setup-deno@v2
         with:
-          deno-version: v2.5.2
+          # 2.9.x: the npm:pg TLS regression (denoland/deno#33296, broke the
+          # TCP→TLS socket upgrade in 2.7.12) was fixed 2026-04-18, and the
+          # formatter rules changed between 2.5 and 2.9 — the tree is
+          # formatted with 2.9, so the pin must match.
+          deno-version: v2.9.7
 
       - name: Format check
         run: deno fmt --check .

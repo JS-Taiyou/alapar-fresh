@@ -25,3 +25,7 @@ PENDING.md
 .claude/
 skills-lock.json
 review/
+
+# IDE + local test artifacts
+.idea/
+gui-test-screenshots/
