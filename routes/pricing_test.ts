@@ -44,6 +44,13 @@ const SUB_ACTIVE = {
   cancel_at_period_end: false,
 };
 
+// Dates relative to "now" so paid-through assertions can't rot: a hardcoded
+// future date eventually slips into the past and flips the entitlement
+// matrix (this exact failure shipped 2026-10-09, two months after 09-01).
+const isoFromNow = (days: number) =>
+  new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+const PAST = "2026-01-01T00:00:00Z";
+
 describe("pricing GET — anonymous", () => {
   it("returns fallback prices and no session state", async () => {
     const result = await handler.GET!(ctxFor(null) as never);
@@ -91,8 +98,8 @@ describe("pricing GET — authenticated (per-user model)", () => {
   it("a dead subscription (beyond grace and paid-through) is not Active", async () => {
     stubFor([{ role: "owner", plan: "free" }], {
       status: "canceled",
-      grace_until: "2026-01-01T00:00:00Z",
-      current_period_end: "2026-01-01T00:00:00Z",
+      grace_until: PAST,
+      current_period_end: PAST,
       cancel_at_period_end: false,
     });
     const result = await handler.GET!(ctxFor({ id: "u1" }) as never);
@@ -103,8 +110,8 @@ describe("pricing GET — authenticated (per-user model)", () => {
   it("canceled-but-paid-through counts as live (rest of the cycle)", async () => {
     stubFor([{ role: "owner", plan: "free" }], {
       status: "canceled",
-      grace_until: "2026-01-01T00:00:00Z",
-      current_period_end: "2026-09-01T00:00:00Z",
+      grace_until: PAST,
+      current_period_end: isoFromNow(10),
       cancel_at_period_end: false,
     });
     const result = await handler.GET!(ctxFor({ id: "u1" }) as never);
